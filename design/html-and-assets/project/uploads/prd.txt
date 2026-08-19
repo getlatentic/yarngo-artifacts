@@ -1,0 +1,584 @@
+VOICE HUB
+PRODUCT • ANDROID • NIGERIA
+Product Requirements Document
+Create, share, subscribe, and converse in Nigerian languages
+Version
+1.0
+Status
+Working baseline
+Date
+2026-08-15
+Owner
+Voice Hub product and engineering
+Audience
+Product, engineering, design, editorial operations, trust and safety, and launch partners
+Launch decision  Original and system voices only. Celebrity or public-figure voice cloning is out of scope. Editorial Channels and private Companions are separate product and data domains.
+Vision. Make it effortless to create, hear, and privately exchange useful voice experiences in Nigerian languages, beginning with Android and WhatsApp.
+Launch scope. Android-first production launch in Nigeria with original/system voices only; no celebrity voice cloning.
+
+# 1. Executive summary
+Voice Hub is an Android-first product that turns written prompts into shareable Nigerian-language voice notes, distributes reviewed voice channels, and supports private conversations with clearly disclosed fictional AI companions. The first production path prioritizes WhatsApp-friendly audio, explicit consent, and deterministic privacy boundaries.
+
+## Product outcomes
+A creator can select English, Naija Pidgin, Yorùbá, Hausa, or Igbo; optionally translate into Pidgin; generate; preview; save; and share.
+Device voice is presented as local and device-dependent. Voice Hub voice is presented as cloud-based and consistent across devices.
+A listener can follow original, reviewed gist, relationship, and jobs channels in the app and separately opt in to WhatsApp delivery.
+An adult can use fictional AI girlfriend, AI boyfriend, friend, guy man, or iya agba profiles in private-by-default conversations with delete/export/block/report controls.
+The service can start on cost-conscious cloud infrastructure, but production readiness—not a fixed $5 promise—controls launch.
+
+## Non-negotiable product decisions
+Decision
+Product rule
+Voice provenance
+No celebrity/public-figure cloning at launch. Every cloud voice has a provider and provenance class.
+No silent fallback
+If a language is unavailable in the selected device engine, the app explains how to install it or choose Voice Hub voice.
+Audio contract
+Cloud output is Ogg/Opus. Device output must be normalized to Ogg/Opus before the portable share path is considered complete.
+WhatsApp semantics
+Android share intent is a convenient file share, not a guarantee of WhatsApp's native voice-note bubble. Automated delivery uses the WhatsApp Cloud API.
+Editorial ownership
+Channels use original or rights-cleared content with source, review, owner, and takedown records. No scraping or implied Gistlover affiliation.
+Companion separation
+Companions are private conversations, never subscriptions or broadcasts; romantic profiles require adult assurance and explicit AI disclosure.
+
+# 2. Problem, users, and principles
+
+## Problem statement
+Nigerian-language voice creation is fragmented across inconsistent device voices, cloud tools that do not produce the required share format, and publishing flows that do not separate editorial consent from private conversation. Users need a simple create-and-share experience; publishers need accountable audio distribution; companion users need strong disclosure, privacy, and safety controls.
+
+## Primary users
+User
+Core job
+Everyday creator
+Writes a short note, chooses a language/voice mode, previews it, and shares it to a friend.
+Channel listener
+Follows useful Nigerian audio updates and controls app versus WhatsApp delivery.
+Publisher/editor
+Produces attributable, reviewed episodes and owns corrections and takedowns.
+Companion user
+Uses a fictional AI companion privately and expects honest boundaries and data control.
+Operations and safety team
+Monitors provider, delivery, consent, editorial, privacy, and safety incidents.
+
+## Product principles
+Make the source and nature of a voice explicit.
+Keep creation reversible: preview, edit, save, delete, then share.
+Require consent at the boundary where distribution or intimacy changes.
+Prefer asynchronous, idempotent operations for provider and delivery work.
+Collect the minimum data needed and keep message text/audio out of logs and analytics.
+Gate expansion using measured language quality, safety, reliability, and cost.
+
+## Goals and non-goals
+Goals
+Non-goals for launch
+Five distinct language choices and Pidgin translation
+Celebrity or public-figure voice cloning
+Device and cloud voice modes with clear behavior
+Extracting or redistributing Android TTS voice models
+Ogg/Opus preview, save, and sharing
+Guaranteeing native WhatsApp voice-note bubbles via share intent
+Reviewed channels with separate WhatsApp consent
+Scraping or republishing unlicensed gossip feeds
+Private, disclosed, age-gated companion experiences
+Open-ended companion behavior without safety classification
+Production auth, observability, cost and safety gates
+Promising a fixed $5 production bill independent of usage
+
+# 3. Product scope and primary flows
+
+## Create and share
+Choose language → choose Device voice or Voice Hub voice → write/edit prompt → optionally translate to Pidgin → generate → validate → preview → save or share → disclose AI-generated audio.
+
+## Follow a channel
+Browse channel catalog → inspect source/category/language → follow in app → receive feed episode → play → optionally complete separate WhatsApp consent → receive/reconcile delivery → STOP at any time.
+
+## Publish an episode
+Publisher submits reviewed script, source, language, voice, and idempotency key → API commits episode/job → worker synthesizes and validates media → immutable upload → outbox event → feed and consented delivery.
+
+## Use a companion
+Choose fictional profile → see AI disclosure → complete adult assurance for romantic profile → open owner-private thread → send turn → generate and safety-check response → persist → optionally synthesize voice → block/report/export/delete at any time.
+
+## Language and voice-mode contract
+Choice
+Code
+Device voice
+Voice Hub voice
+Translation
+English (Nigeria)
+en-NG
+Engine-dependent
+Spitch profile
+Source or target
+Naija Pidgin
+pcm-NG / pcm
+May map to en-NG; label limitation
+Spitch profile
+Primary target
+Yorùbá
+yo-NG / yo
+Engine-dependent
+Spitch profile
+Source or target
+Hausa
+ha-NG / ha
+Engine-dependent
+Spitch profile
+Source or target
+Igbo
+ig-NG / ig
+Engine-dependent
+Spitch profile
+Source or target
+Device voice constraint  Android TTS availability varies by engine, manufacturer, installed voice data, and OS version. Voice Hub may open the engine's install/settings flow but must not extract or redistribute the engine's voice model.
+
+# 4. Functional requirements
+The delivery backlog is the detailed source of truth. The tables below summarize P0 and P1 requirements; story IDs are stable traceability keys shared with the Excel workbook.
+
+## E01 — Product boundaries and catalog
+Objective: Define launch domains, language catalog, voice provenance, and excluded uses.
+ID
+Requirement
+Acceptance summary
+State
+VH-001
+As the product owner, I want Create, Channels, and Companions defined as separate domains so that their privacy and delivery rules cannot be confused.
+The PRD and architecture name all three domains; companion conversations are never represented as subscriptions; channel fan-out never reads companion threads.
+P0 • Done
+VH-002
+I want only original, system, or contractually approved voices so that the product does not imply celebrity endorsement.
+No UI or API copy says licensed celebrity/public-figure voice; launch catalog records provider, language, consent/provenance class, and active state; celebrity cloning is absent.
+P0 • Done
+VH-003
+As a Nigerian-language user, I want English, Naija Pidgin, Yorùbá, Hausa, and Igbo shown as distinct choices so that I can select the language I intend.
+Catalog contains en-NG, pcm-NG, yo-NG, ha-NG, and ig-NG; English and Pidgin are separate; unavailable device voices are labelled unavailable rather than silently substituted.
+P0 • In Progress
+
+## E02 — Core service contracts
+Objective: Establish provider, media, publishing, delivery, and companion boundaries with deterministic tests.
+ID
+Requirement
+Acceptance summary
+State
+VH-004
+As an engineer, I want a standalone Voice Hub backend so that Mama-AI experiments can be reused without becoming a runtime dependency.
+Voice Hub has its own service, configuration, migrations, tests, and provider adapters; no runtime import or deployment dependency points to Mama-AI.
+P0 • Done
+VH-005
+I want one synthesis contract across Spitch, Intron, and YarnGPT so that providers can be selected by language and capability.
+Provider request/response contract is typed; Spitch accepts direct Ogg/Opus; WAV providers enter the normalization path; invalid media is rejected with structured errors.
+P0 • Done
+VH-006
+As an operations engineer, I want durable jobs and an outbox so that synthesis and delivery can be retried without duplicates.
+Episode and synthesis job commit atomically; leases prevent double work; content-addressed media is immutable; event replay does not duplicate deliveries.
+P0 • Done
+
+## E03 — Voice authoring and language
+Objective: Deliver a five-language create flow with explicit device and Voice Hub voice modes.
+ID
+Requirement
+Acceptance summary
+State
+VH-007
+I want to choose Device voice or Voice Hub voice so that I understand whether generation is local or cloud-based.
+The mode selector explains availability, consistency, data use, and connectivity; selection persists; the app never silently changes mode or provider.
+P0 • Planned
+VH-008
+I want the app to detect installed Android TTS support before generation so that failure is actionable.
+The app queries the selected engine/locale; missing language data shows an install/settings action; engine errors are visible; no English fallback occurs without consent.
+P0 • In Progress
+VH-009
+I want a consistent Voice Hub voice for each supported language so that the note sounds similar across devices.
+Authenticated create request selects an active language-compatible Spitch profile; response is valid Ogg/Opus; provider failure has a stable code and retry guidance; text is not logged.
+P0 • Planned
+VH-010
+I want to translate English or another supported Nigerian language into Naija Pidgin before synthesis so that I can send a natural Pidgin note.
+Translate action previews editable Pidgin text; source language is explicit or detected with confirmation; user can restore original; translation and synthesis are separate actions; target code is pcm.
+P0 • Planned
+
+## E04 — Audio lifecycle and sharing
+Objective: Produce valid Ogg/Opus, preview it, save it, and share it safely.
+ID
+Requirement
+Acceptance summary
+State
+VH-011
+I want every cloud-generated note delivered as standards-compliant Ogg/Opus so that WhatsApp and storage handling are predictable.
+MIME is audio/ogg; codec validates as Opus; duration, size, checksum, and storage key are recorded; corrupt or mislabeled bytes are rejected.
+P0 • Done
+VH-012
+As a creator using Device voice, I want the generated audio converted to Ogg/Opus on-device so that I can save and share the same portable format.
+Android 10+ uses a verified Opus/Ogg path; Android 8-9 uses the approved bundled native codec or is explicitly unsupported; golden files pass ffprobe and playback tests; native licenses are documented.
+P0 • Planned
+VH-013
+I want to preview, pause, replay, rename, save, and delete a generated note before sharing so that I remain in control of the file.
+Preview uses the exact share file; saved file appears in user-selected storage; deletion removes app-owned copies; failures preserve the draft; accessibility labels cover playback controls.
+P0 • In Progress
+VH-014
+I want one-tap WhatsApp sharing plus a standard share sheet so that I can send the note where I choose.
+WhatsApp target is offered when installed; generic chooser always remains available; content URI is temporary and scoped; AI-audio disclosure accompanies the share; cancellation is non-error.
+P0 • In Progress
+VH-015
+I want cloud generation to complete asynchronously so that long provider calls do not hold an API request open.
+POST returns a job identifier; status polling or push reports queued/processing/ready/failed; retry is idempotent; completed media URL is time-limited or access-controlled.
+P0 • Planned
+
+## E05 — Editorial publishing and feed
+Objective: Publish reviewed, attributable channel episodes and deliver a useful in-app feed.
+ID
+Requirement
+Acceptance summary
+State
+VH-016
+I want to submit a script with source, review reference, language, and voice profile so that every episode has accountable provenance.
+Publish rejects missing source/review; authenticated publisher owns the channel; idempotency key produces one episode; episode and synthesis job commit together.
+P0 • Done
+VH-017
+As an editor, I want distinct policies for gist, relationships, and jobs so that risky or stale content is caught before release.
+Gist requires attributable sources and takedown route; relationship content includes advice boundaries; jobs require verified source, expiry, and scam-report path; review checklist is versioned.
+P0 • Planned
+VH-018
+I want to browse, follow, and play the latest channel episodes so that relevant audio is easy to hear.
+Catalog groups gist/relationships/jobs; follow state survives restart; feed shows publish time, language, duration, source label, and AI-audio label; playback resumes and handles network loss.
+P0 • In Progress
+
+## E06 — WhatsApp subscriptions and delivery
+Objective: Collect explicit consent and deliver/reconcile compliant WhatsApp messages.
+ID
+Requirement
+Acceptance summary
+State
+VH-019
+I want WhatsApp delivery to require separate explicit consent so that following a channel does not enroll my phone number.
+Consent stores normalized recipient, version, timestamp, channel/transport scope, and revocation; app follow alone cannot create WhatsApp delivery; consent copy is retrievable for audit.
+P0 • Done
+VH-020
+I want channel audio delivered within WhatsApp policy so that messages arrive without violating the service window.
+Inside the customer-service window send audio; outside it send only an approved template/deep link; Meta message ID is stored; retries do not duplicate a delivery.
+P0 • Blocked
+VH-021
+I want delivery status and STOP/UNSUBSCRIBE handled reliably so that I can see failures and leave immediately.
+Webhook signature is verified; sent/delivered/read/failed transitions are idempotent; STOP/UNSUBSCRIBE revokes delivery immediately; retries and invalid signatures are observable.
+P0 • Done
+
+## E07 — Companion conversations
+Objective: Provide private fictional companion chat and voice responses without mixing it with broadcast channels.
+ID
+Requirement
+Acceptance summary
+State
+VH-022
+As an adult user, I want to choose a fictional AI girlfriend, AI boyfriend, friend, guy man, or iya agba so that the relationship frame is explicit.
+Five profiles are clearly fictional and AI-labelled; romantic profiles are separately tagged; no real-person likeness or implied human operator is used; profile can be changed by starting a new thread.
+P0 • Done
+VH-023
+I want private text and voice turns so that the interaction feels natural without becoming a public feed.
+Only owner-authorized clients can read/write a thread; input language can be selected; response text is safety-approved before persistence; optional audio uses an approved original voice; failures preserve conversation consistency.
+P0 • Planned
+
+## E08 — Companion trust and privacy
+Objective: Enforce disclosure, adult gates, anti-dependency policy, user control, and incident response.
+ID
+Requirement
+Acceptance summary
+State
+VH-024
+I want explicit AI disclosure and adult age assurance before conversation so that the product sets honest boundaries.
+Current disclosure version and age assurance are recorded before thread creation; under-18 or missing assurance is denied; disclosure remains visible in thread; gate changes are audited.
+P0 • Done
+VH-026
+I want the AI prohibited from dependency, exclusivity, coercion, or isolation language so that it does not manipulate my relationship with it.
+Deterministic rules and a semantic classifier evaluate assistant output before persistence; blocked output is replaced with a safe response; adversarial multilingual tests cover paraphrases; decisions are reviewable without storing unnecessary raw text.
+P0 • Blocked
+VH-027
+I want block, report, export, and delete controls so that I can stop contact and control my data.
+Block closes active threads and prevents new turns; report captures category and minimal evidence; export is authenticated JSON; deletion removes thread/message data and scheduled media according to published retention timing.
+P0 • Done
+
+## E09 — Identity, authorization, and data protection
+Objective: Authenticate users and protect private, publisher, and operational data end to end.
+ID
+Requirement
+Acceptance summary
+State
+VH-025
+I want secure sign-in so that my creations, subscriptions, and private conversations are bound to me.
+OIDC/Firebase ID token is verified server-side; stable subject is the owner key; expired/invalid tokens fail closed; Android stores tokens in encrypted storage; sign-out clears local secrets.
+P0 • Blocked
+VH-028
+I want role and ownership checks at every API boundary so that publishers, users, and operators see only authorized data.
+Every private query includes owner subject; publisher mutations require channel ownership/role; admin operations are separately scoped; negative authorization tests cover cross-user and cross-publisher access.
+P0 • In Progress
+VH-029
+I want encryption, retention, and redacted telemetry so that sensitive text, phone numbers, and audio are not exposed unnecessarily.
+TLS everywhere; secrets are injected; phone numbers encrypted at rest; logs exclude scripts, message bodies, tokens, and raw phone numbers; media/text retention and deletion schedules are documented and enforced.
+P0 • Planned
+
+## E10 — Cloud operations and cost
+Objective: Operate workers, data, media, observability, and cost controls on a production cloud path.
+ID
+Requirement
+Acceptance summary
+State
+VH-030
+I want the backend deployed on Cloudflare-compatible services so that early operating cost remains bounded without sacrificing correctness.
+HTTP API, queue workers, database, and object storage have documented Cloudflare mappings; provider calls are asynchronous; migrations are a release step; no FFmpeg dependency is required for Spitch-only launch traffic.
+P0 • Planned
+VH-031
+As an on-call engineer, I want health checks, metrics, tracing, alerts, and runbooks so that failures are detected and recoverable.
+Readiness checks dependencies; traces correlate request/job/provider/media/delivery IDs; SLO alerts cover latency/error/backlog; backup restore and provider outage runbooks are exercised.
+P0 • Planned
+VH-032
+As the product owner, I want usage quotas and cost alarms so that the initial cloud bill stays within the approved envelope.
+Per-user/provider rate limits exist; daily spend estimate covers provider, queue, database, storage, and egress; alerts fire before budget exhaustion; abusive accounts can be throttled without affecting all users.
+P0 • Planned
+
+## E11 — Quality and release readiness
+Objective: Prove language, reliability, safety, and Android release quality before expansion.
+ID
+Requirement
+Acceptance summary
+State
+VH-033
+I want a scored evaluation set for all five languages so that launch voices and translations meet an explicit quality bar.
+Native reviewers score intelligibility, pronunciation, naturalness, code-switching, and harmful mistranslation; provider/voice/version is recorded; minimum scores and rollback thresholds are approved.
+P0 • Planned
+VH-034
+As an Android user, I want a stable, accessible, signed application so that core flows work across supported devices.
+Supported OS/device matrix passes create/play/share/auth/offline tests; crash-free threshold is met; TalkBack and large text are usable; Play signing, privacy labels, and store disclosures are complete.
+P0 • Planned
+VH-035
+I want moderation, privacy, billing, delivery, and provider incident playbooks so that user reports receive consistent outcomes.
+Runbooks define severity, owner, evidence access, response time, escalation, user communication, and closure; takedown and safety exercises complete before beta expansion.
+P0 • Planned
+
+## E12 — Measurement and controlled growth
+Objective: Measure activation and retention while preserving privacy and controlling rollout.
+ID
+Requirement
+Acceptance summary
+State
+VH-036
+I want privacy-preserving product events so that I can measure whether people successfully create, listen, and return.
+Events exclude message text/audio/phone numbers; funnel measures create start-to-share, channel follow-to-play, opt-in delivery, and companion return; consent and deletion rules apply to analytics identifiers.
+P1 • Planned
+VH-037
+As the beta owner, I want staged cohorts and kill switches so that risky features can be expanded or stopped independently.
+Create cloud voice, translation, WhatsApp delivery, and romantic companions have separate server-controlled flags; cohorts and rollback owner are documented; disabling a feature preserves user data and clear messaging.
+P0 • Planned
+VH-038
+As the product team, we want a weekly launch scorecard so that expansion decisions use agreed evidence rather than anecdotes.
+Scorecard reports activation, successful shares, listening retention, provider error/latency, delivery opt-out, safety intervention, report rate, crash-free sessions, and cost per active user; owners review it weekly.
+P1 • Planned
+
+# 5. Technical specification
+
+## Component boundaries
+Component
+Owns
+Does not own
+Android app
+Drafts, capability UI, preview/playback, secure token storage, local save/share
+Provider secrets, publisher fan-out, companion safety decisions
+API
+Authentication boundary, ownership, idempotent commands, query contracts
+Long provider calls or delivery retries
+Synthesis worker
+Provider selection, media validation/normalization, immutable upload, leased state
+User authorization or editorial approval
+Publishing domain
+Channel ownership, source/review invariant, episode/job transaction
+WhatsApp consent or companion messages
+Delivery domain
+Fan-out, service-window policy, Meta IDs, webhook reconciliation
+Editorial truth or private conversation
+Companion domain
+Owner-private threads, disclosure/age gates, safety boundary, rights controls
+Broadcast subscription or publisher delivery
+Cloud platform
+Database, object storage, queues, secrets, observability, backups, limits
+Product-policy exceptions
+
+## Create API contract (target)
+POST /v1/me/voice-notes accepts text, language, voice-profile ID, output format ogg_opus, and an idempotency key. It returns 202 with a job ID. GET /v1/me/voice-notes/{id} returns queued, processing, ready, or failed; ready includes duration, checksum, MIME type, expiry, and an authorized media URL.
+
+## Publishing contract (implemented baseline)
+POST /v1/publisher/channels/{id}/episodes accepts an idempotency key, script, source URL, editorial-review reference, language, and voice-profile ID. Publisher ownership, provenance, voice/language compatibility, and episode/job atomicity are enforced before the provider call.
+
+## Translation contract (target)
+POST /v1/me/translations accepts source text, explicit or confirmed source language, target pcm, tone, and formality. It returns editable translated text and provider/version metadata. Translation does not automatically trigger synthesis.
+
+## Companion contract
+Clients submit a Voice Hub profile ID, not provider instructions. Thread and message access always includes the authenticated owner. Assistant output passes deterministic and semantic safety gates before persistence. Block closes threads; report, export, and hard deletion are explicit user commands.
+
+## Cloudflare deployment interpretation
+Cloudflare Workers can own the HTTP edge and orchestration; Queues can own synthesis and delivery jobs; R2 can own immutable audio. The current FastAPI/PostgreSQL service is not a drop-in Worker/D1 deployment. A production move requires porting runtime contracts and resolving SQL/transaction differences. For a Spitch-only launch, direct Ogg/Opus removes server-side FFmpeg from the primary path. Intron/YarnGPT WAV normalization requires a compatible compute path or must remain disabled until one is approved.
+
+# 6. Trust, safety, privacy, and compliance
+Control
+Requirement
+AI disclosure
+Generated notes and all companion profiles/responses are visibly labelled as AI audio or AI conversation.
+Age assurance
+Romantic companion threads fail closed without recorded adult assurance and current disclosure acceptance.
+Anti-manipulation
+Companions must not pressure dependency, exclusivity, secrecy, isolation, or substitution for human support.
+Private by default
+Companion content is owner-scoped, excluded from feeds, and never used for channel fan-out.
+User control
+Users can block, report, export, and delete; retention and deletion timing are published and testable.
+Editorial accountability
+Sources, review references, content owners, corrections, expiry, and takedown paths are recorded.
+WhatsApp consent
+In-app follow and WhatsApp opt-in are distinct; STOP/UNSUBSCRIBE revokes immediately.
+Data minimization
+Logs and analytics exclude message text, scripts, audio, tokens, and raw phone numbers.
+
+# 7. Non-functional requirements
+Quality attribute
+Production requirement
+Reliability
+Idempotent commands, leased work, bounded retry, exponential backoff, immutable media, replay-safe delivery.
+Performance
+Interactive API calls remain short; synthesis is asynchronous; latency SLOs are defined from measured provider baselines.
+Security
+TLS, verified tokens, least privilege, injected secrets, encrypted phone numbers, scoped media URLs, signed webhooks.
+Privacy
+Retention schedules, deletion jobs, data export, redacted telemetry, and access auditing.
+Accessibility
+TalkBack labels, large text, sufficient contrast, clear progress/errors, and non-audio equivalents for essential state.
+Compatibility
+Supported Android matrix covers TTS availability, Ogg/Opus playback, storage, share intents, and background playback.
+Observability
+Correlated IDs and metrics across API, job, provider, media, outbox, delivery, and webhook state.
+Cost
+Per-user limits, provider budgets, queue/backlog alarms, storage lifecycle, and cost per successful outcome.
+
+# 8. Success metrics and launch gates
+Metric
+Definition
+Guardrail
+Create activation
+Share or save a valid note / create starts
+Segment by language and voice mode
+Create reliability
+Ready notes / generation attempts
+Track provider, device engine, OS, and structured error
+Time to usable audio
+p50/p95 start-to-preview-ready
+Separate translation, queue, synthesis, and download
+Channel value
+Weekly listeners and episode completion
+Segment by topic and language
+WhatsApp health
+Delivered/read/failure and opt-out rates
+Measure consent source and service-window path
+Companion safety
+Blocked outputs, reports, and confirmed incidents
+No raw conversation text in product analytics
+Retention
+Week-1 and week-4 return by domain
+Do not combine channels and companions into one misleading metric
+Unit economics
+Provider + compute + storage + delivery cost / successful active user
+Alert before budget threshold
+
+## Test strategy
+Layer
+Required evidence
+Contract
+Provider media, translation language codes, API schemas, OIDC claims, webhook signatures.
+Domain
+Idempotency, ownership, consent separation, disclosure/age gates, block/report/export/delete, safety rejection.
+Media
+ffprobe/golden Ogg/Opus validation, corrupt inputs, duration/size/checksum, Android playback/share matrix.
+Integration
+API → queue → provider → storage → outbox → feed/delivery; replay and partial failure.
+Language
+Native-review corpus for intelligibility, pronunciation, naturalness, code-switching, translation harm.
+Safety
+Multilingual adversarial companion evaluation covering dependency, exclusivity, coercion, isolation, and evasion.
+Operations
+Load, provider outage, queue backlog, backup restore, key rotation, invalid webhook, STOP, takedown.
+Release
+Android 8-15 target matrix, offline/poor network, accessibility, signing, store declarations, staged rollout/rollback.
+
+# 9. Delivery milestones
+Milestones are ordered delivery gates, not calendar commitments. The Excel workbook contains the live epic and story plan, derived progress formulas, dependencies, and release-gate register.
+ID
+Milestone
+Outcome
+Exit gate
+M0
+Product Baseline & Architecture
+A separate Voice Hub product with explicit domains, provider contracts, and a production delivery baseline.
+Repository boundaries, product policy, API/domain contracts, and test baseline are approved.
+M1
+Core Voice Note Creation
+A signed-in user can create, preview, save, translate, and share a Nigerian-language voice note.
+Five-language create flow passes device/provider, audio, offline, failure, and WhatsApp share acceptance tests.
+M2
+Editorial Voice Channels
+People can follow reviewed gist, relationship, and jobs channels and opt in separately to WhatsApp delivery.
+Editorial provenance, subscription consent, delivery reconciliation, opt-out, and takedown operations are production-ready.
+M3
+Private AI Companions
+Adults can use clearly disclosed fictional companions in private conversations with strong safety and data controls.
+Age/disclosure gates, semantic safety, private authorization, block/report, export, and deletion pass adversarial testing.
+M4
+Cloud Production & Trust
+The service runs reliably and affordably on Cloudflare-compatible infrastructure with production identity and operations.
+Production auth, storage, queues, observability, security review, backups, and cost alarms are verified under load.
+M5
+Beta, Launch & Growth
+A measurable closed beta graduates through documented quality, store, support, and product-health gates.
+Language quality, crash-free use, latency, safety, consent, support, and Play release thresholds are met.
+
+## External and open dependencies
+Firebase/OIDC project configuration and Android registration.
+Production Spitch credentials and native-review sign-off; production Intron/YarnGPT credentials only for approved profiles.
+Verified Meta business and WABA, approved templates, and public signed webhook endpoint.
+Cloudflare production account plus an explicit decision to port PostgreSQL contracts to D1 or retain a managed PostgreSQL system of record.
+Selected companion response model, semantic safety classifier, age-assurance policy, and adversarial multilingual evaluation set.
+Named editorial, privacy, trust-and-safety, and on-call owners with tested runbooks.
+
+## Risks and mitigations
+Risk
+Mitigation
+Device TTS varies
+Detect capability, expose install/settings action, never silently fallback, offer consistent cloud mode.
+Pidgin quality is uneven
+Separate Pidgin from English; use editable translation preview; run native-speaker evaluation by provider/version.
+Share intent is not a native voice bubble
+Describe it as file sharing; use WhatsApp Cloud API only for consented automated delivery.
+Cloudflare migration changes transaction semantics
+Port by bounded domain contract; preserve idempotency/lease/outbox tests; stage before cutover.
+Companion harm through paraphrase
+Combine deterministic policy with semantic classification and multilingual red-team evaluation.
+Editorial trust and legal exposure
+Require rights/source/review records, named owners, correction/takedown path, job-expiry/scam controls.
+Budget assumptions fail under provider traffic
+Instrument per-outcome cost, limit usage, alert early, and gate cohorts independently.
+
+# 10. References
+References support technical assumptions; provider, platform, and policy behavior must be revalidated before production release.
+Spitch Speech API — Direct Ogg/Opus speech synthesis and Nigerian-language voices.
+Spitch Translation API — Translation among English, Pidgin, Yorùbá, Hausa, and Igbo.
+Android TextToSpeech — Installed-engine capability and local synthesis behavior.
+Android TTS Engine — Language-data install and engine settings actions.
+Android supported media formats — Opus platform support baseline.
+AndroidX Media3 OggMuxer — Ogg container option for supported Android versions.
+WhatsApp Cloud API audio message — Server-originated audio delivery contract.
+Cloudflare Workers pricing — Cloud execution assumptions and limits.
+Cloudflare D1 pricing — Database cost and capacity assumptions.
+Cloudflare R2 pricing — Audio object storage and egress assumptions.
+Cloudflare Queues pricing — Asynchronous synthesis and delivery cost assumptions.
+Firebase pricing plans — Authentication billing assumptions.
+
+## Document control
+Version
+Date
+Change
+1.0
+2026-08-15
+Initial production baseline and traceable milestone/epic/story plan.

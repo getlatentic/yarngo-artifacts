@@ -1,0 +1,241 @@
+{
+  "$meta": {
+    "textSubtleNote": "textNonText (#857D72) is for icons, dividers and disabled marks — never a string. Smallest passing text colour is textSubtle.",
+    "name": "Yarngo Design Tokens",
+    "version": "1.0.0",
+    "basedOn": "Yarngo Brand Guidelines v0.1"
+  },
+  "color": {
+    "orange": {
+      "50": "#FFF3E6",
+      "100": "#FFE2C2",
+      "200": "#FFCB93",
+      "300": "#FFB264",
+      "400": "#FF9C3D",
+      "500": "#FF8A1F",
+      "600": "#E6740F",
+      "700": "#BF5C08",
+      "800": "#8F4406",
+      "900": "#5E2C03"
+    },
+    "neutral": {
+      "50": "#FFF9F2",
+      "100": "#F7F1E8",
+      "200": "#EBE4D9",
+      "300": "#D8D0C4",
+      "400": "#B0A79B",
+      "500": "#857D72",
+      "600": "#5F594F",
+      "700": "#423E37",
+      "800": "#2A2723",
+      "900": "#171717"
+    },
+    "leaf": {
+      "50": "#E9F5EF",
+      "100": "#C9E7D9",
+      "300": "#7FC3A5",
+      "500": "#287A57",
+      "700": "#1B5C41",
+      "900": "#0E3A28"
+    },
+    "signal": {
+      "50": "#EEF0FE",
+      "100": "#D8DDFD",
+      "300": "#9AA6FB",
+      "500": "#596DF8",
+      "700": "#3A4CD1",
+      "900": "#23308F"
+    }
+  },
+  "semantic": {
+    "light": {
+      "bg": "#FFF9F2",
+      "bgSubtle": "#F7F1E8",
+      "surface": "#FFFFFF",
+      "surfaceSunken": "#F1EBE1",
+      "border": "#EBE4D9",
+      "borderStrong": "#D8D0C4",
+      "text": "#171717",
+      "textMuted": "#5F594F",
+      "textSubtle": "#857D72",
+      "textInverse": "#FFF9F2",
+      "accent": "#FF8A1F",
+      "accentHover": "#E6740F",
+      "accentPress": "#BF5C08",
+      "accentText": "#8F4406",
+      "accentTextLarge": "#BF5C08",
+      "accentSurface": "#FFF3E6",
+      "onAccent": "#171717",
+      "success": "#287A57",
+      "successSurface": "#E9F5EF",
+      "warning": "#C97A00",
+      "warningSurface": "#FBF0DC",
+      "danger": "#C7362B",
+      "dangerSurface": "#FBEBE8",
+      "info": "#596DF8",
+      "infoSurface": "#EEF0FE",
+      "focus": "#596DF8"
+    },
+    "dark": {
+      "bg": "#121110",
+      "bgSubtle": "#1A1816",
+      "surface": "#1F1C19",
+      "surfaceSunken": "#171513",
+      "border": "#35302A",
+      "borderStrong": "#4A443C",
+      "text": "#FFF9F2",
+      "textMuted": "#B0A79B",
+      "textSubtle": "#857D72",
+      "textInverse": "#171717",
+      "accent": "#FF9C3D",
+      "accentHover": "#FFB264",
+      "accentPress": "#FF8A1F",
+      "accentText": "#FFB264",
+      "accentSurface": "#2E1F10",
+      "onAccent": "#171717",
+      "success": "#7FC3A5",
+      "successSurface": "#10291F",
+      "warning": "#E3A21F",
+      "warningSurface": "#2E200F",
+      "danger": "#E8695C",
+      "dangerSurface": "#2E1512",
+      "info": "#9AA6FB",
+      "infoSurface": "#1A1D3A",
+      "focus": "#9AA6FB"
+    }
+  },
+  "font": {
+    "display": "Sora",
+    "text": "Noto Sans",
+    "mono": "Noto Sans Mono"
+  },
+  "type": {
+    "display1": {
+      "size": 64,
+      "line": 1.02,
+      "tracking": "-0.025em",
+      "weight": 700,
+      "font": "display",
+      "mobile": 40
+    },
+    "display2": {
+      "size": 48,
+      "line": 1.05,
+      "tracking": "-0.02em",
+      "weight": 700,
+      "font": "display",
+      "mobile": 32
+    },
+    "h1": {
+      "size": 36,
+      "line": 1.15,
+      "tracking": "-0.02em",
+      "weight": 600,
+      "font": "display",
+      "mobile": 28
+    },
+    "h2": {
+      "size": 28,
+      "line": 1.2,
+      "tracking": "-0.01em",
+      "weight": 600,
+      "font": "display",
+      "mobile": 24
+    },
+    "h3": {
+      "size": 22,
+      "line": 1.3,
+      "tracking": "-0.01em",
+      "weight": 600,
+      "font": "display",
+      "mobile": 20
+    },
+    "title": {
+      "size": 18,
+      "line": 1.4,
+      "weight": 600,
+      "font": "display"
+    },
+    "bodyLg": {
+      "size": 18,
+      "line": 1.6,
+      "weight": 400,
+      "font": "text"
+    },
+    "body": {
+      "size": 16,
+      "line": 1.6,
+      "weight": 400,
+      "font": "text"
+    },
+    "bodySm": {
+      "size": 14,
+      "line": 1.55,
+      "weight": 400,
+      "font": "text"
+    },
+    "caption": {
+      "size": 13,
+      "line": 1.4,
+      "weight": 400,
+      "font": "text"
+    },
+    "label": {
+      "size": 12,
+      "line": 1.2,
+      "tracking": "0.08em",
+      "weight": 600,
+      "font": "text",
+      "transform": "uppercase"
+    },
+    "code": {
+      "size": 13,
+      "line": 1.5,
+      "weight": 400,
+      "font": "mono"
+    }
+  },
+  "space": {
+    "1": 4,
+    "2": 8,
+    "3": 12,
+    "4": 16,
+    "5": 20,
+    "6": 24,
+    "8": 32,
+    "10": 40,
+    "12": 48,
+    "16": 64,
+    "20": 80,
+    "24": 96
+  },
+  "radius": {
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "full": 999
+  },
+  "shadow": {
+    "1": "0 1px 2px rgba(23,23,23,.06)",
+    "2": "0 4px 16px rgba(23,23,23,.08)",
+    "3": "0 12px 32px rgba(23,23,23,.12)"
+  },
+  "motion": {
+    "instant": 120,
+    "fast": 180,
+    "base": 240,
+    "slow": 320,
+    "breathe": 1600,
+    "easeStandard": "cubic-bezier(.2,0,0,1)",
+    "easeOut": "cubic-bezier(0,0,0,1)",
+    "easeIn": "cubic-bezier(.3,0,1,1)"
+  },
+  "touch": {
+    "minTarget": 44,
+    "iconGrid": 24,
+    "iconStroke": 2
+  }
+}

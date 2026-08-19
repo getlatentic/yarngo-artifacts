@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Mono:wght@400;500&display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,0..1,0&display=swap" rel="stylesheet"><style>body{margin:0;background:#EDE8E0;font-family:'Noto Sans',system-ui,sans-serif;color:#171717}a{color:#8F4406;text-decoration:none}a:hover{color:#5E2C03}</style></helmet>
+
+<section style="padding:44px 48px 48px" id="t3">
+<div style="display:flex;align-items:baseline;gap:10px;margin:0 0 6px"><a href="#t3" style="font:600 10px 'Noto Sans Mono',monospace;padding:3px 7px;background:#1F1C19;color:#FFF9F2;border-radius:4px">3</a><span style="font:600 14px 'Noto Sans',sans-serif">No runtime, no model, and what the two title-bar controls open</span></div>
+
+<sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+<p style="margin:0 0 14px;font:400 13px/1.6 'Noto Sans',sans-serif;color:#5F594F;max-width:840px;text-wrap:pretty">The three things you can skip fail differently, so they should not look alike. A missing <b>voice</b> leaves a working app — <a href="#2a">2a</a>. A missing <b>model</b> leaves an app that can accept work but not do it yet, so <a href="#3b">3b</a> takes the text you typed and queues it: the download finishes, the clip generates, nothing is retyped. A missing <b>runtime</b> leaves nothing to do at all, so <a href="#3a">3a</a> is the only case that refuses to open the workspace — it returns to step 1 and states what is blocked, with a resume, an offline installer, and a copyable link for a machine that has no connection.</p>
+<p style="margin:0 0 34px;font:400 13px/1.6 'Noto Sans',sans-serif;color:#5F594F;max-width:840px;text-wrap:pretty">The pill and the gear split by frequency. The <b>pill</b> is a switcher — <a href="#3c">3c</a> lists what is on disk, switches on click, and shows what a switch costs in seconds and memory. Everything slower than that lives behind the <b>gear</b> — <a href="#3d">3d</a>, a normal settings window where models are added and deleted, disk is accounted for, and the runtime version and update channel are visible. Deleting a model names the voices that stop working.</p>
+</sc-if>
+
+<div style="display:flex;flex-direction:column;gap:34px">
+
+<div id="3a" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#3a" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:rgba(23,23,23,.09);color:#171717;border-radius:5px">3a</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Runtime skipped or interrupted — the one state that has no workspace behind it</span></div>
+<div data-screen-label="3a" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:6px;font:400 11.5px 'Noto Sans',sans-serif;color:#C7362B"><span style="width:7px;height:7px;border-radius:50%;background:#C7362B"></span>Runtime not installed</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;padding:30px 40px 0">
+<div style="width:820px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;align-items:center;gap:12px">
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;border-radius:50%;background:#1F1C19;display:flex;align-items:center;justify-content:center;font:600 11px 'Noto Sans Mono',monospace;color:#FFF9F2">1</span><span style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Runtime</span></span>
+<span style="width:44px;height:1px;background:#E4DCD0"></span>
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;box-sizing:border-box;border:1px solid #D8D0C4;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 11px 'Noto Sans Mono',monospace;color:#B0A79B">2</span><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#B0A79B">Model</span></span>
+<span style="width:44px;height:1px;background:#E4DCD0"></span>
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;box-sizing:border-box;border:1px solid #D8D0C4;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 11px 'Noto Sans Mono',monospace;color:#B0A79B">3</span><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#B0A79B">Your voice</span></span>
+</div>
+<div style="background:#FFF9F5;border:1px solid #F0B7AF;border-radius:12px;padding:16px 18px;display:flex;gap:14px;align-items:flex-start">
+<span style="width:32px;height:32px;flex:none;border-radius:9px;background:#FDEBE8;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#C7362B">wifi_off</span></span>
+<div style="flex:1;min-width:0">
+<div style="font:600 15px Sora,sans-serif;color:#171717">The download stopped at 52 of 84 MB</div>
+<div style="font:400 12.5px/1.55 'Noto Sans',sans-serif;color:#5F594F;margin-top:4px;max-width:600px">The connection dropped. What was downloaded is kept, so resuming picks up where it stopped. Nothing was installed yet.</div>
+</div>
+</div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);overflow:hidden">
+<div style="padding:15px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #F1EBE1">
+<span style="width:34px;height:34px;flex:none;border-radius:9px;background:#F7F1E8;border:1px solid #E4DCD0;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#5F594F">memory</span></span>
+<div style="flex:1;min-width:0"><div style="font:600 15px Sora,sans-serif;color:#171717">Yarngo Runtime 0.9.4</div><div style="font:400 12px 'Noto Sans',sans-serif;color:#6B645A;margin-top:2px">84 MB · required. Yarngo cannot generate speech without it.</div></div>
+<span style="height:36px;padding:0 16px;box-sizing:border-box;background:#FF6E08;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 13px 'Noto Sans',sans-serif;color:#FFFEFD"><span style="font-family:'Material Symbols Rounded';font-size:17px">refresh</span>Resume download</span>
+</div>
+<div style="padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+<div style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Until it is installed</div>
+<div style="display:flex;gap:22px">
+<div style="display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#B0A79B">block</span><span style="font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">Generating speech</span></div>
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#B0A79B">block</span><span style="font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">Downloading models</span></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">Recording a reference voice</span></div>
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">Playing clips you already made</span></div>
+</div>
+</div>
+</div>
+</div>
+<div style="display:flex;gap:16px;align-items:stretch">
+<div style="flex:1;min-width:0;background:#FFFDFA;border:1px solid #EBE4D9;border-radius:12px;padding:15px 16px;display:flex;flex-direction:column;gap:9px">
+<div style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717">No connection on this machine?</div>
+<div style="font:400 12px/1.55 'Noto Sans',sans-serif;color:#5F594F">Download the installer somewhere else and point Yarngo at the file. It checks the signature the same way.</div>
+<span style="height:34px;padding:0 13px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:inline-flex;align-self:flex-start;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">folder_open</span>Install from a file</span>
+</div>
+<div style="flex:1;min-width:0;background:#FFFDFA;border:1px solid #EBE4D9;border-radius:12px;padding:15px 16px;display:flex;flex-direction:column;gap:9px">
+<div style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Direct link</div>
+<div style="font:400 11.5px 'Noto Sans Mono',monospace;color:#5F594F;word-break:break-all">get.yarngo.app/runtime/0.9.4-macos-arm64.pkg</div>
+<span style="height:34px;padding:0 13px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:inline-flex;align-self:flex-start;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">content_copy</span>Copy link</span>
+</div>
+</div>
+</div>
+</div>
+<div style="height:62px;flex:none;box-sizing:border-box;border-top:1px solid #EBE4D9;background:#F7F1E8;display:flex;align-items:center;gap:12px;padding:0 24px">
+<span style="font:400 12px 'Noto Sans',sans-serif;color:#6B645A">Yarngo will pick this up next time it opens.</span>
+<span style="flex:1"></span>
+<span style="height:36px;padding:0 14px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Quit</span>
+<span style="height:36px;padding:0 14px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">mic</span>Record my voice meanwhile</span>
+</div>
+</div>
+</div>
+
+<div id="3b" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#3b" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:#FF6E08;color:#FFFEFD;border-radius:5px">3b</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">No model yet — the app takes the work now and does it when the download lands</span></div>
+<div data-screen-label="3b" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<sc-if value="{{ statusPill }}" hint-placeholder-val="{{ true }}"><span style="height:24px;padding:0 10px;box-sizing:border-box;background:#FFFFFF;border:1px solid #FFCB93;border-radius:999px;display:flex;align-items:center;gap:7px;font:500 11.5px 'Noto Sans',sans-serif;color:#8F4406"><span style="width:7px;height:7px;border-radius:50%;background:#FF8A1F"></span>Fast · 41%<span style="font-family:'Material Symbols Rounded';font-size:15px;color:#B98A55">expand_more</span></span></sc-if>
+<span style="font-family:'Material Symbols Rounded';font-size:19px;color:#5F594F">settings</span>
+</div>
+<div style="flex:1;min-height:0;display:flex">
+<div style="width:236px;flex:none;box-sizing:border-box;background:#F7F1E8;border-right:1px solid #EBE4D9;display:flex;flex-direction:column">
+<div style="padding:16px 14px 8px;display:flex;align-items:center;gap:8px"><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">VOICES</span><span style="flex:1"></span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">add</span></div>
+<div style="padding:0 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;background:#FFF3E6"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#FF8A1F;display:flex;align-items:center;justify-content:center;font:600 11px Sora,sans-serif;color:#171717">M</span><span style="flex:1;min-width:0"><span style="display:block;font:600 12.5px 'Noto Sans',sans-serif;color:#8F4406">My voice</span><span style="display:block;font:400 11px 'Noto Sans',sans-serif;color:#8F4406;opacity:.75;margin-top:1px">0:21 reference</span></span></span>
+</div>
+<div style="padding:20px 14px 8px;font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">CLIPS</div>
+<div style="padding:0 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;background:#FFFFFF;border:1px solid #EBE4D9"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#857D72">schedule</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Good morning. Prices at…</span><span style="display:block;font:400 11px 'Noto Sans Mono',monospace;color:#857D72;margin-top:1px">queued</span></span></span>
+</div>
+<span style="flex:1"></span>
+<div style="border-top:1px solid #EBE4D9;padding:12px 14px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Runtime running · 0.9.4</div>
+<div style="display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#8F4406"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#FF8A1F">downloading</span>Fast · 493 MB of 1.2 GB</div>
+<div style="height:5px;background:#EBE4D9;border-radius:999px;overflow:hidden"><span style="display:block;width:41%;height:100%;background:#FF8A1F;border-radius:999px"></span></div>
+</div>
+</div>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="flex:1;min-height:0;padding:22px 26px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px">
+<div><div style="font:600 19px Sora,sans-serif;letter-spacing:-.01em;color:#171717">New clip</div><div style="font:400 12.5px 'Noto Sans',sans-serif;color:#6B645A;margin-top:3px">My voice · no model yet</div></div>
+<span style="flex:1"></span>
+<span style="height:32px;padding:0 12px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#5F594F">tune</span>Speed, pitch, seed</span>
+</div>
+<div style="background:#FFFFFF;border:1.5px solid #171717;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:15px 18px;display:flex;flex-direction:column;gap:11px">
+<div style="display:flex;align-items:center;gap:14px">
+<span style="width:34px;height:34px;flex:none;border-radius:9px;background:#FFF3E6;border:1px solid #FFCB93;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#8F4406">download</span></span>
+<div style="flex:1;min-width:0"><div style="font:600 14px Sora,sans-serif;color:#171717">Downloading Fast — 4 minutes left</div><div style="font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F;margin-top:3px">A model is the part that actually speaks. You can write now; the queue runs the moment it is ready.</div></div>
+<span style="height:34px;padding:0 13px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Choose another</span>
+</div>
+<div style="height:6px;background:#EBE4D9;border-radius:999px;overflow:hidden"><span style="display:block;width:41%;height:100%;background:#FF8A1F;border-radius:999px"></span></div>
+</div>
+<div style="flex:1;min-height:0;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px">
+<span style="font:400 15px/1.7 'Noto Sans',sans-serif;color:#171717">Good morning. Prices at Mile 12 came down again this week, so if you were waiting to buy rice, this is the week to do it.</span>
+<span style="flex:1"></span>
+<div style="display:flex;gap:16px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span>120 characters</span><span>about 16 seconds spoken</span></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px">
+<span style="height:38px;padding:0 18px;box-sizing:border-box;background:#1F1C19;border-radius:8px;display:flex;align-items:center;gap:8px;font:600 13.5px 'Noto Sans',sans-serif;color:#FFF9F2"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#FFF9F2">schedule</span>Generate when ready</span>
+<span style="font:400 12.5px 'Noto Sans',sans-serif;color:#6B645A">1 clip queued. It starts on its own — you do not have to wait here.</span>
+<span style="flex:1"></span>
+<sc-if value="{{ privacyNote }}" hint-placeholder-val="{{ true }}"><span style="display:flex;align-items:center;gap:7px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#857D72">wifi_off</span>Runs on this machine. Works offline.</span></sc-if>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="3c" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#3c" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:rgba(23,23,23,.09);color:#171717;border-radius:5px">3c</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">The pill, clicked — switch what is on disk, with the cost of switching stated</span></div>
+<div data-screen-label="3c" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column;position:relative">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<span style="height:24px;padding:0 10px;box-sizing:border-box;background:#FFFFFF;border:1px solid #171717;border-radius:999px;display:flex;align-items:center;gap:7px;font:500 11.5px 'Noto Sans',sans-serif;color:#171717"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Fast · loaded<span style="font-family:'Material Symbols Rounded';font-size:15px;color:#5F594F">expand_less</span></span>
+<span style="font-family:'Material Symbols Rounded';font-size:19px;color:#5F594F">settings</span>
+</div>
+<div style="flex:1;min-height:0;display:flex">
+<div style="width:236px;flex:none;box-sizing:border-box;background:#F7F1E8;border-right:1px solid #EBE4D9;display:flex;flex-direction:column">
+<div style="padding:16px 14px 8px;display:flex;align-items:center;gap:8px"><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">VOICES</span><span style="flex:1"></span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">add</span></div>
+<div style="padding:0 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;background:#FFF3E6"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#FF8A1F;display:flex;align-items:center;justify-content:center;font:600 11px Sora,sans-serif;color:#171717">M</span><span style="flex:1;min-width:0"><span style="display:block;font:600 12.5px 'Noto Sans',sans-serif;color:#8F4406">My voice</span><span style="display:block;font:400 11px 'Noto Sans',sans-serif;color:#8F4406;opacity:.75;margin-top:1px">0:21 reference</span></span></span>
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#E4DCD0;display:flex;align-items:center;justify-content:center;font:600 11px Sora,sans-serif;color:#5F594F">T</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717">Tunde, studio</span><span style="display:block;font:400 11px 'Noto Sans',sans-serif;color:#857D72;margin-top:1px">0:22 reference</span></span></span>
+</div>
+<div style="padding:20px 14px 8px;font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">CLIPS</div>
+<div style="padding:0 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#857D72">play_circle</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Intro for episode 12</span><span style="display:block;font:400 11px 'Noto Sans Mono',monospace;color:#857D72;margin-top:1px">0:31 · 14:02</span></span></span>
+</div>
+<span style="flex:1"></span>
+<div style="border-top:1px solid #EBE4D9;padding:12px 14px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Runtime running · 0.9.4</div>
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">hard_drive</span>2 models on disk · 4.0 GB</div>
+</div>
+</div>
+<div style="flex:1;min-width:0;padding:22px 26px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px">
+<div><div style="font:600 19px Sora,sans-serif;letter-spacing:-.01em;color:#171717">New clip</div><div style="font:400 12.5px 'Noto Sans',sans-serif;color:#6B645A;margin-top:3px">My voice · Fast</div></div>
+<span style="flex:1"></span>
+<span style="height:32px;padding:0 12px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#5F594F">tune</span>Speed 1.0 · Seed 4417</span>
+</div>
+<div style="flex:1;min-height:0;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px">
+<span style="font:400 15px/1.7 'Noto Sans',sans-serif;color:#171717">Good morning. Prices at Mile 12 came down again this week.</span>
+<span style="flex:1"></span>
+<div style="display:flex;gap:16px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span>58 characters</span><span>about 8 seconds spoken</span></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px">
+<span style="height:38px;padding:0 20px;box-sizing:border-box;background:#FF6E08;border-radius:8px;display:flex;align-items:center;font:600 13.5px 'Noto Sans',sans-serif;color:#FFFEFD">Generate</span>
+<span style="flex:1"></span>
+<sc-if value="{{ privacyNote }}" hint-placeholder-val="{{ true }}"><span style="display:flex;align-items:center;gap:7px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#857D72">wifi_off</span>Runs on this machine. Works offline.</span></sc-if>
+</div>
+</div>
+</div>
+<div style="position:absolute;top:46px;right:44px;width:352px;background:#FFFDFA;border:1px solid #E4DCD0;border-radius:12px;box-shadow:0 16px 40px rgba(23,23,23,.22);overflow:hidden">
+<div style="padding:11px 14px 9px;font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">ON THIS MACHINE</div>
+<div style="padding:0 8px 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:flex-start;gap:10px;padding:9px 8px;border-radius:8px;background:#FFF3E6"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#8F4406;font-variation-settings:'FILL' 1">check_circle</span><span style="flex:1;min-width:0"><span style="display:flex;align-items:baseline;gap:7px"><span style="font:600 13px 'Noto Sans',sans-serif;color:#171717">Fast</span><span style="font:400 10.5px 'Noto Sans',sans-serif;color:#8F4406">in memory</span></span><span style="display:block;font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A;margin-top:2px">1.2 GB · 0.4× realtime</span></span></span>
+<span style="display:flex;align-items:flex-start;gap:10px;padding:9px 8px;border-radius:8px"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#B0A79B">radio_button_unchecked</span><span style="flex:1;min-width:0"><span style="display:flex;align-items:baseline;gap:7px"><span style="font:500 13px 'Noto Sans',sans-serif;color:#171717">Best quality</span><span style="font:400 10.5px 'Noto Sans',sans-serif;color:#857D72">loads in 8s</span></span><span style="display:block;font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A;margin-top:2px">2.8 GB · 1.6× realtime</span></span></span>
+</div>
+<div style="padding:9px 14px;border-top:1px solid #F1EBE1;font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">NOT DOWNLOADED</div>
+<div style="padding:0 8px 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#B0A79B">download</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Step Audio</span><span style="display:block;font:400 11px 'Noto Sans Mono',monospace;color:#857D72;margin-top:1px">3.4 GB</span></span></span>
+<span style="display:flex;align-items:center;gap:10px;padding:8px"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#B0A79B">download</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">LongCat</span><span style="display:block;font:400 11px 'Noto Sans Mono',monospace;color:#857D72;margin-top:1px">2.1 GB</span></span></span>
+</div>
+<div style="border-top:1px solid #F1EBE1;padding:11px 14px;display:flex;flex-direction:column;gap:8px">
+<span style="font:400 11.5px/1.5 'Noto Sans',sans-serif;color:#6B645A">Switching only changes the next clip. Clips already made keep the model they were made with.</span>
+<span style="display:flex;align-items:center;gap:8px;font:600 12px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">settings</span>Manage models…</span>
+</div>
+</div>
+</div>
+</div>
+
+<div id="3d" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#3d" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:#FF6E08;color:#FFFEFD;border-radius:5px">3d</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">The gear — a settings window where disk, models and the runtime are accounted for</span></div>
+<div data-screen-label="3d" style="width:1180px;height:740px;box-sizing:border-box;background:#EDE8E0;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);position:relative;display:flex;align-items:center;justify-content:center">
+<div style="position:absolute;left:0;top:0;right:0;bottom:0;background:#FFF9F2;opacity:.55"></div>
+<div style="position:relative;width:900px;height:600px;box-sizing:border-box;background:#FFF9F2;border:1px solid #D8D0C4;border-radius:12px;box-shadow:0 18px 48px rgba(23,23,23,.26);overflow:hidden;display:flex;flex-direction:column">
+<div style="height:38px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 13px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#E4DCD0"></span><span style="width:11px;height:11px;border-radius:50%;background:#E4DCD0"></span></div>
+<span style="flex:1;text-align:center;font:600 12.5px Sora,sans-serif;color:#171717;margin-right:44px">Settings</span>
+</div>
+<div style="flex:1;min-height:0;display:flex">
+<div style="width:186px;flex:none;box-sizing:border-box;background:#F7F1E8;border-right:1px solid #EBE4D9;padding:12px 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font:500 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">tune</span>General</span>
+<span style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;background:#FFF3E6;font:600 12.5px 'Noto Sans',sans-serif;color:#8F4406"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#8F4406">graphic_eq</span>Models</span>
+<span style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font:500 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">mic</span>Voices</span>
+<span style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font:500 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">headphones</span>Audio</span>
+<span style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font:500 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">hard_drive</span>Storage</span>
+<span style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font:500 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">memory</span>Runtime</span>
+<span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#857D72">info</span>About</span>
+</div>
+<div style="flex:1;min-width:0;padding:20px 22px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px;overflow:hidden">
+<div style="display:flex;align-items:flex-end;gap:12px">
+<div><div style="font:600 17px Sora,sans-serif;letter-spacing:-.01em;color:#171717">Models</div><div style="font:400 12px 'Noto Sans',sans-serif;color:#6B645A;margin-top:3px">2 on disk · 4.0 GB used · 38 GB free</div></div>
+<span style="flex:1"></span>
+<span style="height:32px;padding:0 12px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#5F594F">folder_open</span>Add from a file</span>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px">
+<span style="width:20px;height:20px;flex:none;border-radius:50%;background:#FF6E08;display:flex;align-items:center;justify-content:center"><span style="width:7px;height:7px;border-radius:50%;background:#FFFEFD"></span></span>
+<div style="flex:1;min-width:0"><div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 13.5px Sora,sans-serif;color:#171717">Fast</span><span style="font:400 11px 'Noto Sans',sans-serif;color:#8F4406">default · in memory</span></div><div style="font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A;margin-top:2px">1.2 GB · 4-bit · Apache-2.0 · used by 2 voices</div></div>
+<span style="height:30px;padding:0 11px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:7px;display:flex;align-items:center;font:600 12px 'Noto Sans',sans-serif;color:#B0A79B">Delete</span>
+</div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px">
+<span style="width:20px;height:20px;flex:none;box-sizing:border-box;border:1px solid #C4BBAE;border-radius:50%"></span>
+<div style="flex:1;min-width:0"><div style="font:600 13.5px Sora,sans-serif;color:#171717">Best quality</div><div style="font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A;margin-top:2px">2.8 GB · fp16 · Apache-2.0 · last used 3 days ago</div></div>
+<span style="height:30px;padding:0 11px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:7px;display:flex;align-items:center;font:600 12px 'Noto Sans',sans-serif;color:#171717">Delete</span>
+</div>
+</div>
+<div style="background:#FFF9F5;border:1px solid #F0B7AF;border-radius:10px;padding:12px 14px;display:flex;align-items:flex-start;gap:11px">
+<span style="font-family:'Material Symbols Rounded';font-size:18px;color:#C7362B">delete</span>
+<div style="flex:1;min-width:0"><div style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Deleting Best quality frees 2.8 GB</div><div style="font:400 12px/1.5 'Noto Sans',sans-serif;color:#5F594F;margin-top:3px">Clips already made keep playing. Nothing currently uses it. Re-downloading takes about 6 minutes.</div></div>
+<span style="height:30px;padding:0 12px;box-sizing:border-box;background:#C7362B;border-radius:7px;display:flex;align-items:center;font:600 12px 'Noto Sans',sans-serif;color:#FFFEFD">Delete</span>
+</div>
+<div style="border-top:1px solid #EBE4D9;padding-top:14px;display:flex;flex-direction:column;gap:9px">
+<span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">AVAILABLE</span>
+<div style="display:flex;align-items:center;gap:12px"><div style="flex:1;min-width:0"><span style="font:500 13px 'Noto Sans',sans-serif;color:#171717">Step Audio</span><span style="font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A;margin-left:9px">3.4 GB · Mandarin and code-switched text</span></div><span style="height:28px;padding:0 11px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:7px;display:flex;align-items:center;font:600 11.5px 'Noto Sans',sans-serif;color:#171717">Download</span></div>
+<div style="display:flex;align-items:center;gap:12px"><div style="flex:1;min-width:0"><span style="font:500 13px 'Noto Sans',sans-serif;color:#171717">LongCat</span><span style="font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A;margin-left:9px">2.1 GB · long paragraphs, needs a 20s clip</span></div><span style="height:28px;padding:0 11px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:7px;display:flex;align-items:center;font:600 11.5px 'Noto Sans',sans-serif;color:#171717">Download</span></div>
+</div>
+<span style="flex:1"></span>
+<div style="border-top:1px solid #EBE4D9;padding-top:12px;display:flex;align-items:center;gap:12px">
+<span style="display:flex;align-items:center;gap:8px;font:400 12px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Runtime 0.9.4 · up to date</span>
+<span style="flex:1"></span>
+<span style="font:400 11.5px 'Noto Sans Mono',monospace;color:#857D72">~/Library/Application Support/Yarngo</span>
+<span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">open_in_new</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</section>
+
+<section style="padding:44px 48px 48px" id="t2">
+<div style="display:flex;align-items:baseline;gap:10px;margin:0 0 6px"><a href="#t2" style="font:600 10px 'Noto Sans Mono',monospace;padding:3px 7px;background:#1F1C19;color:#FFF9F2;border-radius:4px">2</a><span style="font:600 14px 'Noto Sans',sans-serif">Skipping the voice, adding it later, and a script you read instead of type</span></div>
+
+<sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+<p style="margin:0 0 14px;font:400 13px/1.6 'Noto Sans',sans-serif;color:#5F594F;max-width:840px;text-wrap:pretty">Skipping step 3 leaves the app in a real state, not a broken one. <a href="#2a">2a</a> keeps the composer usable — you can type, and you can hear something immediately through a bundled sample voice — but Generate stays off until a voice exists, and the reason sits next to the button rather than in an alert. The sample is labelled everywhere it is used, so nobody ships a clip thinking it was theirs.</p>
+<p style="margin:0 0 14px;font:400 13px/1.6 'Noto Sans',sans-serif;color:#5F594F;max-width:840px;text-wrap:pretty">Adding a voice later is the same job as step 3, so it is the same layout in a sheet over the workspace — <a href="#2b">2b</a> to <a href="#2d">2d</a>. One recorder, reached from setup, from the sidebar, or from the empty composer.</p>
+<p style="margin:0 0 34px;font:400 13px/1.6 'Noto Sans',sans-serif;color:#5F594F;max-width:840px;text-wrap:pretty">On the fixed script: if the words are given, the panel should not look like a field you can type in. So the script becomes the large left panel set in reading type with a lock on its label, and the recorder — device, button, level, timer — moves to a narrow right column. Reading is the task, so it gets the space; <a href="#2c">2c</a> follows the sentence you are on, and <a href="#2d">2d</a> checks the take against the script you were given. An escape hatch stays for people who want their own words.</p>
+</sc-if>
+
+<div style="display:flex;flex-direction:column;gap:34px">
+
+<div id="2a" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#2a" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:rgba(23,23,23,.09);color:#171717;border-radius:5px">2a</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">You skipped step 3 — the workspace with no voice of your own</span></div>
+<div data-screen-label="2a" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<sc-if value="{{ statusPill }}" hint-placeholder-val="{{ true }}"><span style="height:24px;padding:0 10px;box-sizing:border-box;background:#FFFFFF;border:1px solid #E4DCD0;border-radius:999px;display:flex;align-items:center;gap:7px;font:500 11.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Fast · loaded<span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">expand_more</span></span></sc-if>
+<span style="font-family:'Material Symbols Rounded';font-size:19px;color:#5F594F">settings</span>
+</div>
+<div style="flex:1;min-height:0;display:flex">
+<div style="width:236px;flex:none;box-sizing:border-box;background:#F7F1E8;border-right:1px solid #EBE4D9;display:flex;flex-direction:column">
+<div style="padding:16px 14px 8px;display:flex;align-items:center;gap:8px"><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">VOICES</span><span style="flex:1"></span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">add</span></div>
+<div style="padding:0 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;border:1px dashed #C4BBAE"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#FFF3E6;border:1px solid #FFCB93;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#8F4406">mic</span></span><span style="flex:1;min-width:0"><span style="display:block;font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Add a voice</span><span style="display:block;font:400 11px 'Noto Sans',sans-serif;color:#857D72;margin-top:1px">about a minute</span></span></span>
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#E4DCD0;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#5F594F">volume_up</span></span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717">Sample voice</span><span style="display:block;font:400 11px 'Noto Sans',sans-serif;color:#857D72;margin-top:1px">bundled · for trying</span></span></span>
+</div>
+<div style="padding:20px 14px 8px;font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">CLIPS</div>
+<div style="margin:0 12px;padding:14px;box-sizing:border-box;border:1px dashed #D8D0C4;border-radius:10px;font:400 12px/1.55 'Noto Sans',sans-serif;color:#6B645A">Nothing yet. Clips stay on this machine until you delete them.</div>
+<span style="flex:1"></span>
+<div style="border-top:1px solid #EBE4D9;padding:12px 14px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Runtime running · 0.9.4</div>
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">hard_drive</span>1 model on disk · 1.2 GB</div>
+</div>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="flex:1;min-height:0;padding:22px 26px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px">
+<div><div style="font:600 19px Sora,sans-serif;letter-spacing:-.01em;color:#171717">New clip</div><div style="font:400 12.5px 'Noto Sans',sans-serif;color:#6B645A;margin-top:3px">No voice selected · Fast</div></div>
+<span style="flex:1"></span>
+<span style="height:32px;padding:0 12px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12px 'Noto Sans',sans-serif;color:#B0A79B"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#B0A79B">tune</span>Speed, pitch, seed</span>
+</div>
+<div style="background:#FFFFFF;border:1.5px solid #171717;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:16px 18px;display:flex;align-items:center;gap:16px">
+<span style="width:38px;height:38px;flex:none;border-radius:50%;background:#FFF3E6;border:1px solid #FFCB93;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:20px;color:#8F4406">mic</span></span>
+<div style="flex:1;min-width:0"><div style="font:600 14px Sora,sans-serif;color:#171717">No voice yet</div><div style="font:400 12.5px/1.5 'Noto Sans',sans-serif;color:#5F594F;margin-top:3px">Yarngo speaks in a voice you record. You read a short script, twenty seconds, and it is done.</div></div>
+<span style="height:36px;padding:0 16px;box-sizing:border-box;background:#FF6E08;border-radius:8px;display:flex;align-items:center;font:600 13px 'Noto Sans',sans-serif;color:#FFFEFD">Add a voice</span>
+</div>
+<div style="flex:1;min-height:0;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px">
+<span style="font:400 15px/1.7 'Noto Sans',sans-serif;color:#171717">Good morning. Prices at Mile 12 came down again this week.</span>
+<span style="flex:1"></span>
+<div style="display:flex;gap:16px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span>58 characters</span><span>about 8 seconds spoken</span></div>
+</div>
+<div style="display:flex;align-items:center;gap:14px">
+<span style="height:38px;padding:0 20px;box-sizing:border-box;background:#F1EBE1;border-radius:8px;display:flex;align-items:center;font:600 13.5px 'Noto Sans',sans-serif;color:#B0A79B">Generate</span>
+<span style="height:38px;padding:0 15px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:8px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">volume_up</span>Hear it in the sample voice</span>
+<span style="font:400 12.5px 'Noto Sans',sans-serif;color:#6B645A">Add a voice to generate in yours.</span>
+<span style="flex:1"></span>
+<sc-if value="{{ privacyNote }}" hint-placeholder-val="{{ true }}"><span style="display:flex;align-items:center;gap:7px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#857D72">wifi_off</span>Runs on this machine. Works offline.</span></sc-if>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="2b" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#2b" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:#FF6E08;color:#FFFEFD;border-radius:5px">2b</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Adding it later — the recorder as a sheet, with a script you are given rather than one you type</span></div>
+<div data-screen-label="2b" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<span style="font-family:'Material Symbols Rounded';font-size:19px;color:#857D72">settings</span>
+</div>
+<div style="flex:1;min-height:0;position:relative;display:flex">
+<div style="width:236px;flex:none;box-sizing:border-box;background:#F7F1E8;border-right:1px solid #EBE4D9;padding:16px 14px;display:flex;flex-direction:column;gap:10px">
+<span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">VOICES</span>
+<span style="display:flex;align-items:center;gap:10px;font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#E4DCD0"></span>Sample voice</span>
+</div>
+<div style="flex:1;min-width:0;padding:22px 26px;display:flex;flex-direction:column;gap:14px">
+<div style="font:600 19px Sora,sans-serif;color:#171717">New clip</div>
+<div style="flex:1;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px"></div>
+</div>
+<div style="position:absolute;left:0;top:0;right:0;bottom:0;background:rgba(31,28,25,.38);display:flex;align-items:center;justify-content:center">
+<div style="width:900px;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:14px;box-shadow:0 12px 32px rgba(23,23,23,.28);overflow:hidden;display:flex;flex-direction:column">
+<div style="padding:16px 20px;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px">
+<div><div style="font:600 17px Sora,sans-serif;letter-spacing:-.01em;color:#171717">Add a reference voice</div><div style="font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F;margin-top:3px">Read the script out loud. The words are how the model lines your voice up with speech.</div></div>
+<span style="flex:1"></span>
+<span style="font-family:'Material Symbols Rounded';font-size:20px;color:#5F594F">close</span>
+</div>
+<div style="display:flex;gap:0;align-items:stretch">
+<div style="flex:1;min-width:0;padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">lock</span><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">READ THIS SCRIPT</span><span style="flex:1"></span><span style="font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A">249 characters · about 20 seconds</span></div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<span style="font:400 17px/1.7 'Noto Sans',sans-serif;color:#171717;text-wrap:pretty">My name is spoken here, and this is how I sound when I speak naturally.</span>
+<span style="font:400 17px/1.7 'Noto Sans',sans-serif;color:#171717;text-wrap:pretty">The quick brown fox jumps over the lazy dog, while five wizards judge my calm voice.</span>
+<span style="font:400 17px/1.7 'Noto Sans',sans-serif;color:#171717;text-wrap:pretty">I am recording this so the app can learn my accent, my rhythm, and the way I shape my words.</span>
+</div>
+<div style="display:flex;align-items:baseline;gap:8px;font:400 12px/1.55 'Noto Sans',sans-serif;color:#6B645A"><span style="flex:1;text-wrap:pretty">The same script for everyone: it covers the sounds the model needs and lets the app check your take.</span><a href="#2b" style="font:600 12px 'Noto Sans',sans-serif;color:#8F4406;white-space:nowrap">Read my own text</a></div>
+</div>
+<div style="width:300px;flex:none;box-sizing:border-box;background:#FFFDFA;border-left:1px solid #EBE4D9;padding:20px;display:flex;flex-direction:column;gap:14px">
+<div><div style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72;margin-bottom:7px">MICROPHONE</div><span style="display:flex;align-items:center;justify-content:space-between;height:36px;padding:0 10px 0 12px;box-sizing:border-box;background:#FFFFFF;border:1px solid #D8D0C4;border-radius:8px;font:400 12.5px 'Noto Sans',sans-serif;color:#171717">MacBook Pro Microphone<span style="font-family:'Material Symbols Rounded';font-size:18px;color:#857D72">expand_more</span></span></div>
+<div style="display:flex;align-items:center;gap:2px;height:34px">
+<i style="width:3px;height:6px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:9px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:6px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:12px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:7px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:5px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:10px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:6px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:8px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:5px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:11px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:7px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:6px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:9px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:5px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:8px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:6px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:10px;border-radius:2px;background:#E4DCD0"></i>
+<span style="flex:1"></span><span style="font:400 11.5px 'Noto Sans Mono',monospace;color:#857D72">quiet</span>
+</div>
+<span style="height:44px;background:#FF6E08;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:9px;font:600 14px 'Noto Sans',sans-serif;color:#FFFEFD"><span style="font-family:'Material Symbols Rounded';font-size:19px">mic</span>Start recording</span>
+<span style="height:36px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:8px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">upload_file</span>Upload a recording</span>
+<div style="border-top:1px solid #EBE4D9;padding-top:12px;display:flex;flex-direction:column;gap:7px;font:400 12px/1.5 'Noto Sans',sans-serif;color:#5F594F">
+<span style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Getting a good voice</span>
+<span>Read in the tone you want back. Flat reading gives flat speech.</span>
+<span>Read the whole script — full sentences carry rhythm.</span>
+<span>Somewhere quiet, close to the microphone, no headphones needed.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="2c" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#2c" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:rgba(23,23,23,.09);color:#171717;border-radius:5px">2c</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Recording — the script keeps your place, the meter proves the mic is live</span></div>
+<div data-screen-label="2c" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:6px;font:500 11.5px 'Noto Sans',sans-serif;color:#C7362B"><span style="width:8px;height:8px;border-radius:50%;background:#C7362B"></span>Recording</span>
+</div>
+<div style="flex:1;min-height:0;position:relative;display:flex">
+<div style="width:236px;flex:none;box-sizing:border-box;background:#F7F1E8;border-right:1px solid #EBE4D9;padding:16px 14px;display:flex;flex-direction:column;gap:10px">
+<span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">VOICES</span>
+<span style="display:flex;align-items:center;gap:10px;font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#E4DCD0"></span>Sample voice</span>
+</div>
+<div style="flex:1;min-width:0;padding:22px 26px;display:flex;flex-direction:column;gap:14px">
+<div style="font:600 19px Sora,sans-serif;color:#171717">New clip</div>
+<div style="flex:1;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px"></div>
+</div>
+<div style="position:absolute;left:0;top:0;right:0;bottom:0;background:rgba(31,28,25,.38);display:flex;align-items:center;justify-content:center">
+<div style="width:900px;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:14px;box-shadow:0 12px 32px rgba(23,23,23,.28);overflow:hidden;display:flex;flex-direction:column">
+<div style="padding:16px 20px;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px">
+<div><div style="font:600 17px Sora,sans-serif;letter-spacing:-.01em;color:#171717">Add a reference voice</div><div style="font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F;margin-top:3px">Keep going to the end of the script. Pauses are fine.</div></div>
+<span style="flex:1"></span>
+<span style="font-family:'Material Symbols Rounded';font-size:20px;color:#5F594F">close</span>
+</div>
+<div style="display:flex;gap:0;align-items:stretch">
+<div style="flex:1;min-width:0;padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">lock</span><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">READ THIS SCRIPT</span><span style="flex:1"></span><span style="font:400 11.5px 'Noto Sans',sans-serif;color:#8F4406">sentence 2 of 3</span></div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:18px 20px;display:flex;flex-direction:column;gap:12px">
+<span style="font:400 17px/1.7 'Noto Sans',sans-serif;color:#B0A79B;text-wrap:pretty">My name is spoken here, and this is how I sound when I speak naturally.</span>
+<div style="display:flex;gap:12px"><span style="width:3px;flex:none;border-radius:2px;background:#FF8A1F"></span><span style="font:400 17px/1.7 'Noto Sans',sans-serif;color:#171717;text-wrap:pretty">The quick brown fox jumps over the lazy dog, while five wizards judge my calm voice.</span></div>
+<span style="font:400 17px/1.7 'Noto Sans',sans-serif;color:#5F594F;text-wrap:pretty">I am recording this so the app can learn my accent, my rhythm, and the way I shape my words.</span>
+</div>
+<div style="font:400 12px/1.55 'Noto Sans',sans-serif;color:#6B645A">If you stumble, keep reading — you can record again before saving.</div>
+</div>
+<div style="width:300px;flex:none;box-sizing:border-box;background:#FFFDFA;border-left:1px solid #EBE4D9;padding:20px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 24px 'Noto Sans Mono',monospace;color:#171717">0:11</span><span style="font:400 12px 'Noto Sans Mono',monospace;color:#857D72">of about 0:20</span></div>
+<div style="display:flex;align-items:center;gap:2px;height:34px">
+<i style="width:3px;height:14px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:24px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:18px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:30px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:22px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:12px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:26px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:20px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:32px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:16px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:24px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:10px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:18px;border-radius:2px;background:#FFCB93"></i><i style="width:3px;height:26px;border-radius:2px;background:#FFCB93"></i><i style="width:3px;height:14px;border-radius:2px;background:#FFCB93"></i><i style="width:3px;height:8px;border-radius:2px;background:#FFCB93"></i><i style="width:3px;height:20px;border-radius:2px;background:#FFCB93"></i><i style="width:3px;height:12px;border-radius:2px;background:#FFCB93"></i>
+<span style="flex:1"></span><span style="font:400 11.5px 'Noto Sans Mono',monospace;color:#287A57">good level</span>
+</div>
+<span style="height:44px;box-sizing:border-box;border:1.5px solid #C7362B;background:#FFFFFF;border-radius:10px;display:flex;align-items:center;justify-content:center;gap:9px;font:600 14px 'Noto Sans',sans-serif;color:#C7362B"><span style="font-family:'Material Symbols Rounded';font-size:19px;font-variation-settings:'FILL' 1">stop_circle</span>Stop recording</span>
+<span style="height:36px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;justify-content:center;font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Discard and start over</span>
+<div style="border-top:1px solid #EBE4D9;padding-top:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="font:400 12px 'Noto Sans',sans-serif;color:#5F594F">Input reaching the mic</span></div>
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="font:400 12px 'Noto Sans',sans-serif;color:#5F594F">No clipping so far</span></div>
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#857D72">graphic_eq</span><span style="font:400 12px 'Noto Sans',sans-serif;color:#5F594F">Room noise measured after you stop</span></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="2d" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#2d" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:#FF6E08;color:#FFFEFD;border-radius:5px">2d</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">The take, checked against the script it was read from</span></div>
+<div data-screen-label="2d" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<span style="font-family:'Material Symbols Rounded';font-size:19px;color:#857D72">settings</span>
+</div>
+<div style="flex:1;min-height:0;position:relative;display:flex">
+<div style="width:236px;flex:none;box-sizing:border-box;background:#F7F1E8;border-right:1px solid #EBE4D9;padding:16px 14px;display:flex;flex-direction:column;gap:10px">
+<span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">VOICES</span>
+<span style="display:flex;align-items:center;gap:10px;font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#E4DCD0"></span>Sample voice</span>
+</div>
+<div style="flex:1;min-width:0;padding:22px 26px;display:flex;flex-direction:column;gap:14px">
+<div style="font:600 19px Sora,sans-serif;color:#171717">New clip</div>
+<div style="flex:1;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px"></div>
+</div>
+<div style="position:absolute;left:0;top:0;right:0;bottom:0;background:rgba(31,28,25,.38);display:flex;align-items:center;justify-content:center">
+<div style="width:900px;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:14px;box-shadow:0 12px 32px rgba(23,23,23,.28);overflow:hidden;display:flex;flex-direction:column">
+<div style="padding:16px 20px;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px">
+<div><div style="font:600 17px Sora,sans-serif;letter-spacing:-.01em;color:#171717">Check your take</div><div style="font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F;margin-top:3px">Listen once. If it sounds like you on a normal day, save it.</div></div>
+<span style="flex:1"></span>
+<span style="font-family:'Material Symbols Rounded';font-size:20px;color:#5F594F">close</span>
+</div>
+<div style="display:flex;gap:0;align-items:stretch">
+<div style="flex:1;min-width:0;padding:20px;box-sizing:border-box;display:flex;flex-direction:column;gap:14px">
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:16px 18px;display:flex;align-items:center;gap:14px">
+<span style="width:40px;height:40px;flex:none;border-radius:50%;background:#FFF3E6;border:1px solid #FFCB93;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:21px;color:#8F4406;font-variation-settings:'FILL' 1">play_arrow</span></span>
+<div style="flex:1;min-width:0;display:flex;align-items:center;gap:2px;height:48px">
+<i style="width:3px;height:10px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:18px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:30px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:22px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:40px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:34px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:14px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:26px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:44px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:36px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:20px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:12px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:28px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:42px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:34px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:24px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:16px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:32px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:46px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:30px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:18px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:26px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:38px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:32px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:22px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:14px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:28px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:20px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:34px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:24px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:12px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:8px;border-radius:2px;background:#FFB264"></i>
+</div>
+<span style="font:400 12px 'Noto Sans Mono',monospace;color:#6B645A">0:21</span>
+</div>
+<div style="display:flex;align-items:center;gap:8px"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">lock</span><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">SAVED WITH THE VOICE AS ITS REFERENCE TEXT</span></div>
+<div style="background:#FFFDFA;border:1px solid #EBE4D9;border-radius:12px;padding:14px 16px;font:400 13.5px/1.65 'Noto Sans',sans-serif;color:#5F594F;text-wrap:pretty">My name is spoken here, and this is how I sound when I speak naturally. The quick brown fox jumps over the lazy dog, while five wizards judge my calm voice. I am recording this so the app can learn my accent, my rhythm, and the way I shape my words.</div>
+</div>
+<div style="width:300px;flex:none;box-sizing:border-box;background:#FFFDFA;border-left:1px solid #EBE4D9;padding:20px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="flex:1;font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">Whole script read · 0:21</span></div>
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="flex:1;font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">No clipping, room noise low</span></div>
+<div style="display:flex;align-items:flex-start;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#C97A00">error_outline</span><span style="flex:1;font:400 12.5px/1.5 'Noto Sans',sans-serif;color:#5F594F">Slight reverb. It carries into every clip. Recording closer helps.</span></div>
+</div>
+<div><div style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72;margin-bottom:7px">NAME</div><span style="display:flex;align-items:center;height:36px;padding:0 12px;box-sizing:border-box;background:#FFFFFF;border:1px solid #171717;border-radius:8px;font:400 12.5px 'Noto Sans',sans-serif;color:#171717">My voice</span></div>
+<span style="flex:1"></span>
+<span style="height:36px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;justify-content:center;gap:8px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#C7362B">mic</span>Record again</span>
+<span style="height:40px;background:#FF6E08;border-radius:8px;display:flex;align-items:center;justify-content:center;font:600 13.5px 'Noto Sans',sans-serif;color:#FFFEFD">Save voice</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</section>
+
+<section style="padding:44px 48px 48px" id="t1">
+<div style="display:flex;align-items:baseline;gap:10px;margin:0 0 6px"><a href="#t1" style="font:600 10px 'Noto Sans Mono',monospace;padding:3px 7px;background:#1F1C19;color:#FFF9F2;border-radius:4px">1</a><span style="font:600 14px 'Noto Sans',sans-serif">Yarngo Studio — install, add a voice, generate</span></div>
+
+<sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+<p style="margin:0 0 14px;font:400 13px/1.6 'Noto Sans',sans-serif;color:#5F594F;max-width:840px;text-wrap:pretty">A desktop app that speaks in your own voice, with the models on your machine. The current build puts everything in one column: model chips, a voice button, a box, Generate. That works once you are set up, but it says nothing about the two things a first-time user has to do — get a runtime and a model onto disk, and record a reference clip with the text that matches it.</p>
+<p style="margin:0 0 14px;font:400 13px/1.6 'Noto Sans',sans-serif;color:#5F594F;max-width:840px;text-wrap:pretty">So the app has two modes. <b>Setup is a three-step wizard</b> shown once, because a download is a wait with a size and a failure case, and the model choice deserves the licence and disk cost next to the name instead of five chips. <b>After that it is a workspace</b>: voices and clips on the left, one composer on the right. Model selection moves into the title bar as status, since it is a setting you pick rarely and want to see always.</p>
+<p style="margin:0 0 34px;font:400 13px/1.6 'Noto Sans',sans-serif;color:#5F594F;max-width:840px;text-wrap:pretty">Two rules carry through. <b>Reference audio and reference text are one object</b> — a voice is not saved until both exist, which is why <a href="#1c">1c</a> checks them together rather than accepting a clip and asking for the transcript later. <b>Nothing is silently remote</b>: the footer states where generation happens, and setup states what is written to disk and where.</p>
+</sc-if>
+
+<div style="display:flex;flex-direction:column;gap:34px">
+
+<div id="1a" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#1a" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:rgba(23,23,23,.09);color:#171717;border-radius:5px">1a</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Setup, step 1 — the runtime, with the wait made legible</span></div>
+<div data-screen-label="1a" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<span style="font:400 11.5px 'Noto Sans',sans-serif;color:#857D72">First run</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;padding:34px 40px 0">
+<div style="width:820px;display:flex;flex-direction:column;gap:22px">
+<div style="display:flex;align-items:center;gap:14px">
+<img src="brand/yarngo-icon.png" alt="" style="display:block;width:42px;height:42px">
+<div><div style="font:600 22px Sora,sans-serif;letter-spacing:-.01em;color:#171717">Set up Yarngo Studio</div><div style="font:400 13px 'Noto Sans',sans-serif;color:#5F594F;margin-top:3px">Three steps, about four minutes. No account. Speech is generated on this machine.</div></div>
+</div>
+<div style="display:flex;align-items:center;gap:12px">
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;border-radius:50%;background:#1F1C19;display:flex;align-items:center;justify-content:center;font:600 11px 'Noto Sans Mono',monospace;color:#FFF9F2">1</span><span style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Runtime</span></span>
+<span style="width:44px;height:1px;background:#E4DCD0"></span>
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;box-sizing:border-box;border:1px solid #D8D0C4;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 11px 'Noto Sans Mono',monospace;color:#857D72">2</span><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#857D72">Model</span></span>
+<span style="width:44px;height:1px;background:#E4DCD0"></span>
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;box-sizing:border-box;border:1px solid #D8D0C4;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 11px 'Noto Sans Mono',monospace;color:#857D72">3</span><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#857D72">Your voice</span></span>
+</div>
+<div style="display:flex;gap:16px;align-items:flex-start">
+<div style="flex:1;min-width:0;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);overflow:hidden">
+<div style="padding:16px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #F1EBE1">
+<span style="width:34px;height:34px;flex:none;border-radius:9px;background:#FFF3E6;border:1px solid #FFCB93;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:19px;color:#8F4406">memory</span></span>
+<div style="min-width:0"><div style="font:600 15px Sora,sans-serif;color:#171717">Yarngo Runtime 0.9.4</div><div style="font:400 12px 'Noto Sans',sans-serif;color:#6B645A;margin-top:2px">84 MB · the local engine that loads models and does the synthesis</div></div>
+</div>
+<div style="padding:16px 18px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:baseline;gap:10px"><span style="font:600 13px 'Noto Sans',sans-serif;color:#171717">Downloading</span><span style="flex:1"></span><span style="font:400 12px 'Noto Sans Mono',monospace;color:#6B645A">52.1 / 84.0 MB · 8.4 MB/s · 4s left</span></div>
+<div style="height:6px;background:#EBE4D9;border-radius:999px;overflow:hidden"><span style="display:block;width:62%;height:100%;background:#FF8A1F;border-radius:999px"></span></div>
+<div style="display:flex;flex-direction:column;gap:0;margin-top:6px">
+<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #F1EBE1"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#287A57;font-variation-settings:'FILL' 1">check_circle</span><span style="flex:1;font:500 12.5px 'Noto Sans',sans-serif;color:#171717">Checked this Mac</span><span style="font:400 11.5px 'Noto Sans',sans-serif;color:#857D72">supported</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #F1EBE1"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#FF8A1F;font-variation-settings:'FILL' 1">downloading</span><span style="flex:1;font:500 12.5px 'Noto Sans',sans-serif;color:#171717">Download runtime</span><span style="font:400 11.5px 'Noto Sans',sans-serif;color:#857D72">62%</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #F1EBE1"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#B0A79B">radio_button_unchecked</span><span style="flex:1;font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Verify signature</span><span style="font:400 11.5px 'Noto Sans',sans-serif;color:#857D72">waiting</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid #F1EBE1"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#B0A79B">radio_button_unchecked</span><span style="flex:1;font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Install and start</span><span style="font:400 11.5px 'Noto Sans',sans-serif;color:#857D72">waiting</span></div>
+</div>
+</div>
+</div>
+<div style="width:280px;flex:none;display:flex;flex-direction:column;gap:16px">
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);overflow:hidden">
+<div style="padding:13px 15px;font:600 13px 'Noto Sans',sans-serif;color:#171717">This Mac</div>
+<div style="display:flex;align-items:center;gap:9px;padding:9px 15px;border-top:1px solid #F1EBE1"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="flex:1;font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">macOS 15.4</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:9px 15px;border-top:1px solid #F1EBE1"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="flex:1;font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">Apple M2 Pro</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:9px 15px;border-top:1px solid #F1EBE1"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="flex:1;font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">16 GB memory</span></div>
+<div style="display:flex;align-items:center;gap:9px;padding:9px 15px;border-top:1px solid #F1EBE1"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="flex:1;font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">42 GB free</span><span style="font:400 11px 'Noto Sans',sans-serif;color:#857D72">need 1.3</span></div>
+</div>
+<div style="background:#FFFDFA;border:1px solid #EBE4D9;border-radius:12px;padding:14px 15px">
+<div style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717;margin-bottom:8px">Where things go</div>
+<div style="font:400 12px/1.55 'Noto Sans',sans-serif;color:#5F594F">Runtime and models are written to<br><span style="font:400 11.5px 'Noto Sans Mono',monospace;color:#171717">~/Library/Application&nbsp;Support/Yarngo</span></div>
+<div style="font:400 12px/1.55 'Noto Sans',sans-serif;color:#5F594F;margin-top:8px">Deleting that folder removes everything. Your recordings stay where you saved them.</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div style="height:62px;flex:none;box-sizing:border-box;border-top:1px solid #EBE4D9;background:#F7F1E8;display:flex;align-items:center;gap:12px;padding:0 24px">
+<span style="font:400 12px 'Noto Sans',sans-serif;color:#6B645A">You can close the window — the download resumes.</span>
+<span style="flex:1"></span>
+<span style="height:36px;padding:0 14px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Quit</span>
+<span style="height:36px;padding:0 18px;box-sizing:border-box;background:#F1EBE1;border-radius:8px;display:flex;align-items:center;font:600 13px 'Noto Sans',sans-serif;color:#B0A79B">Continue</span>
+</div>
+</div>
+</div>
+
+<div id="1b" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#1b" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:rgba(23,23,23,.09);color:#171717;border-radius:5px">1b</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Setup, step 2 — one model per row, with size and licence where the name is</span></div>
+<div data-screen-label="1b" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:6px;font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Runtime running</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;padding:22px 40px 0">
+<div style="width:860px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px">
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;border-radius:50%;background:#E9F5EF;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#1B5C41">check</span></span><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Runtime</span></span>
+<span style="width:44px;height:1px;background:#E4DCD0"></span>
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;border-radius:50%;background:#1F1C19;display:flex;align-items:center;justify-content:center;font:600 11px 'Noto Sans Mono',monospace;color:#FFF9F2">2</span><span style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Model</span></span>
+<span style="width:44px;height:1px;background:#E4DCD0"></span>
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;box-sizing:border-box;border:1px solid #D8D0C4;border-radius:50%;display:flex;align-items:center;justify-content:center;font:600 11px 'Noto Sans Mono',monospace;color:#857D72">3</span><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#857D72">Your voice</span></span>
+</div>
+<div><div style="font:600 20px Sora,sans-serif;letter-spacing:-.01em;color:#171717">Choose a model</div><div style="font:400 13px 'Noto Sans',sans-serif;color:#5F594F;margin-top:3px">One is enough to start. Others can be added later in Settings, and you can switch per clip.</div></div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="background:#FFFFFF;border:1.5px solid #171717;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:12px">
+<div style="min-width:0;flex:1">
+<div style="display:flex;align-items:center;gap:9px"><span style="font:600 15px Sora,sans-serif;color:#171717">Fast</span><span style="background:#FFF3E6;border:1px solid #FFCB93;border-radius:999px;padding:2px 9px;font:600 10.5px 'Noto Sans',sans-serif;color:#8F4406">Recommended</span></div>
+<div style="font:400 12.5px/1.5 'Noto Sans',sans-serif;color:#5F594F;margin-top:4px;max-width:630px">Validated default. Best measured accent retention, ~3.5× faster than SOAR.</div>
+<div style="display:flex;gap:14px;margin-top:7px;font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A"><span>1.2 GB</span><span>Apache-2.0</span><span>4-bit quantised</span><span>~0.4× realtime on M2</span></div>
+</div>
+<div style="width:196px;flex:none;display:flex;flex-direction:column;gap:6px">
+<div style="height:6px;background:#EBE4D9;border-radius:999px;overflow:hidden"><span style="display:block;width:41%;height:100%;background:#FF8A1F;border-radius:999px"></span></div>
+<span style="font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A">493 MB / 1.2 GB · 41%</span>
+</div>
+</div>
+</div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:12px 16px;display:flex;align-items:center;gap:12px">
+<div style="min-width:0;flex:1">
+<div style="font:600 15px Sora,sans-serif;color:#171717">Fast, full precision</div>
+<div style="font:400 12.5px/1.5 'Noto Sans',sans-serif;color:#5F594F;margin-top:4px;max-width:630px">Same weights as Fast, unquantised. Marginally cleaner on sibilants, twice the memory.</div>
+<div style="display:flex;gap:14px;margin-top:7px;font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A"><span>2.8 GB</span><span>Apache-2.0</span><span>fp16</span><span>~0.9× realtime on M2</span></div>
+</div>
+<span style="height:34px;padding:0 14px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">download</span>Download</span>
+</div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:12px 16px;display:flex;align-items:center;gap:12px">
+<div style="min-width:0;flex:1">
+<div style="font:600 15px Sora,sans-serif;color:#171717">Best quality</div>
+<div style="font:400 12.5px/1.5 'Noto Sans',sans-serif;color:#5F594F;margin-top:4px;max-width:630px">Highest fidelity on long sentences. Slower than realtime.</div>
+<div style="display:flex;gap:14px;margin-top:7px;font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A"><span>4.1 GB</span><span>Apache-2.0</span><span>fp16</span><span>~1.6× realtime on M2</span></div>
+</div>
+<span style="height:34px;padding:0 14px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">download</span>Download</span>
+</div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:12px 16px;display:flex;align-items:center;gap:12px">
+<div style="min-width:0;flex:1">
+<div style="font:600 15px Sora,sans-serif;color:#171717">Step Audio</div>
+<div style="font:400 12.5px/1.5 'Noto Sans',sans-serif;color:#5F594F;margin-top:4px;max-width:630px">Third-party model. Stronger on Mandarin and code-switched text; weaker accent retention.</div>
+<div style="display:flex;gap:14px;margin-top:7px;font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A"><span>3.4 GB</span><span>Apache-2.0</span><span>fp16</span><span>~1.1× realtime on M2</span></div>
+</div>
+<span style="height:34px;padding:0 14px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">download</span>Download</span>
+</div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:12px 16px;display:flex;align-items:center;gap:12px">
+<div style="min-width:0;flex:1">
+<div style="font:600 15px Sora,sans-serif;color:#171717">LongCat</div>
+<div style="font:400 12.5px/1.5 'Noto Sans',sans-serif;color:#5F594F;margin-top:4px;max-width:630px">Third-party model. Holds prosody over paragraphs; needs a 20 second clip or longer.</div>
+<div style="display:flex;gap:14px;margin-top:7px;font:400 11.5px 'Noto Sans Mono',monospace;color:#6B645A"><span>2.1 GB</span><span>MIT</span><span>4-bit quantised</span><span>~0.7× realtime on M2</span></div>
+</div>
+<span style="height:34px;padding:0 14px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">download</span>Download</span>
+</div>
+</div>
+</div>
+</div>
+<div style="height:62px;flex:none;box-sizing:border-box;border-top:1px solid #EBE4D9;background:#F7F1E8;display:flex;align-items:center;gap:12px;padding:0 24px">
+<span style="font:400 12px 'Noto Sans',sans-serif;color:#6B645A">Downloads continue in the background. 42 GB free after this.</span>
+<span style="flex:1"></span>
+<span style="height:36px;padding:0 14px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Back</span>
+<span style="height:36px;padding:0 18px;box-sizing:border-box;background:#FF6E08;border-radius:8px;display:flex;align-items:center;font:600 13px 'Noto Sans',sans-serif;color:#FFFEFD">Continue</span>
+</div>
+</div>
+</div>
+
+<div id="1c" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#1c" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:#FF6E08;color:#FFFEFD;border-radius:5px">1c</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Setup, step 3 — the reference clip and the words in it, side by side</span></div>
+<div data-screen-label="1c" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<span style="display:flex;align-items:center;gap:6px;font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Fast · loaded</span>
+</div>
+<div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;padding:30px 40px 0">
+<div style="width:880px;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;align-items:center;gap:12px">
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;border-radius:50%;background:#E9F5EF;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#1B5C41">check</span></span><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Runtime</span></span>
+<span style="width:44px;height:1px;background:#E4DCD0"></span>
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;border-radius:50%;background:#E9F5EF;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#1B5C41">check</span></span><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Model</span></span>
+<span style="width:44px;height:1px;background:#E4DCD0"></span>
+<span style="display:flex;align-items:center;gap:8px"><span style="width:22px;height:22px;flex:none;border-radius:50%;background:#1F1C19;display:flex;align-items:center;justify-content:center;font:600 11px 'Noto Sans Mono',monospace;color:#FFF9F2">3</span><span style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Your voice</span></span>
+</div>
+<div><div style="font:600 20px Sora,sans-serif;letter-spacing:-.01em;color:#171717">Add a reference voice</div><div style="font:400 13px 'Noto Sans',sans-serif;color:#5F594F;margin-top:3px">Read anything for fifteen seconds, then type the words you read. Both halves are needed — the text is how the model lines your voice up with speech.</div></div>
+<div style="display:flex;gap:16px;align-items:stretch">
+<div style="flex:1;min-width:0;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);display:flex;flex-direction:column;overflow:hidden">
+<div style="padding:12px 16px;border-bottom:1px solid #F1EBE1;display:flex;align-items:center;gap:9px"><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">REFERENCE AUDIO</span><span style="flex:1"></span><span style="font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A">MacBook Pro Microphone</span></div>
+<div style="padding:18px 16px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:14px">
+<span style="width:44px;height:44px;flex:none;border-radius:50%;background:#FFF3E6;border:1px solid #FFCB93;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#8F4406;font-variation-settings:'FILL' 1">play_arrow</span></span>
+<div style="flex:1;min-width:0;display:flex;align-items:center;gap:2px;height:52px">
+<i style="width:3px;height:10px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:18px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:30px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:22px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:40px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:34px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:14px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:26px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:46px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:38px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:20px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:12px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:28px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:44px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:36px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:24px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:16px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:32px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:48px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:30px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:18px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:26px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:40px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:34px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:22px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:14px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:28px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:20px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:36px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:24px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:12px;border-radius:2px;background:#FFB264"></i><i style="width:3px;height:8px;border-radius:2px;background:#FFB264"></i>
+</div>
+<span style="font:400 12px 'Noto Sans Mono',monospace;color:#6B645A">0:14</span>
+</div>
+<div style="display:flex;gap:9px">
+<span style="height:34px;padding:0 13px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#C7362B">mic</span>Record again</span>
+<span style="height:34px;padding:0 13px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">upload_file</span>Use a file instead</span>
+</div>
+<div style="border-top:1px solid #F1EBE1;padding-top:12px;display:flex;flex-direction:column;gap:8px">
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="flex:1;font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">Length 0:14 — inside the 10 to 30 second range</span></div>
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#287A57">check</span><span style="flex:1;font:400 12.5px 'Noto Sans',sans-serif;color:#5F594F">No clipping, background noise low</span></div>
+<div style="display:flex;align-items:center;gap:9px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#C97A00">error_outline</span><span style="flex:1;font:400 12.5px/1.5 'Noto Sans',sans-serif;color:#5F594F">Room reverb is audible. It will carry into every clip you generate. Recording closer to the mic helps.</span></div>
+</div>
+</div>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:16px">
+<div style="flex:1;min-height:0;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);display:flex;flex-direction:column;overflow:hidden">
+<div style="padding:12px 16px;border-bottom:1px solid #F1EBE1;display:flex;align-items:center;gap:9px"><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">REFERENCE TEXT</span><span style="flex:1"></span><span style="font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A">what you said, word for word</span></div>
+<div style="flex:1;min-height:0;padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+<span style="flex:1;display:block;padding:12px;box-sizing:border-box;background:#FFFFFF;border:1px solid #171717;border-radius:8px;font:400 14px/1.65 'Noto Sans',sans-serif;color:#171717">The market opens before six, and by seven the first buses are already full. I take the same seat every morning, near the window, and read until my stop.</span>
+<div style="display:flex;align-items:center;gap:14px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span>151 characters</span><span>26 words</span><span style="flex:1"></span><span style="display:flex;align-items:center;gap:6px;color:#287A57"><span style="font-family:'Material Symbols Rounded';font-size:16px">check</span>Length matches the clip</span></div>
+</div>
+</div>
+<div style="background:#FFFDFA;border:1px solid #EBE4D9;border-radius:12px;padding:14px 16px">
+<div style="font:600 12.5px 'Noto Sans',sans-serif;color:#171717;margin-bottom:7px">Getting a good voice</div>
+<div style="display:flex;flex-direction:column;gap:6px;font:400 12px/1.5 'Noto Sans',sans-serif;color:#5F594F">
+<span>Read in the tone you want back. Flat reading gives flat speech.</span>
+<span>Do not read a list — full sentences carry rhythm.</span>
+<span>Transcribe exactly, including stumbles. A mismatch is what makes output slur.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div style="height:62px;flex:none;box-sizing:border-box;border-top:1px solid #EBE4D9;background:#F7F1E8;display:flex;align-items:center;gap:12px;padding:0 24px">
+<span style="font:400 12px 'Noto Sans',sans-serif;color:#6B645A">Name</span>
+<span style="width:200px;height:34px;padding:0 11px;box-sizing:border-box;background:#FFFFFF;border:1px solid #D8D0C4;border-radius:8px;display:flex;align-items:center;font:400 12.5px 'Noto Sans',sans-serif;color:#171717">My voice</span>
+<span style="flex:1"></span>
+<span style="height:36px;padding:0 14px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;font:600 12.5px 'Noto Sans',sans-serif;color:#171717">Skip, add later</span>
+<span style="height:36px;padding:0 18px;box-sizing:border-box;background:#FF6E08;border-radius:8px;display:flex;align-items:center;font:600 13px 'Noto Sans',sans-serif;color:#FFFEFD">Save voice</span>
+</div>
+</div>
+</div>
+
+<div id="1d" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#1d" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:rgba(23,23,23,.09);color:#171717;border-radius:5px">1d</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">The workspace, first time through — one voice, no clips yet</span></div>
+<div data-screen-label="1d" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<sc-if value="{{ statusPill }}" hint-placeholder-val="{{ true }}"><span style="height:24px;padding:0 10px;box-sizing:border-box;background:#FFFFFF;border:1px solid #E4DCD0;border-radius:999px;display:flex;align-items:center;gap:7px;font:500 11.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Fast · loaded<span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">expand_more</span></span></sc-if>
+<span style="font-family:'Material Symbols Rounded';font-size:19px;color:#5F594F">settings</span>
+</div>
+<div style="flex:1;min-height:0;display:flex">
+<div style="width:236px;flex:none;box-sizing:border-box;background:#F7F1E8;border-right:1px solid #EBE4D9;display:flex;flex-direction:column">
+<div style="padding:16px 14px 8px;display:flex;align-items:center;gap:8px"><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">VOICES</span><span style="flex:1"></span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">add</span></div>
+<div style="padding:0 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;background:#FFF3E6"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#FF8A1F;display:flex;align-items:center;justify-content:center;font:600 11px Sora,sans-serif;color:#171717">M</span><span style="flex:1;min-width:0"><span style="display:block;font:600 12.5px 'Noto Sans',sans-serif;color:#8F4406">My voice</span><span style="display:block;font:400 11px 'Noto Sans',sans-serif;color:#8F4406;opacity:.75;margin-top:1px">0:14 reference</span></span></span>
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px"><span style="width:26px;height:26px;flex:none;border-radius:50%;box-sizing:border-box;border:1px dashed #C4BBAE;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">mic</span></span><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Add a voice</span></span>
+</div>
+<div style="padding:20px 14px 8px;font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">CLIPS</div>
+<div style="margin:0 12px;padding:14px;box-sizing:border-box;border:1px dashed #D8D0C4;border-radius:10px;font:400 12px/1.55 'Noto Sans',sans-serif;color:#6B645A">Anything you generate is kept here until you delete it. Nothing is sent anywhere.</div>
+<span style="flex:1"></span>
+<div style="border-top:1px solid #EBE4D9;padding:12px 14px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Runtime running · 0.9.4</div>
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">hard_drive</span>1 model on disk · 1.2 GB</div>
+</div>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="flex:1;min-height:0;padding:22px 26px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px">
+<div><div style="font:600 19px Sora,sans-serif;letter-spacing:-.01em;color:#171717">New clip</div><div style="font:400 12.5px 'Noto Sans',sans-serif;color:#6B645A;margin-top:3px">My voice · Fast</div></div>
+<span style="flex:1"></span>
+<span style="height:32px;padding:0 12px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#5F594F">tune</span>Speed, pitch, seed</span>
+</div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:13px 15px;display:flex;align-items:center;gap:12px">
+<span style="width:30px;height:30px;flex:none;border-radius:50%;background:#FF8A1F;display:flex;align-items:center;justify-content:center;font:600 12px Sora,sans-serif;color:#171717">M</span>
+<div style="flex:1;min-width:0"><div style="font:600 13px 'Noto Sans',sans-serif;color:#171717">My voice</div><div style="font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Reference: “The market opens before six, and by seven the first buses are already full…”</div></div>
+<span style="height:30px;padding:0 11px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:7px;display:flex;align-items:center;font:600 12px 'Noto Sans',sans-serif;color:#171717">Change</span>
+<span style="height:30px;padding:0 11px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:7px;display:flex;align-items:center;gap:6px;font:600 12px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#5F594F">play_arrow</span>Hear reference</span>
+</div>
+<div style="flex:1;min-height:0;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column">
+<span style="font:400 15px/1.7 'Noto Sans',sans-serif;color:#B0A79B">Type what you want to say…</span>
+</div>
+<div style="display:flex;align-items:center;gap:14px">
+<span style="height:38px;padding:0 20px;box-sizing:border-box;background:#F1EBE1;border-radius:8px;display:flex;align-items:center;font:600 13.5px 'Noto Sans',sans-serif;color:#B0A79B">Generate</span>
+<span style="font:400 12.5px 'Noto Sans',sans-serif;color:#6B645A">Type something to generate. ⌘↵ works too.</span>
+<span style="flex:1"></span>
+<sc-if value="{{ privacyNote }}" hint-placeholder-val="{{ true }}"><span style="display:flex;align-items:center;gap:7px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#857D72">wifi_off</span>Runs on this machine. Works offline.</span></sc-if>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="1e" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#1e" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:rgba(23,23,23,.09);color:#171717;border-radius:5px">1e</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Generating — the wait is local, so it shows what the machine is doing</span></div>
+<div data-screen-label="1e" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<sc-if value="{{ statusPill }}" hint-placeholder-val="{{ true }}"><span style="height:24px;padding:0 10px;box-sizing:border-box;background:#FFFFFF;border:1px solid #E4DCD0;border-radius:999px;display:flex;align-items:center;gap:7px;font:500 11.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#FF8A1F"></span>Fast · generating<span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">expand_more</span></span></sc-if>
+<span style="font-family:'Material Symbols Rounded';font-size:19px;color:#5F594F">settings</span>
+</div>
+<div style="flex:1;min-height:0;display:flex">
+<div style="width:236px;flex:none;box-sizing:border-box;background:#F7F1E8;border-right:1px solid #EBE4D9;display:flex;flex-direction:column">
+<div style="padding:16px 14px 8px;display:flex;align-items:center;gap:8px"><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">VOICES</span><span style="flex:1"></span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">add</span></div>
+<div style="padding:0 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;background:#FFF3E6"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#FF8A1F;display:flex;align-items:center;justify-content:center;font:600 11px Sora,sans-serif;color:#171717">M</span><span style="flex:1;min-width:0"><span style="display:block;font:600 12.5px 'Noto Sans',sans-serif;color:#8F4406">My voice</span><span style="display:block;font:400 11px 'Noto Sans',sans-serif;color:#8F4406;opacity:.75;margin-top:1px">0:14 reference</span></span></span>
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#E4DCD0;display:flex;align-items:center;justify-content:center;font:600 11px Sora,sans-serif;color:#5F594F">T</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717">Tunde, studio</span><span style="display:block;font:400 11px 'Noto Sans',sans-serif;color:#857D72;margin-top:1px">0:22 reference</span></span></span>
+</div>
+<div style="padding:20px 14px 8px;font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">CLIPS</div>
+<div style="padding:0 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;background:#FFFFFF;border:1px solid #EBE4D9"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#FF8A1F">graphic_eq</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Generating…</span><span style="display:block;font:400 11px 'Noto Sans Mono',monospace;color:#857D72;margin-top:1px">just now</span></span></span>
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#857D72">play_circle</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Intro for episode 12</span><span style="display:block;font:400 11px 'Noto Sans Mono',monospace;color:#857D72;margin-top:1px">0:31 · 14:02</span></span></span>
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#857D72">play_circle</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Voicemail greeting</span><span style="display:block;font:400 11px 'Noto Sans Mono',monospace;color:#857D72;margin-top:1px">0:12 · 13:41</span></span></span>
+</div>
+<span style="flex:1"></span>
+<div style="border-top:1px solid #EBE4D9;padding:12px 14px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Runtime running · 0.9.4</div>
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">hard_drive</span>1 model on disk · 1.2 GB</div>
+</div>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="flex:1;min-height:0;padding:22px 26px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px">
+<div><div style="font:600 19px Sora,sans-serif;letter-spacing:-.01em;color:#171717">New clip</div><div style="font:400 12.5px 'Noto Sans',sans-serif;color:#6B645A;margin-top:3px">My voice · Fast</div></div>
+<span style="flex:1"></span>
+<span style="height:32px;padding:0 12px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#5F594F">tune</span>Speed 1.0 · Seed 4417</span>
+</div>
+<div style="flex:1;min-height:0;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px">
+<span style="font:400 15px/1.7 'Noto Sans',sans-serif;color:#171717">Good morning. Prices at Mile 12 came down again this week, so if you were waiting to buy rice, this is the week to do it. I will keep an eye on tomatoes and tell you on Thursday.</span>
+<span style="flex:1"></span>
+<div style="display:flex;gap:16px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span>176 characters</span><span>about 24 seconds spoken</span></div>
+</div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:15px 16px;display:flex;flex-direction:column;gap:11px">
+<div style="display:flex;align-items:center;gap:12px">
+<span style="font-family:'Material Symbols Rounded';font-size:19px;color:#FF8A1F">graphic_eq</span>
+<span style="font:600 13px 'Noto Sans',sans-serif;color:#171717">Generating with Fast</span>
+<span style="flex:1"></span>
+<span style="font:400 12px 'Noto Sans Mono',monospace;color:#6B645A">14.2 of 24.0 s written · 3.1 s elapsed</span>
+<span style="height:30px;padding:0 12px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:7px;display:flex;align-items:center;font:600 12px 'Noto Sans',sans-serif;color:#171717">Cancel</span>
+</div>
+<div style="height:6px;background:#EBE4D9;border-radius:999px;overflow:hidden"><span style="display:block;width:59%;height:100%;background:#FF8A1F;border-radius:999px"></span></div>
+<span style="font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A">Playing is possible as soon as the first seconds land. Keep typing if you want — this clip finishes either way.</span>
+</div>
+<div style="display:flex;align-items:center;gap:14px">
+<span style="height:38px;padding:0 20px;box-sizing:border-box;background:#F1EBE1;border-radius:8px;display:flex;align-items:center;gap:8px;font:600 13.5px 'Noto Sans',sans-serif;color:#B0A79B"><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#B0A79B">hourglass_top</span>Generating</span>
+<span style="flex:1"></span>
+<sc-if value="{{ privacyNote }}" hint-placeholder-val="{{ true }}"><span style="display:flex;align-items:center;gap:7px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#857D72">wifi_off</span>Runs on this machine. Works offline.</span></sc-if>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="1f" style="display:flex;flex-direction:column;gap:10px;scroll-margin-top:20px">
+<div style="display:flex;align-items:baseline;gap:8px"><a href="#1f" style="font:600 10.5px 'Noto Sans Mono',monospace;padding:3px 7px;background:#FF6E08;color:#FFFEFD;border-radius:5px">1f</a><span style="font:500 12.5px 'Noto Sans',sans-serif;color:#5F594F">Done — the clip, what produced it, and the two things you do next</span></div>
+<div data-screen-label="1f" style="width:1180px;height:740px;box-sizing:border-box;background:#FFF9F2;border:1px solid #E4DCD0;border-radius:12px;overflow:hidden;box-shadow:0 12px 32px rgba(23,23,23,.12);display:flex;flex-direction:column">
+<div style="height:40px;flex:none;box-sizing:border-box;background:#F7F1E8;border-bottom:1px solid #EBE4D9;display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;gap:7px"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840"></span></div>
+<span style="font:600 12.5px Sora,sans-serif;color:#171717">Yarngo Studio</span>
+<span style="flex:1"></span>
+<sc-if value="{{ statusPill }}" hint-placeholder-val="{{ true }}"><span style="height:24px;padding:0 10px;box-sizing:border-box;background:#FFFFFF;border:1px solid #E4DCD0;border-radius:999px;display:flex;align-items:center;gap:7px;font:500 11.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Fast · loaded<span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">expand_more</span></span></sc-if>
+<span style="font-family:'Material Symbols Rounded';font-size:19px;color:#5F594F">settings</span>
+</div>
+<div style="flex:1;min-height:0;display:flex">
+<div style="width:236px;flex:none;box-sizing:border-box;background:#F7F1E8;border-right:1px solid #EBE4D9;display:flex;flex-direction:column">
+<div style="padding:16px 14px 8px;display:flex;align-items:center;gap:8px"><span style="font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">VOICES</span><span style="flex:1"></span><span style="font-family:'Material Symbols Rounded';font-size:18px;color:#5F594F">add</span></div>
+<div style="padding:0 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;background:#FFF3E6"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#FF8A1F;display:flex;align-items:center;justify-content:center;font:600 11px Sora,sans-serif;color:#171717">M</span><span style="flex:1;min-width:0"><span style="display:block;font:600 12.5px 'Noto Sans',sans-serif;color:#8F4406">My voice</span><span style="display:block;font:400 11px 'Noto Sans',sans-serif;color:#8F4406;opacity:.75;margin-top:1px">0:14 reference</span></span></span>
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px"><span style="width:26px;height:26px;flex:none;border-radius:50%;background:#E4DCD0;display:flex;align-items:center;justify-content:center;font:600 11px Sora,sans-serif;color:#5F594F">T</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717">Tunde, studio</span><span style="display:block;font:400 11px 'Noto Sans',sans-serif;color:#857D72;margin-top:1px">0:22 reference</span></span></span>
+</div>
+<div style="padding:20px 14px 8px;font:600 10.5px 'Noto Sans Mono',monospace;letter-spacing:.08em;color:#857D72">CLIPS</div>
+<div style="padding:0 8px;display:flex;flex-direction:column;gap:2px">
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px;background:#FFFFFF;border:1px solid #EBE4D9"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#8F4406;font-variation-settings:'FILL' 1">pause_circle</span><span style="flex:1;min-width:0"><span style="display:block;font:600 12.5px 'Noto Sans',sans-serif;color:#171717;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Good morning. Prices at…</span><span style="display:block;font:400 11px 'Noto Sans Mono',monospace;color:#857D72;margin-top:1px">0:24 · now</span></span></span>
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#857D72">play_circle</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Intro for episode 12</span><span style="display:block;font:400 11px 'Noto Sans Mono',monospace;color:#857D72;margin-top:1px">0:31 · 14:02</span></span></span>
+<span style="display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:8px"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#857D72">play_circle</span><span style="flex:1;min-width:0"><span style="display:block;font:500 12.5px 'Noto Sans',sans-serif;color:#171717;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Voicemail greeting</span><span style="display:block;font:400 11px 'Noto Sans Mono',monospace;color:#857D72;margin-top:1px">0:12 · 13:41</span></span></span>
+</div>
+<span style="flex:1"></span>
+<div style="border-top:1px solid #EBE4D9;padding:12px 14px;display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#5F594F"><span style="width:7px;height:7px;border-radius:50%;background:#287A57"></span>Runtime running · 0.9.4</div>
+<div style="display:flex;align-items:center;gap:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#6B645A"><span style="font-family:'Material Symbols Rounded';font-size:15px;color:#857D72">hard_drive</span>1 model on disk · 1.2 GB</div>
+</div>
+</div>
+<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+<div style="flex:1;min-height:0;padding:22px 26px;display:flex;flex-direction:column;gap:14px">
+<div style="display:flex;align-items:center;gap:12px">
+<div><div style="font:600 19px Sora,sans-serif;letter-spacing:-.01em;color:#171717">New clip</div><div style="font:400 12.5px 'Noto Sans',sans-serif;color:#6B645A;margin-top:3px">My voice · Fast</div></div>
+<span style="flex:1"></span>
+<span style="height:32px;padding:0 12px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#5F594F">tune</span>Speed 1.0 · Seed 4417</span>
+</div>
+<div style="flex:1;min-height:0;background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);padding:16px 18px;box-sizing:border-box;display:flex;flex-direction:column;gap:10px">
+<span style="font:400 15px/1.7 'Noto Sans',sans-serif;color:#171717">Good morning. Prices at Mile 12 came down again this week, so if you were waiting to buy rice, this is the week to do it. I will keep an eye on tomatoes and tell you on Thursday.</span>
+<span style="flex:1"></span>
+<div style="display:flex;gap:16px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span>176 characters</span><span>24 seconds spoken</span></div>
+</div>
+<div style="background:#FFFFFF;border:1px solid #EBE4D9;border-radius:12px;box-shadow:0 1px 2px rgba(23,23,23,.06);overflow:hidden">
+<div style="padding:15px 16px;display:flex;align-items:center;gap:14px">
+<span style="width:40px;height:40px;flex:none;border-radius:50%;background:#FF8A1F;display:flex;align-items:center;justify-content:center"><span style="font-family:'Material Symbols Rounded';font-size:22px;color:#171717;font-variation-settings:'FILL' 1">pause</span></span>
+<div style="flex:1;min-width:0;display:flex;align-items:center;gap:2px;height:56px">
+<i style="width:3px;height:8px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:16px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:26px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:38px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:30px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:44px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:22px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:12px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:30px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:48px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:34px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:20px;border-radius:2px;background:#FF8A1F"></i><i style="width:3px;height:10px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:26px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:42px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:52px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:36px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:24px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:14px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:30px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:40px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:28px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:18px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:10px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:22px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:34px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:46px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:30px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:20px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:12px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:26px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:16px;border-radius:2px;background:#E4DCD0"></i><i style="width:3px;height:8px;border-radius:2px;background:#E4DCD0"></i>
+</div>
+<span style="font:400 12px 'Noto Sans Mono',monospace;color:#6B645A">0:09 / 0:24</span>
+</div>
+<div style="padding:0 16px 15px;display:flex;align-items:center;gap:9px">
+<span style="height:34px;padding:0 14px;box-sizing:border-box;background:#FF6E08;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#FFFEFD"><span style="font-family:'Material Symbols Rounded';font-size:17px">download</span>Save as WAV</span>
+<span style="height:34px;padding:0 13px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">refresh</span>Generate again</span>
+<span style="height:34px;padding:0 13px;box-sizing:border-box;border:1px solid #D8D0C4;background:#FFFFFF;border-radius:8px;display:flex;align-items:center;gap:7px;font:600 12.5px 'Noto Sans',sans-serif;color:#171717"><span style="font-family:'Material Symbols Rounded';font-size:17px;color:#5F594F">content_copy</span>Copy audio</span>
+<span style="flex:1"></span>
+<span style="font:400 11.5px 'Noto Sans Mono',monospace;color:#857D72">Fast · seed 4417 · 9.6 s to generate · 2.5× realtime</span>
+</div>
+</div>
+<div style="display:flex;align-items:center;gap:14px">
+<span style="height:38px;padding:0 20px;box-sizing:border-box;background:#FF6E08;border-radius:8px;display:flex;align-items:center;font:600 13.5px 'Noto Sans',sans-serif;color:#FFFEFD">Generate</span>
+<span style="font:400 12.5px 'Noto Sans',sans-serif;color:#6B645A">Edit the text and generate again — the seed stays, so only your words change.</span>
+<span style="flex:1"></span>
+<sc-if value="{{ privacyNote }}" hint-placeholder-val="{{ true }}"><span style="display:flex;align-items:center;gap:7px;font:400 11.5px 'Noto Sans',sans-serif;color:#857D72"><span style="font-family:'Material Symbols Rounded';font-size:16px;color:#857D72">wifi_off</span>Runs on this machine. Works offline.</span></sc-if>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+</div>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Document&quot;},&quot;privacyNote&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;App&quot;},&quot;statusPill&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;App&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      showNotes: this.props.showNotes ?? true,
+      privacyNote: this.props.privacyNote ?? true,
+      statusPill: this.props.statusPill ?? true,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

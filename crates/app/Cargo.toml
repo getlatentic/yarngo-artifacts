@@ -1,0 +1,42 @@
+[package]
+name = "voicestudio"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "voicestudio"
+path = "src/main.rs"
+
+[dependencies]
+speech-engine = { path = "../speech-engine" }
+serde.workspace = true
+serde_json.workspace = true
+gpui = { git = "https://github.com/zed-industries/zed" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", features = ["font-kit"] }
+gpui-component = { git = "https://github.com/longbridge/gpui-component" }
+rodio = "0.22.2"
+cpal = "0.18.2"
+hound = "3.5.1"
+rust-i18n = "4.2"
+
+# cargo-packager produces macOS .app/.dmg, Windows NSIS/MSI and Linux
+# deb/AppImage from one config. Zed hand-rolls this (a patched cargo-bundle plus
+# Inno Setup) because it predates the tooling; cargo-bundle still has no Windows
+# support, so it is not an option for a cross-platform target.
+[package.metadata.packager]
+product-name = "Yarngo Studio"
+identifier = "dev.yarngo.studio"
+description = "Speak text in your own voice, entirely on your machine."
+authors = ["Yarngo"]
+category = "Productivity"
+# The sidecar and its locales ship alongside the binary.
+resources = ["../../sidecar/**/*", "locales/**/*"]
+
+[package.metadata.packager.macos]
+minimum-system-version = "13.0"
+# Shown verbatim in the macOS permission prompt.
+info-plist-path = "../../packaging/Info.plist"
+# Hardened-runtime entitlements. Notarization requires the hardened runtime,
+# and the hardened runtime blocks both microphone capture and the sidecar's
+# unsigned native extensions unless these are declared.
+entitlements = "../../packaging/yarngo-studio.entitlements"

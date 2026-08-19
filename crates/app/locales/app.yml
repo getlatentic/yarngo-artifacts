@@ -1,0 +1,621 @@
+# rust-i18n v2 format: one file, keyed by message, locales nested beneath.
+# Separate per-locale files are the v1 layout and are not read by this version.
+_version: 2
+
+app:
+  name:
+    en: Yarngo Studio
+    sk: Yarngo Studio
+  tagline:
+    en: Your voice, on your machine. Nothing is uploaded.
+    sk: Váš hlas, vo vašom počítači. Nič sa nenahráva na internet.
+
+model:
+  label:
+    en: Model
+    sk: Model
+  title:
+    en: Choose a model
+    sk: Vyberte model
+  subtitle:
+    en: One is enough to start. Others can be added later in Settings, and you can switch per clip.
+    sk: Na začiatok stačí jeden. Ďalšie môžete pridať neskôr a prepínať pri každej nahrávke.
+  recommended:
+    en: Recommended
+    sk: Odporúčané
+  download:
+    en: Download
+    sk: Stiahnuť
+  use:
+    en: Use this
+    sk: Použiť tento
+  in_use:
+    en: In use
+    sk: Používa sa
+  continue:
+    en: Continue
+    sk: Pokračovať
+  measured:
+    en: "%{rtf}× realtime here"
+    sk: "%{rtf}× reálneho času tu"
+  can_clone:
+    en: can speak in your voice
+    sk: dokáže hovoriť vaším hlasom
+  own_voice_only:
+    en: its own voice only
+    sk: iba vlastným hlasom
+  free_after:
+    en: "Downloads continue in the background. %{gb} GB free."
+    sk: "Sťahovanie pokračuje na pozadí. Voľných %{gb} GB."
+  background:
+    en: Downloads continue in the background.
+    sk: Sťahovanie pokračuje na pozadí.
+
+voice:
+  label:
+    en: Voice
+    sk: Hlas
+  add:
+    en: Add a voice
+    sk: Pridať hlas
+  mine:
+    en: My voice
+    sk: Môj hlas
+  sample:
+    en: Sample voice
+    sk: Ukážkový hlas
+  sample_detail:
+    en: bundled · for trying
+    sk: súčasť aplikácie · na vyskúšanie
+  hear_sample:
+    en: Hear it in the sample voice
+    sk: Vypočuť v ukážkovom hlase
+  add_to_generate:
+    en: Add a voice to generate in yours.
+    sk: Pridajte hlas, aby ste generovali vo svojom.
+  none_selected:
+    en: No voice selected
+    sk: Nie je vybraný hlas
+  none_title:
+    en: No voice yet
+    sk: Zatiaľ žiadny hlas
+  none_detail:
+    en: Yarngo speaks in a voice you record. You read a short script, twenty seconds, and it is done.
+    sk: Yarngo hovorí hlasom, ktorý nahráte. Prečítate krátky text, dvadsať sekúnd, a je to.
+  add_takes:
+    en: about a minute
+    sk: približne minútu
+  sample_only_listening:
+    en: bundled · for listening, not for clips you keep
+    sk: súčasť aplikácie · na počúvanie, nie na nahrávky, ktoré si necháte
+  use_mine:
+    en: Use my voice
+    sk: Použiť môj hlas
+  confirm_delete:
+    en: Delete?
+    sk: Vymazať?
+  model_cannot_clone:
+    en: This model speaks in its own voice only. Choose another model to use a voice of your own.
+    sk: Tento model hovorí iba vlastným hlasom. Ak chcete použiť vlastný hlas, vyberte iný model.
+
+switch:
+  on_machine:
+    en: On this machine
+    sk: V tomto počítači
+  not_downloaded:
+    en: Not downloaded
+    sk: Nestiahnuté
+  in_memory:
+    en: in memory
+    sk: v pamäti
+  loads_in:
+    en: "loads in %{seconds}s"
+    sk: "načíta sa za %{seconds}s"
+  on_disk:
+    en: on disk
+    sk: na disku
+  explain:
+    en: Switching only changes the next clip. Clips already made keep the model they were made with.
+    sk: Prepnutie ovplyvní až ďalšiu nahrávku. Hotové nahrávky si ponechajú model, ktorým vznikli.
+  manage:
+    en: Manage models…
+    sk: Spravovať modely…
+
+settings:
+  title:
+    en: Settings
+    sk: Nastavenia
+  general:
+    en: General
+    sk: Všeobecné
+  models:
+    en: Models
+    sk: Modely
+  voices:
+    en: Voices
+    sk: Hlasy
+  audio:
+    en: Audio
+    sk: Zvuk
+  storage:
+    en: Storage
+    sk: Úložisko
+  runtime:
+    en: Runtime
+    sk: Engine
+  about:
+    en: About
+    sk: O aplikácii
+  disk_line:
+    en: "%{count} on disk · %{used} used · %{free} free"
+    sk: "%{count} na disku · %{used} využitých · %{free} voľných"
+  available:
+    en: Available
+    sk: Dostupné
+  delete:
+    en: Delete
+    sk: Vymazať
+  default:
+    en: default
+    sk: predvolený
+  default_in_memory:
+    en: default · in memory
+    sk: predvolený · v pamäti
+  used_by:
+    en: "made %{count} clips"
+    sk: "vytvoril %{count} nahrávok"
+  unused:
+    en: no clips yet
+    sk: zatiaľ žiadne nahrávky
+  used_by_voices:
+    en: "used by %{count} voices"
+    sk: "používa ho %{count} hlasov"
+  used_by_one_voice:
+    en: used by 1 voice
+    sk: používa ho 1 hlas
+  used_by_no_voice:
+    en: not used by any voice
+    sk: nepoužíva ho žiadny hlas
+  delete_frees:
+    en: "Deleting %{model} frees %{size}"
+    sk: "Vymazaním %{model} sa uvoľní %{size}"
+  delete_detail_unused:
+    en: "Clips already made keep playing. Nothing currently uses it. Getting it back means downloading %{size} again."
+    sk: "Hotové nahrávky sa budú ďalej prehrávať. Momentálne ho nič nepoužíva. Vrátiť ho znamená stiahnuť %{size} znova."
+  delete_detail_used:
+    en: "Clips already made keep playing — the audio is on disk. %{count} were made with it. Getting it back means downloading %{size} again."
+    sk: "Hotové nahrávky sa budú ďalej prehrávať — zvuk je na disku. Vzniklo s ním %{count}. Vrátiť ho znamená stiahnuť %{size} znova."
+  in_use:
+    en: in use
+    sk: používa sa
+  voices_line:
+    en: "%{count} voices · %{time} of reference audio"
+    sk: "%{count} hlasov · %{time} referenčného zvuku"
+  voices_where:
+    en: Recordings live here. Deleting a voice removes its recording and everything derived from it.
+    sk: Nahrávky sú tu. Vymazaním hlasu sa odstráni nahrávka aj všetko z nej odvodené.
+  voice_delete_unused:
+    en: Removes the recording and the voice. Nothing was made with it.
+    sk: Odstráni nahrávku aj hlas. Nič s ním nevzniklo.
+  voice_delete_used:
+    en: "Removes the recording and the voice. The %{count} clips made with it keep playing."
+    sk: "Odstráni nahrávku aj hlas. %{count} nahrávok, ktoré s ním vznikli, sa budú ďalej prehrávať."
+  not_built:
+    en: Not built yet. This pane is named so the window says what will live here.
+    sk: Zatiaľ nie je hotové. Panel je pomenovaný, aby bolo jasné, čo tu bude.
+
+clip:
+  save_as:
+    en: Save as WAV
+    sk: Uložiť ako WAV
+  again:
+    en: Generate again
+    sk: Generovať znova
+  copy:
+    en: Copy audio
+    sk: Kopírovať zvuk
+
+compose:
+  placeholder:
+    en: Type what you want to say…
+    sk: Napíšte, čo chcete povedať…
+  generate:
+    en: Generate
+    sk: Generovať
+  working:
+    en: Generating
+    sk: Generujem
+  while_generating:
+    en: Keep typing if you want — this clip finishes either way.
+    sk: Pokojne píšte ďalej — táto nahrávka sa dokončí tak či tak.
+  generating_with:
+    en: "Generating with %{model}"
+    sk: "Generujem cez %{model}"
+  written:
+    en: "%{written} of about %{total} s written · %{elapsed} s elapsed"
+    sk: "%{written} z približne %{total} s hotových · %{elapsed} s uplynulo"
+  generate_when_ready:
+    en: Generate when ready
+    sk: Generovať, keď bude pripravené
+  queued:
+    en: 1 clip queued. It starts on its own — you do not have to wait here.
+    sk: 1 nahrávka v poradí. Spustí sa sama — nemusíte tu čakať.
+  downloading_model:
+    en: "Downloading %{model}"
+    sk: "Sťahujem %{model}"
+  model_missing:
+    en: "%{model} is not on this machine yet"
+    sk: "%{model} zatiaľ nie je v tomto počítači"
+  model_explains:
+    en: A model is the part that actually speaks. You can write now; the queue runs the moment it is ready.
+    sk: Model je tá časť, ktorá hovorí. Môžete písať už teraz; poradie sa spustí, hneď ako bude pripravený.
+  choose_another:
+    en: Choose another
+    sk: Vybrať iný
+
+status:
+  starting:
+    en: Starting the speech engine…
+    sk: Spúšťam rečový engine…
+  no_voice_yet:
+    en: Add a voice to generate in yours. The sample voice is for listening.
+    sk: Pridajte hlas, aby ste generovali vo svojom. Ukážkový hlas slúži len na počúvanie.
+  engine_restarting:
+    en: The speech engine stopped. Restarting it — nothing you made was lost.
+    sk: Rečový engine sa zastavil. Reštartujem ho — nič z vytvoreného sa nestratilo.
+  warming:
+    en: Getting your voice ready. You can type — the first clip may take longer.
+    sk: Pripravujem váš hlas. Môžete písať — prvá nahrávka môže trvať dlhšie.
+  ready:
+    en: Your voice is ready.
+    sk: Váš hlas je pripravený.
+  generating:
+    en: Making your voice note — about 20 seconds.
+    sk: Vytváram hlasovú poznámku — približne 20 sekúnd.
+  saved:
+    en: "Saved %{path} — %{audio}s of audio in %{gen}s"
+    sk: "Uložené %{path} — %{audio}s zvuku za %{gen}s"
+  failed:
+    en: "That did not work: %{reason}"
+    sk: "Nepodarilo sa: %{reason}"
+
+enrol:
+  title:
+    en: Add a reference voice
+    sk: Pridať referenčný hlas
+  subtitle:
+    en: Read the script out loud. The words are how the model lines your voice up with speech.
+    sk: Prečítajte text nahlas a uložte. Potrebné sú obe časti — slová sú to, ako model zosúladí váš hlas s rečou.
+  reference_audio:
+    en: Reference audio
+    sk: Referenčný zvuk
+  reference_text:
+    en: Reference text
+    sk: Referenčný text
+  microphone:
+    en: Default microphone
+    sk: Predvolený mikrofón
+  word_for_word:
+    en: what you read, word for word
+    sk: čo ste prečítali, slovo za slovom
+  tips_title:
+    en: Getting a good voice
+    sk: Ako získať dobrý hlas
+  tip_1:
+    en: Read in the tone you want back. Flat reading gives flat speech.
+    sk: Čítajte tónom, aký chcete dostať späť. Ploché čítanie dá plochú reč.
+  tip_2:
+    en: Read the whole script — full sentences carry rhythm.
+    sk: Prečítajte celý text — celé vety nesú rytmus.
+  tip_3:
+    en: Somewhere quiet, close to the microphone, no headphones needed.
+    sk: Na tichom mieste, blízko mikrofónu, slúchadlá nie sú potrebné.
+  name:
+    en: Name
+    sk: Názov
+  consent_ask:
+    en: I have permission to use this voice
+    sk: Mám povolenie použiť tento hlas
+  read_aloud:
+    en: "Read this out loud, the way you normally talk:"
+    sk: "Prečítajte toto nahlas, tak ako bežne hovoríte:"
+  start:
+    en: Start recording
+    sk: Spustiť nahrávanie
+  stop:
+    en: Stop recording
+    sk: Zastaviť nahrávanie
+  cancel:
+    en: Cancel
+    sk: Zrušiť
+  retry:
+    en: Try again
+    sk: Skúsiť znova
+  again:
+    en: Record again
+    sk: Nahrať znova
+  discard:
+    en: Discard and start over
+    sk: Zahodiť a začať odznova
+  room_noise:
+    en: Room noise measured after you stop
+    sk: Hluk v miestnosti sa zmeria po zastavení
+  save:
+    en: Save voice
+    sk: Uložiť hlas
+  skip:
+    en: Skip, add later
+    sk: Preskočiť, pridať neskôr
+  mic_label:
+    en: Microphone
+    sk: Mikrofón
+  read_this_script:
+    en: Read this script
+    sk: Prečítajte tento text
+  saved_as_reference:
+    en: Saved with the voice as its reference text
+    sk: Uložené s hlasom ako referenčný text
+  script_length:
+    en: "%{chars} characters · about %{seconds} seconds"
+    sk: "%{chars} znakov · približne %{seconds} sekúnd"
+  sentence_of:
+    en: "sentence %{at} of %{of}"
+    sk: "veta %{at} z %{of}"
+  same_script:
+    en: "The same script for everyone: it covers the sounds the model needs and lets the app check your take."
+    sk: "Rovnaký text pre všetkých: pokrýva zvuky, ktoré model potrebuje, a umožní aplikácii skontrolovať nahrávku."
+  keep_reading:
+    en: If you stumble, keep reading — you can record again before saving.
+    sk: Ak sa pomýlite, čítajte ďalej — pred uložením môžete nahrať znova.
+  recording_now:
+    en: Recording
+    sk: Nahráva sa
+  recording_detail:
+    en: Keep going to the end of the script. Pauses are fine.
+    sk: Pokračujte až do konca textu. Pauzy nevadia.
+  check_title:
+    en: Check your take
+    sk: Skontrolujte nahrávku
+  check_detail:
+    en: Listen once. If it sounds like you on a normal day, save it.
+    sk: Vypočujte si to raz. Ak to znie ako vy v bežný deň, uložte to.
+  default_device:
+    en: Default microphone
+    sk: Predvolený mikrofón
+  quiet:
+    en: quiet
+    sk: ticho
+  good_level:
+    en: good level
+    sk: dobrá úroveň
+  too_quiet:
+    en: too quiet
+    sk: príliš ticho
+  of_about:
+    en: "of about 0:%{seconds}"
+    sk: "z približne 0:%{seconds}"
+  mic_reaching:
+    en: Input reaching the mic
+    sk: Zvuk prichádza do mikrofónu
+  no_clipping_yet:
+    en: No clipping so far
+    sk: Zatiaľ bez skreslenia
+  whole_script:
+    en: "Whole script read · %{time}"
+    sk: "Prečítaný celý text · %{time}"
+  no_clipping:
+    en: No clipping, room noise low
+    sk: Bez skreslenia, hluk v miestnosti nízky
+  snr:
+    en: "Room noise is audible, %{db} dB below your voice. It carries into every clip. Recording closer helps."
+    sk: "Hluk v miestnosti je počuť, %{db} dB pod vaším hlasom. Prenesie sa do každej nahrávky. Pomôže nahrávať bližšie."
+  upload:
+    en: Upload a recording
+    sk: Použiť existujúcu nahrávku
+  upload_detail:
+    en: A wav of someone reading this exact script — an earlier recording of yours, or one sent to you. Nothing checks the words, so a file of anything else will slur every clip.
+    sk: Wav súbor s prečítaním presne tohto textu — vaša staršia nahrávka alebo nahrávka, ktorú vám niekto poslal. Slová sa nekontrolujú, takže iný obsah pokazí každú nahrávku.
+  imported_detail:
+    en: Brought in from a file. Listen once — it should be this script, read by the person whose voice this is.
+    sk: Načítané zo súboru. Vypočujte si to — mal by to byť tento text, prečítaný osobou, ktorej hlas to je.
+  good:
+    en: "Sounds good — %{summary}"
+    sk: "Znie dobre — %{summary}"
+  learning_title:
+    en: Getting to know your voice…
+    sk: Spoznávam váš hlas…
+  learning_detail:
+    en: Working out how you sound. About 40 seconds, once. After this it is quick.
+    sk: Zisťujem, ako znie váš hlas. Približne 40 sekúnd, jednorazovo. Potom to už ide rýchlo.
+  learning_status:
+    en: Getting to know your voice — about 40 seconds, once.
+    sk: Spoznávam váš hlas — približne 40 sekúnd, jednorazovo.
+  consent:
+    en: I have permission to use this voice. The recording and the voice stay on this machine. I can delete them whenever I want.
+    sk: Mám povolenie použiť tento hlas. Nahrávka aj hlas zostávajú v tomto počítači. Kedykoľvek ich môžem vymazať.
+
+setup:
+  explain:
+    en: Yarngo Studio downloads its speech engine the first time you open it — about 350 MB, plus a voice model. It only happens once, and everything stays on this machine.
+    sk: Yarngo Studio si pri prvom spustení stiahne rečový engine — približne 350 MB a hlasový model. Stane sa to len raz a všetko zostáva v tomto počítači.
+  header_title:
+    en: Set up Yarngo Studio
+    sk: Nastavenie Yarngo Studio
+  header_detail:
+    en: Three steps, a few minutes. No account. Speech is generated on this machine.
+    sk: Tri kroky, pár minút. Bez účtu. Reč vzniká v tomto počítači.
+  install:
+    en: Set up Yarngo Studio
+    sk: Nastaviť Yarngo Studio
+  title:
+    en: Set up Yarngo Studio
+    sk: Nastavenie Yarngo Studio
+  this_mac:
+    en: This machine
+    sk: Tento počítač
+  step_runtime:
+    en: Runtime
+    sk: Engine
+  step_model:
+    en: Model
+    sk: Model
+  step_voice:
+    en: Your voice
+    sk: Váš hlas
+  can_close:
+    en: You can close the window — the download resumes.
+    sk: Okno môžete zavrieť — sťahovanie bude pokračovať.
+  quit:
+    en: Quit
+    sk: Ukončiť
+  stopped:
+    en: The runtime download stopped
+    sk: Sťahovanie enginu sa zastavilo
+  stopped_detail:
+    en: The connection dropped. What was downloaded is kept, so resuming picks up where it stopped. Nothing was installed yet.
+    sk: Spojenie sa prerušilo. Stiahnuté dáta zostávajú, takže pokračovanie nadviaže tam, kde skončilo. Zatiaľ sa nič nenainštalovalo.
+  resume:
+    en: Resume download
+    sk: Pokračovať v sťahovaní
+  runtime_detail:
+    en: "%{size} · required. Yarngo cannot generate speech without it."
+    sk: "%{size} · povinné. Yarngo bez toho nedokáže generovať reč."
+  until_installed:
+    en: Until it is installed
+    sk: Kým nie je nainštalovaný
+  cap_generate:
+    en: Generating speech
+    sk: Generovanie reči
+  cap_models:
+    en: Downloading models
+    sk: Sťahovanie modelov
+  cap_record:
+    en: Recording a reference voice
+    sk: Nahrávanie referenčného hlasu
+  cap_play:
+    en: Playing clips you already made
+    sk: Prehrávanie už vytvorených nahrávok
+  no_connection:
+    en: No connection on this machine?
+    sk: Tento počítač nie je pripojený?
+  no_connection_detail:
+    en: Download the archive somewhere else and point Yarngo at the file. The speech packages still come from the network afterwards.
+    sk: Stiahnite archív inde a ukážte naň Yarngu. Rečové balíky sa aj tak stiahnu zo siete.
+  install_from_file:
+    en: Install from a file
+    sk: Inštalovať zo súboru
+  direct_link:
+    en: Direct link
+    sk: Priamy odkaz
+  copy_link:
+    en: Copy link
+    sk: Kopírovať odkaz
+  picked_up_next_time:
+    en: Yarngo picks up an interrupted download next time it opens.
+    sk: Yarngo pokračuje v prerušenom sťahovaní pri ďalšom spustení.
+  where:
+    en: Where things go
+    sk: Kam sa veci ukladajú
+  where_detail:
+    en: The engine and models are written to Application Support. Deleting that folder removes everything. Your recordings stay where you saved them.
+    sk: Engine a modely sa ukladajú do Application Support. Vymazaním tohto priečinka sa odstráni všetko. Vaše nahrávky zostanú tam, kam ste ich uložili.
+
+workspace:
+  voices:
+    en: Voices
+    sk: Hlasy
+  clips:
+    en: Clips
+    sk: Nahrávky
+  generating_clip:
+    en: Generating…
+    sk: Generujem…
+  just_now:
+    en: just now
+    sk: práve teraz
+  clips_empty:
+    en: Nothing yet. Clips stay on this machine until you delete them.
+    sk: Zatiaľ nič. Nahrávky zostávajú v tomto počítači, kým ich nevymažete.
+  no_voice:
+    en: No voice yet
+    sk: Zatiaľ žiadny hlas
+  new_clip:
+    en: New clip
+    sk: Nová nahrávka
+  loaded:
+    en: loaded
+    sk: načítaný
+  generating:
+    en: generating
+    sk: generujem
+  starting:
+    en: starting…
+    sk: spúšťam…
+  reference_of:
+    en: "%{time} reference"
+    sk: "referencia %{time}"
+  reference_len:
+    en: reference recording
+    sk: referenčná nahrávka
+  reference_quote:
+    en: "Reference: “%{text}”"
+    sk: "Referencia: „%{text}“"
+  chars:
+    en: "%{chars} characters"
+    sk: "%{chars} znakov"
+  spoken:
+    en: "about %{seconds} seconds spoken"
+    sk: "približne %{seconds} sekúnd reči"
+  type_something:
+    en: Type something to generate. ⌘↵ works too.
+    sk: Napíšte niečo na vygenerovanie.
+  counts:
+    en: "%{chars} characters · about %{seconds} seconds spoken"
+    sk: "%{chars} znakov · približne %{seconds} sekúnd reči"
+  runtime_running:
+    en: Runtime running
+    sk: Engine beží
+  model_on_disk:
+    en: "%{count} model on disk"
+    sk: "%{count} model na disku"
+  models_on_disk:
+    en: "%{count} models on disk"
+    sk: "%{count} modelov na disku"
+  made_with:
+    en: "%{model} · seed %{seed} · %{gen} s to generate"
+    sk: "%{model} · seed %{seed} · %{gen} s generovanie"
+  realtime:
+    en: "%{rtf}× realtime"
+    sk: "%{rtf}× reálneho času"
+  seed_pinned:
+    en: "Seed %{seed}"
+    sk: "Seed %{seed}"
+  seed_fresh:
+    en: Seed · fresh each time
+    sk: Seed · zakaždým nový
+  edit_hint:
+    en: Edit the text and generate again — the seed stays, so only your words change.
+    sk: Upravte text a generujte znova — seed zostáva, takže sa zmenia len vaše slová.
+  change:
+    en: Change
+    sk: Zmeniť
+  hear_reference:
+    en: Hear reference
+    sk: Prehrať referenciu
+  offline:
+    en: Runs on this machine. Works offline.
+    sk: Beží v tomto počítači. Funguje offline.
+
+player:
+  play:
+    en: Play
+    sk: Prehrať
+  pause:
+    en: Pause
+    sk: Pozastaviť
+  reveal:
+    en: Show in Finder
+    sk: Zobraziť vo Finderi
+  no_device:
+    en: No speakers found — the file is still saved.
+    sk: Nenašli sa reproduktory — súbor je aj tak uložený.

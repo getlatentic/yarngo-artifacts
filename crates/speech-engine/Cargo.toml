@@ -1,0 +1,13 @@
+[package]
+name = "speech-engine"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[[example]]
+name = "runtime_install"
+path = "examples/runtime_install.rs"

@@ -1,0 +1,12 @@
+
+# Upstream sources, cloned for reference only — never built from here.
+/vendor/
+
+# Build output.
+/target/
+
+# Byte-compiled sidecar sources; the .py files are the source of truth.
+__pycache__/
+
+# Screenshots taken while comparing the app against the design export.
+/design/current/

@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Caveat:wght@500;600&display=swap" rel="stylesheet"><style>body{margin:0;background:#EFEBE4;font-family:'Noto Sans',system-ui,sans-serif;color:#221f1c}a{color:#BF5C08;text-decoration:none}a:hover{color:#8F4406}</style></helmet>
+<section style="padding:44px 48px 40px" id="t1">
+<div style="display:flex;align-items:baseline;gap:10px;margin:0 0 6px"><a href="#t1" style="font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#221f1c;color:#fff;border-radius:4px">1</a><span style="font:600 13px 'Noto Sans',sans-serif">Voice Hub — launch flow wireframes</span></div>
+<p style="margin:0 0 30px;font:400 12px/1.5 'Noto Sans',sans-serif;color:#6b645b;max-width:720px">Structure only. Copy is real, taken from the brand product language and PRD acceptance criteria. Orange marks the single primary action per screen; everything else is greyscale.</p>
+
+<div style="font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:#8d8579;margin:0 0 14px">Entry</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start;margin:0 0 38px">
+
+<div id="1a" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1a" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1a</a>Onboarding</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px 26px;text-align:center">
+<div style="width:96px;height:96px;border-radius:50%;background:#EDE9E2;border:1.5px dashed #cfc7bb;display:flex;align-items:center;justify-content:center;font:400 10px ui-monospace,monospace;color:#8d8579">voice mark</div>
+<div style="font:700 22px/1.2 'Noto Sans',sans-serif;letter-spacing:-.02em">Voice AI for the way people actually speak.</div>
+<div style="font:400 13px/1.5 'Noto Sans',sans-serif;color:#6b645b">Create voice notes, follow channels, and chat — in English, Naija Pidgin, Yorùbá, Hausa and Igbo.</div>
+</div>
+<div style="padding:0 20px 26px;display:flex;flex-direction:column;gap:10px">
+<div style="background:#FF8A1F;border-radius:10px;padding:13px;text-align:center;font:700 13px 'Noto Sans',sans-serif">Get started</div>
+<div style="border:1.25px solid #221f1c;border-radius:10px;padding:12px;text-align:center;font:600 12px 'Noto Sans',sans-serif">I already have an account</div>
+<div style="font:400 10.5px/1.4 'Noto Sans',sans-serif;color:#8d8579;text-align:center">Voices are AI-generated and always labelled.</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Disclosure sits on the first screen, not in settings. <span style="font:600 9px ui-monospace,monospace;background:rgba(34,31,28,.08);padding:2px 5px;border-radius:4px">VH-002</span></div></sc-if>
+</div>
+
+<div id="1b" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1b" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1b</a>Sign in</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;padding:22px 20px;display:flex;flex-direction:column;gap:14px">
+<div style="width:104px;height:22px;background:#EDE9E2;border-radius:4px;align-self:center"></div>
+<div style="font:700 20px/1.2 'Noto Sans',sans-serif;text-align:center">Welcome to yarngo</div>
+<div style="display:flex;border:1.25px solid #d9d3ca;border-radius:10px;overflow:hidden">
+<div style="flex:1;padding:10px;text-align:center;font:600 12px 'Noto Sans',sans-serif;border-bottom:2.5px solid #FF8A1F">Sign in</div>
+<div style="flex:1;padding:10px;text-align:center;font:400 12px 'Noto Sans',sans-serif;color:#8d8579">Create account</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:5px"><span style="font:600 11px 'Noto Sans',sans-serif">Phone or email</span><div style="height:44px;border:1.25px solid #d9d3ca;border-radius:10px"></div></div>
+<div style="display:flex;flex-direction:column;gap:5px"><span style="font:600 11px 'Noto Sans',sans-serif">Password</span><div style="height:44px;border:1.25px solid #d9d3ca;border-radius:10px"></div><span style="font:400 11px 'Noto Sans',sans-serif;color:#6b645b;align-self:flex-end">Forgot password?</span></div>
+<div style="background:#FF8A1F;border-radius:10px;padding:13px;text-align:center;font:700 13px 'Noto Sans',sans-serif">Sign in</div>
+<div style="display:flex;align-items:center;gap:8px;color:#a9a196;font:400 10px 'Noto Sans',sans-serif"><div style="flex:1;height:1px;background:#e4ded4"></div>or<div style="flex:1;height:1px;background:#e4ded4"></div></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:12px;text-align:center;font:600 12px 'Noto Sans',sans-serif">Continue with Google</div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:12px;text-align:center;font:600 12px 'Noto Sans',sans-serif">Continue with phone number</div>
+<div style="font:400 10.5px/1.4 'Noto Sans',sans-serif;color:#8d8579;text-align:center;margin-top:auto">By continuing you agree to the Terms of Use and Privacy Policy.</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Phone-first for Nigeria; email kept as an option.</div></sc-if>
+</div>
+
+<div id="1c" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1c" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1c</a>Home</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="width:84px;height:18px;background:#EDE9E2;border-radius:4px"></div><div style="width:32px;height:32px;border-radius:50%;background:#EDE9E2"></div></div>
+<div><div style="font:700 20px/1.2 'Noto Sans',sans-serif">Good morning, Tosin</div><div style="font:400 12px 'Noto Sans',sans-serif;color:#6b645b;margin-top:3px">What do you want to say?</div></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:7px"><div style="width:24px;height:24px;background:#EDE9E2;border-radius:6px"></div><span style="font:600 12px 'Noto Sans',sans-serif">Create</span><span style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Voice note</span></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:7px"><div style="width:24px;height:24px;background:#EDE9E2;border-radius:6px"></div><span style="font:600 12px 'Noto Sans',sans-serif">Channels</span><span style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Follow & listen</span></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:7px"><div style="width:24px;height:24px;background:#EDE9E2;border-radius:6px"></div><span style="font:600 12px 'Noto Sans',sans-serif">Chat</span><span style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Private, AI</span></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:7px"><div style="width:24px;height:24px;background:#EDE9E2;border-radius:6px"></div><span style="font:600 12px 'Noto Sans',sans-serif">Saved</span><span style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Your notes</span></div>
+</div>
+<div style="flex:none;display:flex;justify-content:space-between;align-items:baseline"><span style="font:600 13px 'Noto Sans',sans-serif">Recent notes</span><span style="font:400 11px 'Noto Sans',sans-serif;color:#6b645b">See all</span></div>
+<div style="flex:none;border:1.25px solid #d9d3ca;border-radius:10px;overflow:hidden">
+<div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #eee7dd"><div style="width:28px;height:28px;border-radius:50%;border:1.25px solid #221f1c"></div><div style="flex:1"><div style="font:600 12px 'Noto Sans',sans-serif">I dey reach soon</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Naija Pidgin · Yarngo voice</div></div><span style="font:400 11px ui-monospace,monospace;color:#8d8579">0:24</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:10px;border-bottom:1px solid #eee7dd"><div style="width:28px;height:28px;border-radius:50%;border:1.25px solid #221f1c"></div><div style="flex:1"><div style="font:600 12px 'Noto Sans',sans-serif">Market update</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Yorùbá · Device voice</div></div><span style="font:400 11px ui-monospace,monospace;color:#8d8579">0:38</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:10px"><div style="width:28px;height:28px;border-radius:50%;border:1.25px solid #221f1c"></div><div style="flex:1"><div style="font:600 12px 'Noto Sans',sans-serif">Happy birthday Mum</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">English · Yarngo voice</div></div><span style="font:400 11px ui-monospace,monospace;color:#8d8579">0:16</span></div>
+</div>
+<div style="flex:none;margin-top:auto;border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;align-items:center;gap:10px"><div style="flex:1"><div style="font:600 12px 'Noto Sans',sans-serif">120 Yarngo Credits</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">About 4 minutes of cloud voice</div></div><div style="flex:none;white-space:nowrap;border:1.25px solid #221f1c;border-radius:999px;padding:7px 14px;font:600 11px 'Noto Sans',sans-serif">Top up</div></div>
+</div>
+<div style="display:flex;border-top:1.25px solid #e4ded4;padding:9px 0 12px">
+<div style="flex:1;text-align:center;font:600 10px 'Noto Sans',sans-serif;color:#BF5C08"><div style="width:20px;height:20px;background:#FFE2C2;border-radius:5px;margin:0 auto 4px"></div>Home</div>
+<div style="flex:1;text-align:center;font:400 10px 'Noto Sans',sans-serif;color:#8d8579"><div style="width:20px;height:20px;background:#EDE9E2;border-radius:5px;margin:0 auto 4px"></div>Channels</div>
+<div style="flex:1;text-align:center;font:400 10px 'Noto Sans',sans-serif;color:#8d8579"><div style="width:20px;height:20px;background:#EDE9E2;border-radius:5px;margin:0 auto 4px"></div>Create</div>
+<div style="flex:1;text-align:center;font:400 10px 'Noto Sans',sans-serif;color:#8d8579"><div style="width:20px;height:20px;background:#EDE9E2;border-radius:5px;margin:0 auto 4px"></div>Chat</div>
+<div style="flex:1;text-align:center;font:400 10px 'Noto Sans',sans-serif;color:#8d8579"><div style="width:20px;height:20px;background:#EDE9E2;border-radius:5px;margin:0 auto 4px"></div>Profile</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Each note carries its language + voice mode, so provenance is visible before sharing.</div></sc-if>
+</div>
+</div>
+
+<div style="font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:#8d8579;margin:0 0 14px">Create and share</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start;margin:0 0 38px">
+
+<div id="1d" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1d" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1d</a>Create — language & voice mode</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:13px;overflow:hidden">
+<div style="font:700 19px/1.2 'Noto Sans',sans-serif">What do you want to say?</div>
+<div>
+<div style="font:600 11px 'Noto Sans',sans-serif;margin-bottom:7px">1 · Language</div>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<span style="border:1.5px solid #221f1c;border-radius:999px;padding:7px 12px;font:600 11px 'Noto Sans',sans-serif">English</span>
+<span style="border:1.25px solid #d9d3ca;border-radius:999px;padding:7px 12px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b">Naija Pidgin</span>
+<span style="border:1.25px solid #d9d3ca;border-radius:999px;padding:7px 12px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b">Yorùbá</span>
+<span style="border:1.25px solid #d9d3ca;border-radius:999px;padding:7px 12px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b">Hausa</span>
+<span style="border:1.25px solid #d9d3ca;border-radius:999px;padding:7px 12px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b">Igbo</span>
+</div>
+</div>
+<div>
+<div style="font:600 11px 'Noto Sans',sans-serif;margin-bottom:7px">2 · Voice mode</div>
+<div style="display:flex;gap:8px">
+<div style="flex:1;border:1.5px solid #221f1c;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:3px"><span style="font:600 12px 'Noto Sans',sans-serif">Yarngo voice</span><span style="font:400 10px/1.35 'Noto Sans',sans-serif;color:#6b645b">Cloud. Same on every phone. Uses credits and data.</span></div>
+<div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:3px"><span style="font:600 12px 'Noto Sans',sans-serif;color:#6b645b">Device voice</span><span style="font:400 10px/1.35 'Noto Sans',sans-serif;color:#8d8579">On your phone. Free and offline. Depends on installed voices.</span></div>
+</div>
+</div>
+<div>
+<div style="font:600 11px 'Noto Sans',sans-serif;margin-bottom:7px">3 · Your words</div>
+<div style="border:1.25px solid #221f1c;border-radius:10px;height:104px;padding:10px;font:400 12px 'Noto Sans',sans-serif;color:#221f1c">I dey reach soon<span style="color:#FF8A1F">|</span></div>
+<div style="display:flex;justify-content:space-between;margin-top:5px;font:400 10px 'Noto Sans',sans-serif;color:#8d8579"><span>Translate to Pidgin</span><span>16 / 500</span></div>
+</div>
+<div>
+<div style="font:600 11px 'Noto Sans',sans-serif;margin-bottom:7px">4 · Voice</div>
+<div style="display:flex;gap:8px">
+<div style="flex:1;border:1.5px solid #221f1c;border-radius:10px;padding:9px;text-align:center"><div style="height:16px;background:#EDE9E2;border-radius:3px;margin-bottom:6px"></div><span style="font:600 11px 'Noto Sans',sans-serif">Sora</span></div>
+<div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:9px;text-align:center"><div style="height:16px;background:#EDE9E2;border-radius:3px;margin-bottom:6px"></div><span style="font:400 11px 'Noto Sans',sans-serif;color:#6b645b">Amaka</span></div>
+<div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:9px;text-align:center"><div style="height:16px;background:#EDE9E2;border-radius:3px;margin-bottom:6px"></div><span style="font:400 11px 'Noto Sans',sans-serif;color:#6b645b">Dami</span></div>
+</div>
+</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:6px">
+<div style="background:#FF8A1F;border-radius:10px;padding:13px;text-align:center;font:700 13px 'Noto Sans',sans-serif">Generate voice</div>
+<div style="font:400 10px 'Noto Sans',sans-serif;color:#8d8579;text-align:center">Uses about 8 credits · AI-generated voice</div>
+</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Mode selector states availability, consistency, cost and connectivity — and never changes itself. <span style="font:600 9px ui-monospace,monospace;background:rgba(34,31,28,.08);padding:2px 5px;border-radius:4px">VH-003</span> <span style="font:600 9px ui-monospace,monospace;background:rgba(34,31,28,.08);padding:2px 5px;border-radius:4px">VH-007</span></div></sc-if>
+</div>
+
+<div id="1e" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1e" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1e</a>Translate to Pidgin</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:13px">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:26px;height:26px;border:1.25px solid #221f1c;border-radius:50%"></div><span style="font:600 14px 'Noto Sans',sans-serif">Translate</span></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;background:#F7F4EF"><div style="font:600 10px 'Noto Sans',sans-serif;color:#8d8579;margin-bottom:5px">ENGLISH — ORIGINAL</div><div style="font:400 13px/1.5 'Noto Sans',sans-serif">I will get there soon, please wait for me.</div></div>
+<div style="text-align:center;font:400 16px 'Noto Sans',sans-serif;color:#a9a196">↓</div>
+<div style="border:1.5px solid #221f1c;border-radius:10px;padding:11px"><div style="font:600 10px 'Noto Sans',sans-serif;color:#BF5C08;margin-bottom:5px">NAIJA PIDGIN — EDITABLE</div><div style="font:400 13px/1.5 'Noto Sans',sans-serif">I dey come now now, abeg wait for me.<span style="color:#FF8A1F">|</span></div></div>
+<div style="display:flex;gap:8px"><div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;text-align:center;font:600 11px 'Noto Sans',sans-serif;color:#6b645b">Restore original</div><div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;text-align:center;font:600 11px 'Noto Sans',sans-serif;color:#6b645b">Try again</div></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;font:400 11px/1.45 'Noto Sans',sans-serif;color:#6b645b">Translation and voice generation are separate steps. Nothing is generated until you tap below.</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:8px">
+<div style="background:#FF8A1F;border-radius:10px;padding:13px;text-align:center;font:700 13px 'Noto Sans',sans-serif">Use this text</div>
+</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Editable preview + restore original; target is pcm. <span style="font:600 9px ui-monospace,monospace;background:rgba(34,31,28,.08);padding:2px 5px;border-radius:4px">VH-010</span></div></sc-if>
+</div>
+
+<div id="1f" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1f" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1f</a>Device voice unavailable</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="position:absolute"></div>
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:10px;opacity:.35">
+<div style="font:700 19px/1.2 'Noto Sans',sans-serif">What do you want to say?</div>
+<div style="height:34px;border:1.25px solid #d9d3ca;border-radius:999px;width:70%"></div>
+<div style="height:104px;border:1.25px solid #d9d3ca;border-radius:10px"></div>
+<div style="height:56px;border:1.25px solid #d9d3ca;border-radius:10px"></div>
+</div>
+<div style="border-top:1.5px solid #221f1c;border-radius:16px 16px 0 0;padding:18px 16px 22px;display:flex;flex-direction:column;gap:12px;background:#fff">
+<div style="width:36px;height:4px;border-radius:2px;background:#e4ded4;align-self:center"></div>
+<div style="font:700 17px/1.25 'Noto Sans',sans-serif">Yorùbá isn't installed on this phone</div>
+<div style="font:400 12px/1.5 'Noto Sans',sans-serif;color:#6b645b">Your device voice engine doesn't have Yorùbá voice data. We won't swap it for English without asking.</div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;font:400 11px/1.45 'Noto Sans',sans-serif;color:#6b645b">Engine: Google Speech Services · Yorùbá (yo-NG): not installed</div>
+<div style="background:#FF8A1F;border-radius:10px;padding:13px;text-align:center;font:700 13px 'Noto Sans',sans-serif">Install Yorùbá voice data</div>
+<div style="border:1.25px solid #221f1c;border-radius:10px;padding:12px;text-align:center;font:600 12px 'Noto Sans',sans-serif">Use Yarngo voice instead</div>
+<div style="text-align:center;font:400 11px 'Noto Sans',sans-serif;color:#8d8579">Choose another language</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">No silent fallback: the failure is named, and both recoveries are one tap. <span style="font:600 9px ui-monospace,monospace;background:rgba(34,31,28,.08);padding:2px 5px;border-radius:4px">VH-008</span></div></sc-if>
+</div>
+
+<div id="1g" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1g" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1g</a>Generating</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:26px;text-align:center">
+<div style="width:110px;height:110px;border-radius:50%;border:1.5px solid #d9d3ca;display:flex;align-items:center;justify-content:center"><div style="width:74px;height:74px;border-radius:50%;background:#FFE2C2;display:flex;align-items:center;justify-content:center;font:400 9px ui-monospace,monospace;color:#8F4406">pulse</div></div>
+<div style="font:700 18px 'Noto Sans',sans-serif">Making your voice note</div>
+<div style="width:100%;display:flex;flex-direction:column;gap:9px;text-align:left">
+<div style="display:flex;gap:9px;align-items:center;font:400 12px 'Noto Sans',sans-serif;color:#6b645b"><div style="width:16px;height:16px;border-radius:50%;background:#221f1c"></div>Queued</div>
+<div style="display:flex;gap:9px;align-items:center;font:600 12px 'Noto Sans',sans-serif"><div style="width:16px;height:16px;border-radius:50%;background:#FF8A1F"></div>Generating voice</div>
+<div style="display:flex;gap:9px;align-items:center;font:400 12px 'Noto Sans',sans-serif;color:#a9a196"><div style="width:16px;height:16px;border-radius:50%;border:1.25px solid #d9d3ca"></div>Checking the audio</div>
+<div style="display:flex;gap:9px;align-items:center;font:400 12px 'Noto Sans',sans-serif;color:#a9a196"><div style="width:16px;height:16px;border-radius:50%;border:1.25px solid #d9d3ca"></div>Ready</div>
+</div>
+<div style="font:400 11px/1.5 'Noto Sans',sans-serif;color:#8d8579">You can leave this screen. We'll tell you when it's ready.</div>
+</div>
+<div style="padding:0 20px 24px;display:flex;flex-direction:column;gap:8px">
+<div style="border:1.25px solid #221f1c;border-radius:10px;padding:12px;text-align:center;font:600 12px 'Noto Sans',sans-serif">Cancel</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Async job with queued / processing / ready / failed made visible; retry is idempotent. <span style="font:600 9px ui-monospace,monospace;background:rgba(34,31,28,.08);padding:2px 5px;border-radius:4px">VH-015</span></div></sc-if>
+</div>
+
+<div id="1h" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1h" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1h</a>Voice ready</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:13px">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:26px;height:26px;border:1.25px solid #221f1c;border-radius:50%"></div><span style="font:600 14px 'Noto Sans',sans-serif">Your voice is ready</span></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:12px;padding:13px;display:flex;flex-direction:column;gap:11px">
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="font:600 14px 'Noto Sans',sans-serif">Quick update</div><span style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Rename</span></div>
+<div style="display:flex;align-items:center;gap:10px"><div style="width:38px;height:38px;border-radius:50%;background:#FF8A1F"></div><div style="flex:1;height:32px;background:#EDE9E2;border-radius:4px;display:flex;align-items:center;justify-content:center;font:400 9px ui-monospace,monospace;color:#8d8579">waveform</div></div>
+<div style="display:flex;justify-content:space-between;font:400 10.5px ui-monospace,monospace;color:#8d8579"><span>00:06</span><span>00:16</span></div>
+<div style="display:flex;gap:6px;flex-wrap:wrap"><span style="border:1px solid #d9d3ca;border-radius:999px;padding:5px 10px;font:400 10px 'Noto Sans',sans-serif;color:#6b645b">AI-generated voice</span><span style="border:1px solid #d9d3ca;border-radius:999px;padding:5px 10px;font:400 10px 'Noto Sans',sans-serif;color:#6b645b">Ogg / Opus</span><span style="border:1px solid #d9d3ca;border-radius:999px;padding:5px 10px;font:400 10px 'Noto Sans',sans-serif;color:#6b645b">English · Yarngo voice</span></div>
+</div>
+<div style="display:flex;gap:8px"><div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;text-align:center;font:600 11px 'Noto Sans',sans-serif">Save</div><div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;text-align:center;font:600 11px 'Noto Sans',sans-serif">Regenerate</div><div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;text-align:center;font:600 11px 'Noto Sans',sans-serif;color:#8d8579">Delete</div></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:4px"><span style="font:600 12px 'Noto Sans',sans-serif">Voice used</span><span style="font:400 11px 'Noto Sans',sans-serif;color:#6b645b">Sora · warm, clear · Yarngo cloud voice</span></div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:6px">
+<div style="background:#FF8A1F;border-radius:10px;padding:13px;text-align:center;font:700 13px 'Noto Sans',sans-serif">Share</div>
+<div style="font:400 10px/1.4 'Noto Sans',sans-serif;color:#8d8579;text-align:center">Shared files are labelled as AI-generated voice.</div>
+</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Preview plays the exact file that gets shared. <span style="font:600 9px ui-monospace,monospace;background:rgba(34,31,28,.08);padding:2px 5px;border-radius:4px">VH-011</span> <span style="font:600 9px ui-monospace,monospace;background:rgba(34,31,28,.08);padding:2px 5px;border-radius:4px">VH-013</span></div></sc-if>
+</div>
+
+<div id="1i" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1i" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1i</a>Share</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:10px;opacity:.35">
+<div style="font:700 17px 'Noto Sans',sans-serif">Your voice is ready</div>
+<div style="height:120px;border:1.25px solid #d9d3ca;border-radius:12px"></div>
+<div style="height:40px;border:1.25px solid #d9d3ca;border-radius:10px"></div>
+</div>
+<div style="border-top:1.5px solid #221f1c;border-radius:16px 16px 0 0;padding:18px 16px 22px;display:flex;flex-direction:column;gap:11px;background:#fff">
+<div style="width:36px;height:4px;border-radius:2px;background:#e4ded4;align-self:center"></div>
+<div style="font:700 16px 'Noto Sans',sans-serif">Send this note</div>
+<div style="border:1.5px solid #221f1c;border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px"><div style="width:30px;height:30px;border-radius:7px;background:#EDE9E2"></div><div style="flex:1"><div style="font:600 12px 'Noto Sans',sans-serif">WhatsApp</div><div style="font:400 10px 'Noto Sans',sans-serif;color:#8d8579">Sends as an audio file, not a recorded voice bubble</div></div></div>
+<div style="display:flex;gap:8px">
+<div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;text-align:center;font:600 11px 'Noto Sans',sans-serif">More apps</div>
+<div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;text-align:center;font:600 11px 'Noto Sans',sans-serif">Copy file</div>
+<div style="flex:1;border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;text-align:center;font:600 11px 'Noto Sans',sans-serif">Save to phone</div>
+</div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;font:400 11px/1.45 'Noto Sans',sans-serif;color:#6b645b">This audio is AI-generated. The label travels with the file.</div>
+<div style="text-align:center;font:600 12px 'Noto Sans',sans-serif;color:#6b645b;padding:6px">Cancel</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">WhatsApp offered when installed; generic chooser always present; cancel is not an error. <span style="font:600 9px ui-monospace,monospace;background:rgba(34,31,28,.08);padding:2px 5px;border-radius:4px">VH-014</span></div></sc-if>
+</div>
+</div>
+
+<div style="font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:#8d8579;margin:0 0 14px">Channels</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start;margin:0 0 38px">
+
+<div id="1j" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1j" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1j</a>Channel catalog</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+<div style="font:700 19px 'Noto Sans',sans-serif">Listen to what matters to you.</div>
+<div style="height:38px;border:1.25px solid #d9d3ca;border-radius:999px;display:flex;align-items:center;padding:0 12px;font:400 12px 'Noto Sans',sans-serif;color:#a9a196">Search channels</div>
+<div style="display:flex;gap:14px;border-bottom:1px solid #e4ded4;padding-bottom:8px;font:400 11.5px 'Noto Sans',sans-serif;color:#8d8579"><span style="font-weight:600;color:#221f1c;border-bottom:2.5px solid #FF8A1F;padding-bottom:8px;margin-bottom:-9px">For you</span><span>Gist</span><span>Jobs</span><span>Relationships</span><span>News</span></div>
+<div style="display:flex;flex-direction:column;gap:9px">
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;display:flex;gap:10px;align-items:center"><div style="width:44px;height:44px;border-radius:8px;background:#EDE9E2"></div><div style="flex:1"><div style="font:600 12.5px 'Noto Sans',sans-serif">Daily Talks</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">News · English, Pidgin · Reviewed</div></div><div style="border:1.25px solid #221f1c;border-radius:999px;padding:6px 13px;font:600 10.5px 'Noto Sans',sans-serif">Follow</div></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;display:flex;gap:10px;align-items:center"><div style="width:44px;height:44px;border-radius:8px;background:#EDE9E2"></div><div style="flex:1"><div style="font:600 12.5px 'Noto Sans',sans-serif">Naija Jobs Daily</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Jobs · English · Reviewed</div></div><div style="border:1.25px solid #221f1c;border-radius:999px;padding:6px 13px;font:600 10.5px 'Noto Sans',sans-serif">Follow</div></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;display:flex;gap:10px;align-items:center"><div style="width:44px;height:44px;border-radius:8px;background:#EDE9E2"></div><div style="flex:1"><div style="font:600 12.5px 'Noto Sans',sans-serif">Gist & Culture</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Culture · Pidgin · Original content</div></div><div style="border:1.25px solid #d9d3ca;border-radius:999px;padding:6px 13px;font:600 10.5px 'Noto Sans',sans-serif;color:#6b645b">Following</div></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;display:flex;gap:10px;align-items:center"><div style="width:44px;height:44px;border-radius:8px;background:#EDE9E2"></div><div style="flex:1"><div style="font:600 12.5px 'Noto Sans',sans-serif">Love & Relationships</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Relationships · Yorùbá · Reviewed</div></div><div style="border:1.25px solid #221f1c;border-radius:999px;padding:6px 13px;font:600 10.5px 'Noto Sans',sans-serif">Follow</div></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:10px;display:flex;gap:10px;align-items:center"><div style="width:44px;height:44px;border-radius:8px;background:#EDE9E2"></div><div style="flex:1"><div style="font:600 12.5px 'Noto Sans',sans-serif">Market Pulse</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">Business · Hausa · Reviewed</div></div><div style="border:1.25px solid #221f1c;border-radius:999px;padding:6px 13px;font:600 10.5px 'Noto Sans',sans-serif">Follow</div></div>
+</div>
+</div>
+<div style="display:flex;border-top:1.25px solid #e4ded4;padding:9px 0 12px">
+<div style="flex:1;text-align:center;font:400 10px 'Noto Sans',sans-serif;color:#8d8579"><div style="width:20px;height:20px;background:#EDE9E2;border-radius:5px;margin:0 auto 4px"></div>Home</div>
+<div style="flex:1;text-align:center;font:600 10px 'Noto Sans',sans-serif;color:#BF5C08"><div style="width:20px;height:20px;background:#FFE2C2;border-radius:5px;margin:0 auto 4px"></div>Channels</div>
+<div style="flex:1;text-align:center;font:400 10px 'Noto Sans',sans-serif;color:#8d8579"><div style="width:20px;height:20px;background:#EDE9E2;border-radius:5px;margin:0 auto 4px"></div>Create</div>
+<div style="flex:1;text-align:center;font:400 10px 'Noto Sans',sans-serif;color:#8d8579"><div style="width:20px;height:20px;background:#EDE9E2;border-radius:5px;margin:0 auto 4px"></div>Chat</div>
+<div style="flex:1;text-align:center;font:400 10px 'Noto Sans',sans-serif;color:#8d8579"><div style="width:20px;height:20px;background:#EDE9E2;border-radius:5px;margin:0 auto 4px"></div>Profile</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Every row shows category, language and editorial status — attribution is part of the list, not a detail page.</div></sc-if>
+</div>
+
+<div id="1k" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1k" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1k</a>Channel detail</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="height:130px;background:#EDE9E2;display:flex;align-items:center;justify-content:center;font:400 10px ui-monospace,monospace;color:#8d8579;border-bottom:1.25px solid #d9d3ca">channel artwork</div>
+<div style="padding:13px 14px;display:flex;gap:11px;align-items:center;border-bottom:1px solid #eee7dd"><div style="width:48px;height:48px;border-radius:10px;background:#EDE9E2"></div><div style="flex:1"><div style="font:700 15px 'Noto Sans',sans-serif">Daily Talks</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">News · Reviewed · 28.4K followers</div></div><div style="background:#FF8A1F;border-radius:999px;padding:9px 16px;font:700 11.5px 'Noto Sans',sans-serif">Follow</div></div>
+<div style="display:flex;gap:16px;padding:10px 14px;border-bottom:1px solid #e4ded4;font:400 11.5px 'Noto Sans',sans-serif;color:#8d8579"><span style="font-weight:600;color:#221f1c;border-bottom:2.5px solid #FF8A1F;padding-bottom:9px;margin-bottom:-11px">Episodes</span><span>About</span><span>Source</span></div>
+<div style="flex:1;padding:12px 14px;display:flex;flex-direction:column;gap:10px;overflow:hidden">
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;gap:10px"><div style="width:52px;height:52px;border-radius:8px;background:#EDE9E2"></div><div style="flex:1"><div style="font:600 12.5px/1.35 'Noto Sans',sans-serif">Fuel price update, explained in Pidgin</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579;margin-top:3px">New · 20 Aug · 4:12 · Pidgin</div></div><div style="width:30px;height:30px;border-radius:50%;background:#FF8A1F;align-self:center"></div></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;gap:10px"><div style="width:52px;height:52px;border-radius:8px;background:#EDE9E2"></div><div style="flex:1"><div style="font:600 12.5px/1.35 'Noto Sans',sans-serif">Lagos traffic: what changed this week</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579;margin-top:3px">19 Aug · 3:40 · English</div></div><div style="width:30px;height:30px;border-radius:50%;border:1.25px solid #221f1c;align-self:center"></div></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:7px"><div style="font:600 12px 'Noto Sans',sans-serif">Also get episodes on WhatsApp</div><div style="font:400 10.5px/1.45 'Noto Sans',sans-serif;color:#6b645b">Separate from following. You choose the number and can stop anytime.</div><div style="border:1.25px solid #221f1c;border-radius:999px;padding:8px 14px;font:600 11px 'Noto Sans',sans-serif;align-self:flex-start">Set up delivery</div></div>
+</div>
+<div style="border-top:1.25px solid #221f1c;padding:9px 12px;display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:6px;background:#EDE9E2"></div><div style="flex:1"><div style="font:600 11px 'Noto Sans',sans-serif">Fuel price update</div><div style="font:400 9.5px 'Noto Sans',sans-serif;color:#8d8579">Daily Talks · 1:12 / 4:12</div></div><div style="width:26px;height:26px;border-radius:50%;background:#FF8A1F"></div></div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Following in-app and WhatsApp delivery are two different consents; the second lives here as an offer, not a default.</div></sc-if>
+</div>
+
+<div id="1l" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1l" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1l</a>WhatsApp delivery consent</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:13px">
+<div style="display:flex;align-items:center;gap:10px"><div style="width:26px;height:26px;border:1.25px solid #221f1c;border-radius:50%"></div><span style="font:600 14px 'Noto Sans',sans-serif">Episodes on WhatsApp</span></div>
+<div style="font:400 12px/1.55 'Noto Sans',sans-serif;color:#6b645b">Daily Talks will send new episodes to your WhatsApp number. This is separate from following the channel in the app.</div>
+<div style="display:flex;flex-direction:column;gap:5px"><span style="font:600 11px 'Noto Sans',sans-serif">WhatsApp number</span><div style="height:44px;border:1.25px solid #221f1c;border-radius:10px;display:flex;align-items:center;padding:0 12px;font:400 12px 'Noto Sans',sans-serif">+234 ● ● ●   ● ● ● ●</div></div>
+<div style="display:flex;flex-direction:column;gap:9px">
+<div style="display:flex;gap:9px;align-items:flex-start"><div style="width:17px;height:17px;border:1.5px solid #221f1c;border-radius:4px;background:#FF8A1F;flex:none;margin-top:1px"></div><span style="font:400 11.5px/1.45 'Noto Sans',sans-serif">Send me new episodes from this channel on WhatsApp.</span></div>
+<div style="display:flex;gap:9px;align-items:flex-start"><div style="width:17px;height:17px;border:1.5px solid #221f1c;border-radius:4px;flex:none;margin-top:1px"></div><span style="font:400 11.5px/1.45 'Noto Sans',sans-serif;color:#6b645b">Also send me a weekly summary.</span></div>
+</div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;font:400 11px/1.5 'Noto Sans',sans-serif;color:#6b645b">Reply <span style="font:600 11px ui-monospace,monospace">STOP</span> on WhatsApp at any time, or turn delivery off here. Message and data rates may apply.</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:8px">
+<div style="background:#FF8A1F;border-radius:10px;padding:13px;text-align:center;font:700 13px 'Noto Sans',sans-serif">Turn on delivery</div>
+<div style="text-align:center;font:600 12px 'Noto Sans',sans-serif;color:#6b645b;padding:4px">Not now</div>
+</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Consent is per channel, opt-in, and reversible in two places — app and STOP.</div></sc-if>
+</div>
+</div>
+
+<div style="font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:#8d8579;margin:0 0 14px">Chat and companions</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start;margin:0 0 38px">
+
+<div id="1m" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1m" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1m</a>Choose a companion</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+<div style="font:700 19px/1.25 'Noto Sans',sans-serif">Start a conversation</div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;font:400 11px/1.5 'Noto Sans',sans-serif;color:#6b645b">Every companion is a fictional AI character. Conversations are private to you and never appear on channels.</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:6px"><div style="width:40px;height:40px;border-radius:50%;background:#EDE9E2"></div><span style="font:600 12px 'Noto Sans',sans-serif">Guy man</span><span style="font:400 10px/1.35 'Noto Sans',sans-serif;color:#8d8579">Banter, advice, gist</span></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:6px"><div style="width:40px;height:40px;border-radius:50%;background:#EDE9E2"></div><span style="font:600 12px 'Noto Sans',sans-serif">Iya agba</span><span style="font:400 10px/1.35 'Noto Sans',sans-serif;color:#8d8579">Elder wisdom, proverbs</span></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:6px"><div style="width:40px;height:40px;border-radius:50%;background:#EDE9E2"></div><span style="font:600 12px 'Noto Sans',sans-serif">Friend</span><span style="font:400 10px/1.35 'Noto Sans',sans-serif;color:#8d8579">Everyday talk</span></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:6px;position:relative"><div style="width:40px;height:40px;border-radius:50%;background:#EDE9E2"></div><span style="font:600 12px 'Noto Sans',sans-serif">Partner</span><span style="font:400 10px/1.35 'Noto Sans',sans-serif;color:#8d8579">Romantic · 18+</span><span style="position:absolute;top:9px;right:9px;border:1px solid #d9d3ca;border-radius:999px;padding:3px 7px;font:600 9px 'Noto Sans',sans-serif;color:#6b645b">18+</span></div>
+</div>
+<div style="border:1.5px solid #221f1c;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px">
+<div style="font:600 12.5px 'Noto Sans',sans-serif">Before you continue</div>
+<div style="display:flex;gap:9px;align-items:flex-start"><div style="width:17px;height:17px;border:1.5px solid #221f1c;border-radius:4px;flex:none;margin-top:1px"></div><span style="font:400 11px/1.45 'Noto Sans',sans-serif">I am 18 or older.</span></div>
+<div style="display:flex;gap:9px;align-items:flex-start"><div style="width:17px;height:17px;border:1.5px solid #221f1c;border-radius:4px;flex:none;margin-top:1px"></div><span style="font:400 11px/1.45 'Noto Sans',sans-serif">I understand this character is AI, not a real person.</span></div>
+</div>
+<div style="margin-top:auto;background:#FF8A1F;border-radius:10px;padding:13px;text-align:center;font:700 13px 'Noto Sans',sans-serif">Continue</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Adult assurance and AI disclosure sit at the boundary where intimacy changes, not in settings.</div></sc-if>
+</div>
+
+<div id="1n" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1n" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1n</a>Chat thread</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="display:flex;align-items:center;gap:10px;padding:9px 13px;border-bottom:1.25px solid #e4ded4"><div style="width:30px;height:30px;border-radius:50%;background:#EDE9E2"></div><div style="flex:1"><div style="font:600 12.5px 'Noto Sans',sans-serif">Guy man</div><div style="font:400 9.5px 'Noto Sans',sans-serif;color:#8d8579">AI character · private to you</div></div><span style="font:400 16px 'Noto Sans',sans-serif;color:#8d8579">⋮</span></div>
+<div style="flex:1;padding:13px;display:flex;flex-direction:column;gap:11px;overflow:hidden">
+<div style="border:1px dashed #d9d3ca;border-radius:8px;padding:8px;font:400 10px/1.4 'Noto Sans',sans-serif;color:#8d8579;text-align:center">This is an AI character. It can make mistakes and it isn't a real person.</div>
+<div style="align-self:flex-end;max-width:78%;background:#F7F1E8;border-radius:12px 12px 3px 12px;padding:10px;font:400 12px/1.5 'Noto Sans',sans-serif">Help me write a short message to my landlord about the rent.</div>
+<div style="align-self:flex-start;max-width:82%;border:1.25px solid #d9d3ca;border-radius:12px 12px 12px 3px;padding:10px;display:flex;flex-direction:column;gap:9px">
+<div style="font:400 12px/1.5 'Noto Sans',sans-serif">No wahala. Try this: "Good afternoon sir, I want to confirm the rent payment date and the new amount before month end."</div>
+<div style="border:1.25px solid #221f1c;border-radius:999px;padding:8px 11px;display:flex;align-items:center;gap:9px"><div style="width:22px;height:22px;border-radius:50%;background:#FF8A1F"></div><div style="flex:1;height:14px;background:#EDE9E2;border-radius:3px"></div><span style="font:400 10px ui-monospace,monospace;color:#8d8579">0:12</span></div>
+<div style="font:400 9.5px 'Noto Sans',sans-serif;color:#8d8579">AI-generated voice · Pidgin</div>
+</div>
+<div style="display:flex;gap:7px"><span style="border:1px solid #d9d3ca;border-radius:999px;padding:6px 11px;font:400 10.5px 'Noto Sans',sans-serif;color:#6b645b">Hear reply</span><span style="border:1px solid #d9d3ca;border-radius:999px;padding:6px 11px;font:400 10.5px 'Noto Sans',sans-serif;color:#6b645b">Copy</span><span style="border:1px solid #d9d3ca;border-radius:999px;padding:6px 11px;font:400 10.5px 'Noto Sans',sans-serif;color:#6b645b">Report</span></div>
+</div>
+<div style="padding:10px 13px 14px;border-top:1.25px solid #e4ded4;display:flex;gap:9px;align-items:center"><div style="flex:1;height:40px;border:1.25px solid #d9d3ca;border-radius:999px;display:flex;align-items:center;padding:0 13px;font:400 11.5px 'Noto Sans',sans-serif;color:#a9a196">Text or talk…</div><div style="width:40px;height:40px;border-radius:50%;background:#FF8A1F"></div></div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Text and voice in one thread; disclosure repeats on the audio itself, not only at the top.</div></sc-if>
+</div>
+</div>
+
+<div style="font:600 10px/1 ui-monospace,Menlo,monospace;letter-spacing:.12em;text-transform:uppercase;color:#8d8579;margin:0 0 14px">Account</div>
+<div style="display:flex;flex-wrap:wrap;gap:30px;align-items:flex-start">
+
+<div id="1o" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1o" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1o</a>Credits</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:12px">
+<div style="font:700 19px 'Noto Sans',sans-serif">Yarngo Credits</div>
+<div style="border:1.25px solid #d9d3ca;border-radius:12px;padding:14px"><div style="font:700 30px 'Noto Sans',sans-serif">120</div><div style="font:400 11.5px 'Noto Sans',sans-serif;color:#6b645b">credits left · about 4 minutes of cloud voice</div></div>
+<div style="font:600 12px 'Noto Sans',sans-serif">Top up</div>
+<div style="display:flex;flex-direction:column;gap:9px">
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;align-items:center"><div style="flex:1"><div style="font:600 12.5px 'Noto Sans',sans-serif">300 credits</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">About 10 minutes of standard cloud voice</div></div><span style="font:600 12px 'Noto Sans',sans-serif">₦1,500</span></div>
+<div style="border:1.5px solid #221f1c;border-radius:10px;padding:11px;display:flex;align-items:center"><div style="flex:1"><div style="font:600 12.5px 'Noto Sans',sans-serif">900 credits</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">About 30 minutes of standard cloud voice</div></div><span style="font:600 12px 'Noto Sans',sans-serif">₦4,000</span></div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;align-items:center"><div style="flex:1"><div style="font:600 12.5px 'Noto Sans',sans-serif">2,000 credits</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">About 65 minutes of standard cloud voice</div></div><span style="font:600 12px 'Noto Sans',sans-serif">₦8,500</span></div>
+</div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;font:400 11px/1.5 'Noto Sans',sans-serif;color:#6b645b">Device voice never uses credits. Only Yarngo cloud voice does.</div>
+<div style="margin-top:auto;background:#FF8A1F;border-radius:10px;padding:13px;text-align:center;font:700 13px 'Noto Sans',sans-serif">Continue to payment</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Every pack states what it buys in minutes before checkout — no invented currency metaphor.</div></sc-if>
+</div>
+
+<div id="1p" style="display:flex;flex-direction:column;gap:9px;flex:none;scroll-margin-top:16px">
+<div style="display:flex;align-items:baseline;gap:8px;font:400 11px 'Noto Sans',sans-serif;color:#6b645b"><a href="#1p" style="font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1p</a>Profile & privacy</div>
+<div style="width:320px;height:660px;background:#fff;border:1.5px solid #221f1c;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:3px 3px 0 rgba(34,31,28,.14)">
+<div style="display:flex;justify-content:space-between;padding:9px 14px 3px;font:600 9px 'Noto Sans',sans-serif;color:#a9a196"><span>9:41</span><span>▮▮▮</span></div>
+<div style="flex:1;padding:14px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+<div style="display:flex;gap:11px;align-items:center"><div style="width:48px;height:48px;border-radius:50%;background:#EDE9E2"></div><div><div style="font:700 15px 'Noto Sans',sans-serif">Tosin A.</div><div style="font:400 10.5px 'Noto Sans',sans-serif;color:#8d8579">+234 ●●● ●● 42 · Lagos</div></div></div>
+<div style="font:600 10px ui-monospace,monospace;letter-spacing:.1em;color:#8d8579">DEFAULTS</div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;overflow:hidden">
+<div style="display:flex;align-items:center;padding:11px;border-bottom:1px solid #eee7dd"><span style="flex:1;font:400 12px 'Noto Sans',sans-serif">Voice mode</span><span style="font:600 11px 'Noto Sans',sans-serif;color:#6b645b">Yarngo voice</span></div>
+<div style="display:flex;align-items:center;padding:11px;border-bottom:1px solid #eee7dd"><span style="flex:1;font:400 12px 'Noto Sans',sans-serif">Language</span><span style="font:600 11px 'Noto Sans',sans-serif;color:#6b645b">Naija Pidgin</span></div>
+<div style="display:flex;align-items:center;padding:11px"><span style="flex:1;font:400 12px 'Noto Sans',sans-serif">Device voice data</span><span style="font:600 11px 'Noto Sans',sans-serif;color:#6b645b">Manage</span></div>
+</div>
+<div style="font:600 10px ui-monospace,monospace;letter-spacing:.1em;color:#8d8579">DELIVERY</div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;padding:11px;display:flex;align-items:center"><div style="flex:1"><div style="font:400 12px 'Noto Sans',sans-serif">WhatsApp delivery</div><div style="font:400 10px 'Noto Sans',sans-serif;color:#8d8579">2 channels · reply STOP anytime</div></div><div style="width:36px;height:20px;border-radius:999px;background:#FF8A1F"></div></div>
+<div style="font:600 10px ui-monospace,monospace;letter-spacing:.1em;color:#8d8579">YOUR DATA</div>
+<div style="border:1.25px solid #d9d3ca;border-radius:10px;overflow:hidden">
+<div style="display:flex;align-items:center;padding:11px;border-bottom:1px solid #eee7dd"><span style="flex:1;font:400 12px 'Noto Sans',sans-serif">Export my conversations</span><span style="color:#a9a196">›</span></div>
+<div style="display:flex;align-items:center;padding:11px;border-bottom:1px solid #eee7dd"><span style="flex:1;font:400 12px 'Noto Sans',sans-serif">Delete conversations</span><span style="color:#a9a196">›</span></div>
+<div style="display:flex;align-items:center;padding:11px;border-bottom:1px solid #eee7dd"><span style="flex:1;font:400 12px 'Noto Sans',sans-serif">Blocked characters</span><span style="color:#a9a196">›</span></div>
+<div style="display:flex;align-items:center;padding:11px"><span style="flex:1;font:400 12px 'Noto Sans',sans-serif">Delete my account</span><span style="color:#a9a196">›</span></div>
+</div>
+<div style="font:400 10.5px/1.45 'Noto Sans',sans-serif;color:#8d8579">Message text and audio are never used for advertising.</div>
+</div>
+</div>
+<sc-if value="{{ notes }}" hint-placeholder-val="{{ true }}"><div style="width:320px;font:500 14px/1.35 Caveat,cursive;color:#5f584f">Export, delete and block are top-level rows, not buried under a legal page.</div></sc-if>
+</div>
+</div>
+
+<p style="margin:26px 0 0;font:400 12px/1.5 'Noto Sans',sans-serif;color:#6b645b">Try next: "give me 3 layout options for <a href="#1d" style="font:600 10.5px ui-monospace,monospace;padding:2px 6px;background:rgba(34,31,28,.09);color:#221f1c;border-radius:5px">1d</a>" · "add the publisher episode flow" · "show the failed-generation and offline states"</p>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;notes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Wireframe&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { notes: this.props.notes ?? true };
+  }
+}
+</script>
+</body>
+</html>

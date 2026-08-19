@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = ["crates/speech-engine", "crates/app"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[profile.release]
+# A shipped binary carries no debug symbols; they are ~60% of the debug build.
+strip = true
+# Cross-crate optimisation matters for a UI framework this size.
+lto = "thin"
+codegen-units = 1
+panic = "abort"

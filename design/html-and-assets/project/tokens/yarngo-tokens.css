@@ -1,0 +1,146 @@
+/* Yarngo Design Tokens v1.0 — generated from Brand Guidelines */
+
+:root {
+  /* Brand ramps */
+  --yg-orange-50:  #FFF3E6;
+  --yg-orange-100: #FFE2C2;
+  --yg-orange-200: #FFCB93;
+  --yg-orange-300: #FFB264;
+  --yg-orange-400: #FF9C3D;
+  --yg-orange-500: #FF8A1F; /* Yarngo Orange */
+  --yg-orange-600: #E6740F;
+  --yg-orange-700: #BF5C08;
+  --yg-orange-800: #8F4406;
+  --yg-orange-900: #5E2C03;
+
+  --yg-neutral-50:  #FFF9F2; /* Warm White */
+  --yg-neutral-100: #F7F1E8;
+  --yg-neutral-200: #EBE4D9;
+  --yg-neutral-300: #D8D0C4;
+  --yg-neutral-400: #B0A79B;
+  --yg-neutral-500: #857D72;
+  --yg-neutral-600: #5F594F;
+  --yg-neutral-700: #423E37;
+  --yg-neutral-800: #2A2723;
+  --yg-neutral-900: #171717; /* Yarngo Ink */
+
+  --yg-leaf-50:  #E9F5EF;
+  --yg-leaf-100: #C9E7D9;
+  --yg-leaf-300: #7FC3A5;
+  --yg-leaf-500: #287A57; /* Leaf */
+  --yg-leaf-700: #1B5C41;
+  --yg-leaf-900: #0E3A28;
+
+  --yg-signal-50:  #EEF0FE;
+  --yg-signal-100: #D8DDFD;
+  --yg-signal-300: #9AA6FB;
+  --yg-signal-500: #596DF8; /* Signal Blue */
+  --yg-signal-700: #3A4CD1;
+  --yg-signal-900: #23308F;
+
+  /* Semantic — light (default) */
+  --yg-bg: var(--yg-neutral-50);
+  --yg-bg-subtle: var(--yg-neutral-100);
+  --yg-surface: #FFFFFF;
+  --yg-surface-sunken: #F1EBE1;
+  --yg-border: var(--yg-neutral-200);
+  --yg-border-strong: var(--yg-neutral-300);
+  --yg-text: var(--yg-neutral-900);
+  --yg-text-muted: var(--yg-neutral-600);
+  --yg-text-subtle: #6B645A; /* 5.8:1 on surface — smallest text colour that still passes */
+  --yg-text-nontext: var(--yg-neutral-500); /* #857D72 — icons, dividers, disabled marks. Never a string. */
+  --yg-text-inverse: var(--yg-neutral-50);
+  --yg-accent: var(--yg-orange-500);
+  --yg-accent-hover: var(--yg-orange-600);
+  --yg-accent-press: var(--yg-orange-700);
+  --yg-accent-text: var(--yg-orange-800); /* 6.7:1 — orange that passes at body size */
+  --yg-accent-text-large: var(--yg-orange-700); /* 4.2:1 — 24px+ only */
+  --yg-accent-surface: var(--yg-orange-50);
+  --yg-on-accent: var(--yg-neutral-900); /* Ink on orange, never white */
+  --yg-success: var(--yg-leaf-500);
+  --yg-success-surface: var(--yg-leaf-50);
+  --yg-warning: #C97A00;
+  --yg-warning-surface: #FBF0DC;
+  --yg-danger: #C7362B;
+  --yg-danger-surface: #FBEBE8;
+  --yg-info: var(--yg-signal-500);
+  --yg-info-surface: var(--yg-signal-50);
+  --yg-focus: var(--yg-signal-500);
+
+  /* Type */
+  --yg-font-display: "Sora", system-ui, sans-serif;
+  --yg-font-text: "Noto Sans", system-ui, sans-serif;
+  --yg-font-mono: "Noto Sans Mono", ui-monospace, monospace;
+
+  /* Space (4pt) */
+  --yg-space-1: 4px;  --yg-space-2: 8px;   --yg-space-3: 12px;
+  --yg-space-4: 16px; --yg-space-5: 20px;  --yg-space-6: 24px;
+  --yg-space-8: 32px; --yg-space-10: 40px; --yg-space-12: 48px;
+  --yg-space-16: 64px; --yg-space-20: 80px; --yg-space-24: 96px;
+
+  /* Radius */
+  --yg-radius-xs: 4px;  --yg-radius-sm: 8px;  --yg-radius-md: 12px;
+  --yg-radius-lg: 16px; --yg-radius-xl: 24px; --yg-radius-2xl: 32px;
+  --yg-radius-full: 999px;
+
+  /* Elevation — warm shadows only */
+  --yg-shadow-1: 0 1px 2px rgba(23,23,23,.06);
+  --yg-shadow-2: 0 4px 16px rgba(23,23,23,.08);
+  --yg-shadow-3: 0 12px 32px rgba(23,23,23,.12);
+
+  /* Motion */
+  --yg-dur-instant: 120ms; --yg-dur-fast: 180ms; --yg-dur-base: 240ms;
+  --yg-dur-slow: 320ms;    --yg-dur-breathe: 1600ms;
+  --yg-ease-standard: cubic-bezier(.2,0,0,1);
+  --yg-ease-out: cubic-bezier(0,0,0,1);
+  --yg-ease-in: cubic-bezier(.3,0,1,1);
+}
+
+[data-theme="dark"] {
+  --yg-bg: #121110;
+  --yg-bg-subtle: #1A1816;
+  --yg-surface: #1F1C19;
+  --yg-surface-sunken: #171513;
+  --yg-border: #35302A;
+  --yg-border-strong: #4A443C;
+  --yg-text: #FFF9F2;
+  --yg-text-muted: #B0A79B;
+  --yg-text-subtle: #B0A79B; /* dark panels carry one muted value */
+  --yg-text-nontext: #857D72;
+  --yg-text-inverse: #171717;
+  --yg-accent: #FF9C3D;
+  --yg-accent-hover: #FFB264;
+  --yg-accent-press: #FF8A1F;
+  --yg-accent-text: #FFB264;
+  --yg-accent-surface: #2E1F10;
+  --yg-on-accent: #171717;
+  --yg-success: #7FC3A5;
+  --yg-success-surface: #10291F;
+  --yg-warning: #E3A21F;
+  --yg-warning-surface: #2E200F;
+  --yg-danger: #E8695C;
+  --yg-danger-surface: #2E1512;
+  --yg-info: #9AA6FB;
+  --yg-info-surface: #1A1D3A;
+  /* Dark surfaces separate with border + raised fill, not shadow */
+  --yg-shadow-1: none;
+  --yg-shadow-2: none;
+  --yg-shadow-3: 0 12px 32px rgba(0,0,0,.5);
+}
+
+/* ── Accent, resolved 2026-08 ──────────────────────────────────────────────
+   --yg-accent-action: #FF6E08   primary button / primary action fill
+   --yg-on-action:     #FFFEFD   label on that fill
+   --yg-orange-500:    #FF8A1F   BRAND orange — logo files, icons, meters,
+                                 avatars, waveforms. Unchanged.
+
+   DOCUMENTED CONTRAST EXCEPTION
+   #FFFEFD on #FF6E08 measures 2.78:1. WCAG AA for 15px bold text is 4.5:1,
+   and the 3:1 large-text floor is also not met. Accepted by the brand owner
+   as a deliberate exception, scoped to PRIMARY BUTTON FILLS ONLY.
+   Everything else keeps ink (#171717) on orange, which measures 6.39:1.
+   Do not extend this pairing to tabs, chips, badges, links or body text.
+   White-on-orange would need ≈#C24A00 to pass; revisit if an audit blocks.
+
+   Dark theme keeps --yg-accent-dark #FF9C3D: #FF6E08 goes muddy on #121110.
+   ───────────────────────────────────────────────────────────────────────── */

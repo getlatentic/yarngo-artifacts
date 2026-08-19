@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for the hardened runtime, which notarization requires.
+
+  Informed by Zed's own entitlements (the reference production gpui app),
+  reduced to what this app actually does. Each key below is here for a stated
+  reason; anything Zed declares that we do not need is deliberately absent.
+-->
+<plist version="1.0">
+<dict>
+  <!-- Voice enrolment records from the microphone. Without this the hardened
+       runtime denies capture even when TCC has granted permission, which
+       presents as silent recordings rather than an error. -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+
+  <!-- The speech engine runs as a Python sidecar that dlopen()s third-party
+       native extensions — MLX, NumPy, libsndfile — none of which carry our
+       signature. Library validation rejects those under the hardened runtime,
+       so the sidecar would fail to import at launch. Zed keeps this key
+       commented out because it embeds no interpreter; we cannot. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+
+  <!-- MLX compiles Metal kernels at runtime and caches them, which is
+       executable memory the binary did not ship with. -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <!-- Saving a generated voice note to a location the user picks. -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+</dict>
+</plist>
