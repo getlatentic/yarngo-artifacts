@@ -194,6 +194,10 @@ pub struct VoiceStudio {
     /// The name being edited inline in the header, and what it belongs to.
     pub(crate) clip_name: Entity<InputState>,
     pub(crate) renaming: Option<clips::Selected>,
+    /// The runtime finished installing and the user has not moved on yet.
+    /// Setup holds the screen until they do: a download they watched for
+    /// minutes should end by saying so, not by vanishing.
+    pub(crate) runtime_done: bool,
     /// What the app has put on disk, once it has been counted.
     pub(crate) storage: Option<storage::Usage>,
     /// A clip row's menu, and where on screen it was opened from. Anchored to
@@ -259,6 +263,7 @@ impl VoiceStudio {
             inspector: false,
             clip_menu: None,
             storage: None,
+            runtime_done: false,
             drafts: vec![],
             selected: clips::Selected::Draft("draft-1".into()),
             next_draft: 1,
@@ -1370,6 +1375,8 @@ impl VoiceStudio {
             this.update(cx, |this, cx| {
                 if !matches!(this.status, Status::Failed(_)) {
                     this.status = Status::Idle;
+                    // Step one is finished, and says so until it is dismissed.
+                    this.runtime_done = true;
                     this.start_engine(cx);
                 }
                 cx.notify();
@@ -1462,7 +1469,8 @@ impl VoiceStudio {
     pub(crate) fn screen(&self) -> Screen {
         // No engine and a failure means the runtime is what is missing, and
         // there is no workspace to fall back to.
-        if matches!(self.status, Status::Installing { .. })
+        if self.runtime_done
+            || matches!(self.status, Status::Installing { .. })
             || (self.engine.is_none() && matches!(self.status, Status::Failed(_)))
         {
             Screen::Setup
@@ -1870,9 +1878,28 @@ impl VoiceStudio {
                                                     ),
                                             ),
                                     )
-                                    // Nothing to offer on a machine that cannot
-                                    // run it.
-                                    .when(!started && runtime::host_supported().is_ok(), |d| {
+                                    // Done, and saying so: this is the end of a
+                                    // wait someone sat through.
+                                    .when(self.runtime_done, |d| {
+                                        d.child(
+                                            div()
+                                                .h_flex()
+                                                .flex_none()
+                                                .items_center()
+                                                .gap(px(7.0))
+                                                .text_size(px(12.5))
+                                                .font_semibold()
+                                                .text_color(theme::hex(0x1B5C41))
+                                                .child(icon::filled(
+                                                    icon::name::CHECK_CIRCLE,
+                                                    17.0,
+                                                    theme::hex(0x287A57),
+                                                ))
+                                                .child(t!("setup.runtime_ready").to_string()),
+                                        )
+                                    })
+                                    .when(!started && !self.runtime_done
+                                        && runtime::host_supported().is_ok(), |d| {
                                         d.child(
                                             div()
                                                 .h(px(36.0))
@@ -1953,7 +1980,13 @@ impl VoiceStudio {
                                                 div()
                                                     .v_flex()
                                                     .gap(px(7.0))
-                                                    .child(self.capability(true, t!("setup.cap_record").to_string(), cx))
+                                                    // Recording is not on this
+                                                    // side: setup owns the
+                                                    // screen until the engine
+                                                    // is up, and a take could
+                                                    // not be saved without it
+                                                    // anyway.
+                                                    .child(self.capability(false, t!("setup.cap_record").to_string(), cx))
                                                     .child(self.capability(true, t!("setup.cap_play").to_string(), cx)),
                                             ),
                                     ),
@@ -2044,14 +2077,41 @@ impl VoiceStudio {
                         div()
                             .text_size(px(12.0))
                             .text_color(theme::hex(0x6B645A))
-                            .child(t!("setup.can_close").to_string()),
+                            .child(if self.runtime_done {
+                                t!("setup.next_is_a_model").to_string()
+                            } else {
+                                t!("setup.can_close").to_string()
+                            }),
                     )
                     .child(div().flex_1())
                     .child(
                         ui::secondary_button(None, t!("setup.quit").to_string())
                             .id("quit")
                             .on_click(|_, _, cx| cx.quit()),
-                    ),
+                    )
+                    // The step ends when the person says so, not when the
+                    // installer does.
+                    .when(self.runtime_done, |d| {
+                        d.child(
+                            div()
+                                .h_flex()
+                                .h(px(36.0))
+                                .px(px(18.0))
+                                .flex_none()
+                                .items_center()
+                                .rounded(px(8.0))
+                                .bg(theme::hex(0xFF6E08))
+                                .text_size(px(13.0))
+                                .font_semibold()
+                                .text_color(theme::hex(0xFFFEFD))
+                                .id("setup-continue")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.runtime_done = false;
+                                    cx.notify();
+                                }))
+                                .child(t!("model.continue").to_string()),
+                        )
+                    }),
             )
     }
 

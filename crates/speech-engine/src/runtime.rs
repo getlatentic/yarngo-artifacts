@@ -137,23 +137,45 @@ pub fn interpreter(runtime: &Path) -> PathBuf {
     }
 }
 
-/// Whether a usable runtime is already installed.
-pub fn is_installed() -> bool {
-    let runtime = paths::runtime_dir();
-    let python = interpreter(&runtime);
-    if !python.exists() {
-        return false;
+/// An interpreter already on this machine that can run the speech stack.
+///
+/// Asked before offering to download 350 MB, because a machine that already
+/// has MLX and `mlx-speech` — a developer's, or someone who installed it for
+/// something else — does not need a second copy. `YARNGO_PYTHON` names one
+/// explicitly; otherwise whatever `python3` resolves to is tried.
+pub fn existing_interpreter() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Ok(explicit) = std::env::var("YARNGO_PYTHON") {
+        candidates.push(PathBuf::from(explicit));
     }
-    // Presence of the interpreter is not enough — the speech package is what
-    // makes it a *speech* runtime, and a half-finished install has one but not
-    // the other.
-    Command::new(&python)
+    candidates.push(PathBuf::from("python3"));
+
+    candidates.into_iter().find(|python| can_speak(python))
+}
+
+/// Whether this interpreter has the speech package. The import is the test:
+/// a version number or a path would only be a guess about it.
+fn can_speak(python: &Path) -> bool {
+    Command::new(python)
         .args(["-c", "import mlx_speech"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
+}
+
+/// Whether a usable runtime is already installed.
+
+pub fn is_installed() -> bool {
+    let python = interpreter(&paths::runtime_dir());
+    // Presence of the interpreter is not enough — the speech package is what
+    // makes it a *speech* runtime, and a half-finished install has one but not
+    // the other.
+    (python.exists() && can_speak(&python))
+        // Or the machine already had one, in which case there is nothing to
+        // install and setup has nothing to ask for.
+        || existing_interpreter().is_some()
 }
 
 fn run_streaming(

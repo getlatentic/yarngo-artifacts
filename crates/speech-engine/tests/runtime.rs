@@ -222,6 +222,42 @@ fn the_refusal_names_the_reason_rather_than_the_symptom() {
 }
 
 #[test]
+fn an_interpreter_the_machine_already_has_is_found_and_used() {
+    let scratch = Scratch::new();
+    let stub = scratch.path().join("already-here");
+    std::fs::write(&stub, "#!/bin/sh\nexit 0\n").unwrap();
+    Command::new("chmod").arg("+x").arg(&stub).status().unwrap();
+    unsafe { std::env::set_var("YARNGO_PYTHON", &stub) };
+
+    // Nothing was installed here, but the machine can already speak, so there
+    // is nothing to download and nothing for setup to ask.
+    assert_eq!(runtime::existing_interpreter().as_deref(), Some(stub.as_path()));
+    assert!(runtime::is_installed(), "an interpreter that imports the package is an install");
+
+    let paths = speech_engine::EnginePaths::resolve(Path::new("/nonexistent"));
+    assert_eq!(paths.python, stub, "the found interpreter should be the one used");
+
+    unsafe { std::env::remove_var("YARNGO_PYTHON") };
+}
+
+#[test]
+fn an_interpreter_that_cannot_import_the_package_is_not_used() {
+    let scratch = Scratch::new();
+    let stub = scratch.path().join("no-package");
+    std::fs::write(&stub, "#!/bin/sh\nexit 1\n").unwrap();
+    Command::new("chmod").arg("+x").arg(&stub).status().unwrap();
+    unsafe { std::env::set_var("YARNGO_PYTHON", &stub) };
+
+    assert_ne!(
+        runtime::existing_interpreter().as_deref(),
+        Some(stub.as_path()),
+        "an interpreter without the speech package is not a runtime"
+    );
+
+    unsafe { std::env::remove_var("YARNGO_PYTHON") };
+}
+
+#[test]
 fn the_download_url_names_the_pinned_version() {
     // Only meaningful where there is a prebuilt interpreter for the host; on
     // anything else `None` is the right answer and the installer says so.

@@ -116,10 +116,16 @@ MODELS = {
 
 # Voices live on disk so they survive a restart. Preparing a voice costs about
 # 40 seconds, and asking the user to repeat that every launch is not an option.
+# The app passes YARNGO_DATA when it spawns this process, so both sides agree
+# on one directory rather than each deriving its own. `VOICESTUDIO_DATA` is the
+# older name, still read so an existing setup keeps working.
 VOICE_DIR = Path(
     os.environ.get(
-        "VOICESTUDIO_DATA",
-        Path.home() / "Library" / "Application Support" / "Yarngo Studio",
+        "YARNGO_DATA",
+        os.environ.get(
+            "VOICESTUDIO_DATA",
+            Path.home() / "Library" / "Application Support" / "Yarngo Studio",
+        ),
     )
 ) / "voices"
 

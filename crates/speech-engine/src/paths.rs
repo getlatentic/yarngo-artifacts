@@ -82,14 +82,16 @@ impl EnginePaths {
         let runtime = runtime_dir();
         let installed = crate::runtime::interpreter(&runtime);
 
-        // An installed runtime wins; otherwise fall back to a developer venv so
-        // a checkout runs without an install step.
+        // The runtime this app installed wins. Failing that, an interpreter
+        // already on the machine that can import the speech package — which is
+        // also what lets a checkout run without installing anything.
+        //
+        // There used to be one developer's venv path hard-coded here, which
+        // shipped inside the binary and meant nothing on anyone else's Mac.
         let python = if installed.exists() {
             installed
-        } else if let Ok(explicit) = std::env::var("YARNGO_PYTHON") {
-            PathBuf::from(explicit)
         } else {
-            PathBuf::from("/Users/dev/workspace/voice-clone-bench/mlx-speech/.venv/bin/python")
+            crate::runtime::existing_interpreter().unwrap_or(installed)
         };
 
         // The sidecar imports mlx_speech, which resolves from the interpreter's

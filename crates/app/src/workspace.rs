@@ -66,6 +66,7 @@ impl VoiceStudio {
     /// Title bar: product name on the left, the model as live status on the
     /// right. Status rather than a picker, per the design.
     pub(crate) fn title_bar(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let setup = !matches!(self.screen(), crate::Screen::Workspace);
         let model = self
             .models
             .iter()
@@ -111,10 +112,21 @@ impl VoiceStudio {
                     .font_family(theme::FONT_DISPLAY)
                     .child(t!("app.name").to_string()),
             )
+            // Setup has no model to report, nothing to inspect and no settings
+            // worth opening — the catalogue behind them is empty. It says which
+            // run this is instead.
+            .when(setup, |d| {
+                d.child(
+                    div()
+                        .text_size(px(11.5))
+                        .text_color(theme::hex(0x857D72))
+                        .child(t!("setup.first_run").to_string()),
+                )
+            })
             // Recording takes the title bar over: the model is not the state
             // that matters while the microphone is live, and a red dot is
             // visible from across the room.
-            .when(matches!(self.enrolment, crate::Enrolment::Recording), |d| {
+            .when(!setup && matches!(self.enrolment, crate::Enrolment::Recording), |d| {
                 d.child(
                     div()
                         .h_flex()
@@ -127,7 +139,7 @@ impl VoiceStudio {
                         .child(t!("enrol.recording_now").to_string()),
                 )
             })
-            .when(!matches!(self.enrolment, crate::Enrolment::Recording), |this| {
+            .when(!setup && !matches!(self.enrolment, crate::Enrolment::Recording), |this| {
             this.child(
                 div()
                     .h_flex()

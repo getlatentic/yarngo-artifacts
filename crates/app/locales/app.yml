@@ -655,6 +655,15 @@ setup:
   explain:
     en: Yarngo Studio downloads its speech engine the first time you open it — about 350 MB, plus a voice model. It only happens once, and everything stays on this machine.
     sk: Yarngo Studio si pri prvom spustení stiahne rečový engine — približne 350 MB a hlasový model. Stane sa to len raz a všetko zostáva v tomto počítači.
+  runtime_ready:
+    en: Installed and running
+    sk: Nainštalované a beží
+  next_is_a_model:
+    en: "Next: choose a model. One download, then you can generate."
+    sk: Ďalej si vyberte model. Jedno stiahnutie a môžete generovať.
+  first_run:
+    en: First run
+    sk: Prvé spustenie
   header_title:
     en: Set up Yarngo Studio
     sk: Nastavenie Yarngo Studio
@@ -707,8 +716,8 @@ setup:
     en: Downloading models
     sk: Sťahovanie modelov
   cap_record:
-    en: Recording a reference voice
-    sk: Nahrávanie referenčného hlasu
+    en: Recording a voice of your own
+    sk: Nahrávanie vlastného hlasu
   cap_play:
     en: Playing clips you already made
     sk: Prehrávanie už vytvorených nahrávok

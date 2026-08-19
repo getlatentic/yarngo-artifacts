@@ -31,6 +31,10 @@ impl MlxSidecar {
         let mut child = Command::new(python)
             .arg(script)
             .current_dir(working_dir)
+            // Told, not inferred. Both sides used to derive the data directory
+            // from their own environment under different variable names, so
+            // overriding one moved the app without moving its storage.
+            .env("YARNGO_DATA", crate::paths::data_dir())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
