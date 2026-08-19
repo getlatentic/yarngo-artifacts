@@ -58,6 +58,7 @@ fn request() -> SynthesisRequest {
         voice_id: None,
         seed: Some(4417),
         name: None,
+        clip_id: None,
     }
 }
 
@@ -118,9 +119,62 @@ fn the_request_carries_every_field_the_engine_needs() {
 
     let out = engine.synthesize(&request()).unwrap();
     let sent: Vec<String> = serde_json::from_str(&out.model).unwrap();
-    for field in ["text", "output", "model", "voice_id", "seed", "name"] {
+    for field in ["text", "output", "model", "voice_id", "seed", "name", "clip_id"] {
         assert!(sent.contains(&field.to_string()), "{field} was not sent: {sent:?}");
     }
+}
+
+#[test]
+fn a_clip_of_several_takes_is_parsed() {
+    let dir = tempfile::tempdir().unwrap();
+    // Generating again adds a take under the same clip, so the reply carries
+    // the whole list — newest first — rather than one file.
+    let mut engine = spawn(
+        &dir,
+        "takes",
+        r#"    reply({"id": req["id"], "ok": True, "result": {
+        "output": "/tmp/out.wav", "model": "dots-tts-mf",
+        "audio_s": 1.0, "gen_s": 1.0, "rtf": 1.0, "seed": 2796,
+        "sample_rate": 24000,
+        "clip": {"id": "clip-1", "title": "t", "name": "n", "text": "t",
+                 "voice_id": None, "model": "dots-tts-mf", "created": "now",
+                 "takes": [
+                   {"id": "take-2", "path": "/tmp/b.wav", "audio_s": 1.3,
+                    "gen_s": 4.0, "seed": 2796, "created": "17:02"},
+                   {"id": "take-1", "path": "/tmp/a.wav", "audio_s": 1.4,
+                    "gen_s": 5.0, "seed": 9895, "created": "13:06"}]}}})"#,
+    )
+    .unwrap();
+
+    let clip = engine.synthesize(&request()).unwrap().clip.expect("a clip came back");
+    assert_eq!(clip.takes.len(), 2);
+    assert_eq!(clip.latest().map(|t| t.id.as_str()), Some("take-2"), "newest first");
+    assert_eq!(clip.take("take-1").map(|t| t.seed), Some(Some(9895)));
+    assert!(clip.take("missing").is_none());
+    let rtf = clip.latest().unwrap().rtf().unwrap();
+    assert!((rtf - 4.0 / 1.3).abs() < 1e-5, "{rtf}");
+}
+
+#[test]
+fn a_clip_written_before_takes_existed_still_parses() {
+    let dir = tempfile::tempdir().unwrap();
+    // The sidecar migrates on read, but the Rust side must not fall over if it
+    // ever sees the old shape — `takes` defaults rather than failing.
+    let mut engine = spawn(
+        &dir,
+        "old_clip",
+        r#"    reply({"id": req["id"], "ok": True, "result": {
+        "output": "/tmp/out.wav", "model": "dots-tts-mf",
+        "audio_s": 1.0, "gen_s": 1.0, "rtf": 1.0, "seed": 1,
+        "sample_rate": 24000,
+        "clip": {"id": "clip-1", "title": "t", "name": "n", "text": "t",
+                 "voice_id": None, "model": "dots-tts-mf", "created": "now"}}})"#,
+    )
+    .unwrap();
+
+    let clip = engine.synthesize(&request()).unwrap().clip.unwrap();
+    assert!(clip.takes.is_empty());
+    assert!(clip.latest().is_none());
 }
 
 #[test]
