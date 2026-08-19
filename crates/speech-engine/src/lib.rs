@@ -22,7 +22,9 @@ pub use paths::EnginePaths;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelSpec {
     pub id: String,
-    /// What this app calls it — "Fast", "Best quality".
+    /// What this app recommends it *for* — "Fast", "Best quality". A
+    /// characterisation, not an identity: two of these are the same model at
+    /// different precisions, and none of them is what the model is called.
     pub label: String,
     /// What it actually is — "dots.tts MF", "Step-Audio-EditX". The label is
     /// ours; this is the name a licence or a paper is under, and the only one

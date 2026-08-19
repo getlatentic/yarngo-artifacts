@@ -49,6 +49,12 @@ pub(crate) fn realtime(rtf: f32) -> String {
     format!("{:.1}", if rtf > 0.0 { 1.0 / rtf } else { 0.0 })
 }
 
+/// The model's own name, falling back to this app's label for a catalogue
+/// entry that has not been given one.
+pub(crate) fn model_name(model: &speech_engine::ModelSpec) -> String {
+    if model.name.is_empty() { model.label.clone() } else { model.name.clone() }
+}
+
 pub(crate) fn duration(seconds: f32) -> String {
     // Truncated, not rounded, so a 17.6 second take reads 0:17 here and 0:17
     // in the transport rather than disagreeing with itself by a second.
@@ -156,7 +162,7 @@ impl VoiceStudio {
                     .font_medium()
                     .text_color(theme::hex(0x5F594F))
                     .child(match model {
-                        Some(m) => format!("{} · {state}", m.label),
+                        Some(m) => format!("{} · {state}", model_name(m)),
                         None => state,
                     })
                     // The chevron points the way the panel will move, so the
@@ -844,11 +850,14 @@ impl VoiceStudio {
             })
     }
 
+    /// What the model is called. `label` is what this app recommends it for,
+    /// which is the right thing to read while choosing one and the wrong thing
+    /// to read afterwards — a clip was made by dots.tts MF, not by "Fast".
     pub(crate) fn model_label(&self) -> String {
         self.models
             .iter()
             .find(|m| Some(m.id.as_str()) == self.clip_model())
-            .map(|m| m.label.clone())
+            .map(model_name)
             .unwrap_or_default()
     }
 

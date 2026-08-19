@@ -137,7 +137,7 @@ impl VoiceStudio {
         let current = self.selected_model.as_deref() == Some(id.as_str());
 
         let mut facts = vec![
-            model.name.clone(),
+            model.label.clone(),
             gigabytes(model.size_bytes),
             model.precision.clone(),
             model.licence.clone(),
@@ -192,7 +192,7 @@ impl VoiceStudio {
                                     .font_family(theme::FONT_DISPLAY)
                                     .text_size(px(13.5))
                                     .font_semibold()
-                                    .child(model.label.clone()),
+                                    .child(crate::workspace::model_name(model)),
                             )
                             .when(current || model.resident, |d| {
                                 d.child(
@@ -259,7 +259,7 @@ impl VoiceStudio {
                             .child(
                                 t!(
                                     "settings.delete_frees",
-                                    model = model.label.clone(),
+                                    model = crate::workspace::model_name(model),
                                     size = gigabytes(model.size_bytes)
                                 )
                                 .to_string(),
@@ -335,13 +335,13 @@ impl VoiceStudio {
                         div()
                             .text_size(px(13.0))
                             .font_medium()
-                            .child(model.label.clone()),
+                            .child(crate::workspace::model_name(model)),
                     )
                     // Named and licensed before it is downloaded, not after:
                     // this is the moment the terms can still change the choice.
                     .child(ui::mono(
                         [
-                            Some(model.name.clone()).filter(|n| !n.is_empty()),
+                            Some(model.label.clone()),
                             (model.download_bytes > 0).then(|| gigabytes(model.download_bytes)),
                             Some(model.licence.clone()),
                         ]

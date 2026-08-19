@@ -49,10 +49,7 @@ impl VoiceStudio {
         let selected = self.selected_model.as_deref() == Some(id.as_str());
         let downloading = self.installs.get(&id).filter(|s| s.is_downloading()).cloned();
 
-        // The real name first: "Fast" is this app's word for it, and the
-        // licence beside it belongs to the thing itself.
         let mut facts = vec![
-            self.meta(model.name.clone()),
             self.meta(model.licence.clone()),
             self.meta(model.precision.clone()),
         ];
@@ -108,6 +105,22 @@ impl VoiceStudio {
                                             .font_family(theme::FONT_DISPLAY)
                                             .text_size(px(15.0))
                                             .font_semibold()
+                                            .child(crate::workspace::model_name(model)),
+                                    )
+                                    // What this app recommends it for, beside
+                                    // what it is — a characterisation, and it
+                                    // reads as one.
+                                    .child(
+                                        div()
+                                            .px(px(9.0))
+                                            .py(px(2.0))
+                                            .rounded(px(999.0))
+                                            .bg(theme::bg_subtle(false))
+                                            .border_1()
+                                            .border_color(theme::hex(0xE4DCD0))
+                                            .text_size(px(10.5))
+                                            .font_medium()
+                                            .text_color(theme::hex(0x5F594F))
                                             .child(model.label.clone()),
                                     )
                                     .when(model.default, |d| {

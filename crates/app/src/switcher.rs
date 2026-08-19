@@ -133,7 +133,7 @@ impl VoiceStudio {
                                     })
                                     .when(chosen, |d| d.font_semibold())
                                     .when(!chosen, |d| d.font_medium())
-                                    .child(model.label.clone()),
+                                    .child(crate::workspace::model_name(model)),
                             )
                             .when(installed, |d| {
                                 d.child(
