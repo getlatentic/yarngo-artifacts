@@ -274,3 +274,128 @@ pub fn envelope(samples: &[f32], bars: usize) -> Vec<f32> {
     }
     peaks.iter().map(|p| p / loudest).collect()
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A tone at a given amplitude, which is enough to exercise every check:
+    /// the bars are about length, peak and the gap between speech and silence.
+    fn tone(seconds: f32, amplitude: f32, rate: u32) -> Vec<f32> {
+        let n = (seconds * rate as f32) as usize;
+        (0..n)
+            .map(|i| {
+                let t = i as f32 / rate as f32;
+                (t * 220.0 * std::f32::consts::TAU).sin() * amplitude
+            })
+            .collect()
+    }
+
+    /// Speech with a noise floor under it, so the signal-to-noise figure has
+    /// something to measure. Alternating loud and quiet halves of a second.
+    fn speech_over_noise(seconds: f32, speech: f32, noise: f32, rate: u32) -> Vec<f32> {
+        tone(seconds, 1.0, rate)
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                let loud = (i / (rate as usize / 2)) % 2 == 0;
+                s * if loud { speech } else { noise }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn nothing_recorded_is_rejected_by_name() {
+        let err = assess(&[], 24_000).unwrap_err();
+        assert!(err.contains("microphone"), "{err}");
+    }
+
+    #[test]
+    fn a_take_shorter_than_the_script_is_rejected() {
+        let err = assess(&tone(2.0, 0.4, 24_000), 24_000).unwrap_err();
+        assert!(err.contains("seconds recorded"), "{err}");
+    }
+
+    #[test]
+    fn a_take_longer_than_the_bar_is_rejected() {
+        let err = assess(&tone(MAX_SECONDS + 5.0, 0.4, 24_000), 24_000).unwrap_err();
+        assert!(err.contains("Keep it under"), "{err}");
+    }
+
+    #[test]
+    fn a_silent_take_is_rejected_as_too_quiet() {
+        let err = assess(&tone(20.0, 0.001, 24_000), 24_000).unwrap_err();
+        assert!(err.contains("too quiet"), "{err}");
+    }
+
+    #[test]
+    fn a_clipping_take_is_rejected() {
+        let mut samples = tone(20.0, 0.5, 24_000);
+        samples[100] = 1.0;
+        let err = assess(&samples, 24_000).unwrap_err();
+        assert!(err.contains("clipping"), "{err}");
+    }
+
+    #[test]
+    fn a_good_take_passes_and_reports_what_it_measured() {
+        let quality = speech_over_noise(20.0, 0.5, 0.002, 24_000);
+        let quality = assess(&quality, 24_000).expect("a clean take passes");
+        assert!((quality.seconds - 20.0).abs() < 0.1, "{}", quality.seconds);
+        assert!(quality.snr_db > MIN_SNR_DB, "snr {} dB", quality.snr_db);
+    }
+
+    #[test]
+    fn a_noisy_room_scores_worse_than_a_quiet_one() {
+        let rate = 24_000;
+        let quiet = assess(&speech_over_noise(20.0, 0.5, 0.002, rate), rate).unwrap();
+        let noisy = assess(&speech_over_noise(20.0, 0.5, 0.05, rate), rate).unwrap();
+        assert!(
+            noisy.snr_db < quiet.snr_db,
+            "noisy {} dB should score under quiet {} dB",
+            noisy.snr_db,
+            quiet.snr_db
+        );
+    }
+
+    #[test]
+    fn the_bars_do_not_depend_on_the_sample_rate() {
+        // The same twenty seconds at two rates is the same take, and a check
+        // written in samples rather than seconds would disagree.
+        let low = assess(&speech_over_noise(20.0, 0.5, 0.002, 16_000), 16_000).unwrap();
+        let high = assess(&speech_over_noise(20.0, 0.5, 0.002, 48_000), 48_000).unwrap();
+        assert!((low.seconds - high.seconds).abs() < 0.1);
+    }
+
+    #[test]
+    fn an_envelope_has_one_value_per_bar_and_peaks_at_one() {
+        let levels = envelope(&tone(3.0, 0.7, 24_000), 34);
+        assert_eq!(levels.len(), 34);
+        assert!(levels.iter().all(|l| (0.0..=1.0).contains(l)), "{levels:?}");
+        let loudest = levels.iter().cloned().fold(0.0f32, f32::max);
+        assert!((loudest - 1.0).abs() < 1e-3, "the loudest bar should fill the row: {loudest}");
+    }
+
+    #[test]
+    fn an_envelope_follows_the_shape_of_the_take() {
+        // Loud first half, quiet second: the drawing should say so.
+        let rate = 24_000;
+        let mut samples = tone(4.0, 0.9, rate);
+        let half = samples.len() / 2;
+        for s in samples[half..].iter_mut() {
+            *s *= 0.05;
+        }
+        let levels = envelope(&samples, 20);
+        let (front, back) = levels.split_at(10);
+        let mean = |xs: &[f32]| xs.iter().sum::<f32>() / xs.len() as f32;
+        assert!(mean(front) > mean(back) * 5.0, "{levels:?}");
+    }
+
+    #[test]
+    fn an_empty_take_still_draws_the_bars_it_was_asked_for() {
+        // The player draws before anything is loaded, so this must not panic
+        // or return a short row.
+        assert_eq!(envelope(&[], 34).len(), 34);
+        assert!(envelope(&[0.0; 1000], 34).iter().all(|l| *l == 0.0));
+    }
+}
