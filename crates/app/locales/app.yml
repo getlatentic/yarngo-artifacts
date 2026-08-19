@@ -593,6 +593,64 @@ enrol:
     en: I have permission to use this voice. The recording and the voice stay on this machine. I can delete them whenever I want.
     sk: Mám povolenie použiť tento hlas. Nahrávka aj hlas zostávajú v tomto počítači. Kedykoľvek ich môžem vymazať.
 
+storage:
+  line:
+    en: "%{used} in use · %{free} free on this disk"
+    sk: "%{used} využitých · %{free} voľných na disku"
+  counting:
+    en: Counting what is on disk…
+    sk: Počítam, čo je na disku…
+  models_detail:
+    en: Model weights. Deleting one frees the most and costs a download to get back.
+    sk: Váhy modelov. Vymazanie uvoľní najviac a späť sa dostanú len stiahnutím.
+  runtime_detail:
+    en: The Python runtime and the speech packages. Installed once.
+    sk: Python engine a rečové balíky. Inštaluje sa raz.
+  clips_detail:
+    en: Everything you have generated, including every take.
+    sk: Všetko, čo ste vygenerovali, vrátane všetkých verzií.
+  voices_detail:
+    en: The reference recordings your voices were learned from.
+    sk: Referenčné nahrávky, z ktorých vznikli vaše hlasy.
+  where:
+    en: All of it is in one folder. Deleting that folder removes everything the app has stored; your saved WAVs stay where you put them.
+    sk: Všetko je v jednom priečinku. Jeho vymazaním sa odstráni všetko uložené aplikáciou; vaše uložené WAV súbory zostanú tam, kam ste ich dali.
+  recount:
+    en: Count again
+    sk: Prepočítať
+
+about:
+  build:
+    en: "Version %{version}"
+    sk: "Verzia %{version}"
+  privacy:
+    en: Privacy
+    sk: Súkromie
+  privacy_body:
+    en: Speech is generated on this machine. Your recordings, your voices and every clip stay on this disk — nothing about them is uploaded, and there is no account.
+    sk: Reč vzniká v tomto počítači. Vaše nahrávky, hlasy aj nahrávky zostávajú na tomto disku — nič sa nenahráva na internet a nie je potrebný účet.
+  privacy_network:
+    en: "The network is used for two things only: downloading the speech runtime the first time, and downloading a model you choose."
+    sk: "Sieť sa používa len na dve veci: prvé stiahnutie rečového enginu a stiahnutie modelu, ktorý si vyberiete."
+  consent:
+    en: Consent
+    sk: Súhlas
+  consent_body:
+    en: A cloned voice is a likeness, so permission is recorded per voice — the wording as it stood, the build, and a fingerprint of the recording it was given about. The log is append-only; deleting a voice leaves its line.
+    sk: Klonovaný hlas je podobizeň, preto sa súhlas zaznamenáva pre každý hlas — znenie, verzia aplikácie a odtlačok nahrávky, ktorej sa týkal. Záznam sa len pridáva; vymazaním hlasu jeho riadok zostáva.
+  model_licences:
+    en: Models on this machine
+    sk: Modely v tomto počítači
+  model_terms:
+    en: These terms come with anything you generate using them. Models under non-commercial terms are deliberately not offered.
+    sk: Tieto podmienky sa vzťahujú na všetko, čo s nimi vytvoríte. Modely s nekomerčnými podmienkami zámerne neponúkame.
+  built_with:
+    en: Built with
+    sk: Postavené na
+  on_this_machine:
+    en: on this machine
+    sk: v tomto počítači
+
 setup:
   explain:
     en: Yarngo Studio downloads its speech engine the first time you open it — about 350 MB, plus a voice model. It only happens once, and everything stays on this machine.

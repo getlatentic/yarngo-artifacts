@@ -4,11 +4,13 @@
 //! window shows an honest progress state rather than a spinner that implies
 //! something faster. Everything below `EngineHandle` is backend-agnostic.
 
+mod about;
 mod clips;
 mod enrolment;
 mod inspector;
 mod models;
 mod settings;
+mod storage;
 mod switcher;
 mod icon;
 mod ui;
@@ -192,6 +194,8 @@ pub struct VoiceStudio {
     /// The name being edited inline in the header, and what it belongs to.
     pub(crate) clip_name: Entity<InputState>,
     pub(crate) renaming: Option<clips::Selected>,
+    /// What the app has put on disk, once it has been counted.
+    pub(crate) storage: Option<storage::Usage>,
     /// A clip row's menu, and where on screen it was opened from. Anchored to
     /// the click rather than to the row, because the list scrolls under it.
     pub(crate) clip_menu: Option<(String, Point<Pixels>)>,
@@ -254,6 +258,7 @@ impl VoiceStudio {
             pinned_seed: None,
             inspector: false,
             clip_menu: None,
+            storage: None,
             drafts: vec![],
             selected: clips::Selected::Draft("draft-1".into()),
             next_draft: 1,

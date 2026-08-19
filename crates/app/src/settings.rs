@@ -103,6 +103,9 @@ impl VoiceStudio {
                 this.settings_pane = pane;
                 this.confirming_voice = None;
                 this.confirming_delete = None;
+                if pane == Pane::Storage {
+                    this.refresh_storage(cx);
+                }
                 cx.notify();
             }))
             .into_any_element()
@@ -822,6 +825,8 @@ impl VoiceStudio {
                             .child(match self.settings_pane {
                                 Pane::Models => self.models_pane(cx),
                                 Pane::Voices => self.voices_pane(cx),
+                                Pane::Storage => self.storage_pane(cx),
+                                Pane::About => self.about_pane(cx),
                                 other => self.placeholder_pane(other),
                             }),
                     ),
