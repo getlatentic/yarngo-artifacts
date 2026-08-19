@@ -612,6 +612,9 @@ storage:
   voices_detail:
     en: The reference recordings your voices were learned from.
     sk: Referenčné nahrávky, z ktorých vznikli vaše hlasy.
+  runtime_elsewhere:
+    en: No runtime of its own — this build is using an interpreter from elsewhere on the machine.
+    sk: Nemá vlastný engine — toto zostavenie používa interpreter z iného miesta v počítači.
   where:
     en: All of it is in one folder. Deleting that folder removes everything the app has stored; your saved WAVs stay where you put them.
     sk: Všetko je v jednom priečinku. Jeho vymazaním sa odstráni všetko uložené aplikáciou; vaše uložené WAV súbory zostanú tam, kam ste ich dali.

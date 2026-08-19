@@ -65,13 +65,17 @@ impl VoiceStudio {
     /// for a number nobody is watching change.
     pub(crate) fn refresh_storage(&mut self, cx: &mut Context<Self>) {
         let free = self.system.as_ref().map(|s| s.free_bytes).unwrap_or(0);
+        // Model weights live in the Hugging Face cache, wherever that is on
+        // this machine, so the catalogue is the one thing that knows their
+        // size — the sidecar measures it there and reports it per model.
+        let models = self.models.iter().filter(|m| m.installed).map(|m| m.size_bytes).sum();
         cx.spawn(async move |this, cx| {
             let usage = cx
                 .background_spawn(async move {
                     let data = speech_engine::paths::data_dir();
                     Usage {
                         runtime: directory_bytes(&speech_engine::paths::runtime_dir()),
-                        models: directory_bytes(&data.join("models")),
+                        models,
                         voices: directory_bytes(&data.join("voices")),
                         clips: directory_bytes(&data.join("clips")),
                         free,
@@ -183,9 +187,16 @@ impl VoiceStudio {
                             usage.models,
                             total,
                         ))
+                        // Zero here is a real answer, not a missing one: a
+                        // checkout running against a developer environment has
+                        // never installed a runtime of its own.
                         .child(Self::usage_row(
                             t!("settings.runtime").to_string(),
-                            t!("storage.runtime_detail").to_string(),
+                            if usage.runtime > 0 {
+                                t!("storage.runtime_detail").to_string()
+                            } else {
+                                t!("storage.runtime_elsewhere").to_string()
+                            },
                             usage.runtime,
                             total,
                         ))
