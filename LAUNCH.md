@@ -25,27 +25,32 @@ The rest of this assumes **2**, and marks what 1 could skip.
 
 ## Hard blockers
 
-### 1. The app is ad-hoc signed and not notarized
+### 1. Signing needs an Apple Developer account — **the path is wired, the
+### certificate is not**
 
-`scripts/package.sh` signs with `APPLE_SIGNING_IDENTITY` when set and falls back
-to ad-hoc. But the `notarize()` function it defines is **never called** — there
-is no `notarytool submit` and no `stapler staple` anywhere in the run. So today
-the artifact is ad-hoc signed, and on anyone else's Mac Gatekeeper refuses it.
+`package.sh` now signs, then notarizes and staples when a Developer ID is
+configured, and says loudly when it is not:
 
-Needs: an Apple Developer account, a Developer ID Application certificate, the
-notarize step actually wired into the packaging run, and a check that the
-stapled artifact opens on a machine that has never seen it. The hardened runtime
-and entitlements are already right — microphone, JIT, and library validation
-disabled for the sidecar's native extensions.
+> This build is ad-hoc signed. It runs here, and Gatekeeper will refuse it on
+> any other Mac.
 
-Required for 1 and 2 both.
+Credentials come from either `APPLE_NOTARY_PROFILE` (a stored `notarytool`
+profile) or `APPLE_ID` + `APPLE_TEAM_ID` + `APPLE_PASSWORD`, alongside
+`APPLE_SIGNING_IDENTITY`. A release build also runs its own checks — deep
+signature verify, the audio-input entitlement present, the icon present, and a
+Gatekeeper assessment — because each of those fails silently otherwise.
 
-### 2. There is no application icon
+**What is still needed: an Apple Developer account and a Developer ID
+Application certificate**, then one run with the environment set, and a check
+that the stapled artifact opens on a Mac that has never seen it.
 
-No `icons` key in `[package.metadata.packager]`, and nothing in `packaging/`
-but the plist and entitlements. The app ships with the generic binary icon.
-Brand assets exist in `design/html-and-assets/project/brand/` — they need
-cutting to `.icns`.
+### 2. The application icon — **done**
+
+Cut from the brand mark by `scripts/make-app-icon.py`, following the
+guidelines' own rule for it: "The aperture fills the tile", on an orange field
+rather than the in-product warm white. Apple's macOS geometry — 1024 canvas,
+824 tile, 185 corner radius — and wired into the packager, so the bundle now
+carries `YarngoStudio.icns` and names it in its plist.
 
 ### 3. First run needs the network, and asks for a lot of it
 
@@ -79,32 +84,22 @@ declared as macOS 13.
 
 ## Functional gaps
 
-### Iteration 4 is not finished
+### Iteration 4 — **finished**
 
-From `design/PLAN-iteration-4.md`, unbuilt and known:
+Takes and the row menu are both built and verified. A clip holds several
+readings; generating again adds one rather than a second row. Rename, duplicate
+and delete are on the row, and duplicate copies the audio as well as the record.
 
-- **Takes.** 4d's inspector shows `MADE WITH` and a `TAKES` list; the design
-  treats several takes as belonging to one clip, and "Generate again" adds one.
-  The implementation makes a separate clip each time, so the sidebar grows where
-  the design's stays still. A data-model change, and the largest piece left.
-- **The clip row's `more_horiz` menu** — rename, duplicate, delete. The
-  inspector's own copy already refers to it. Delete currently lives at the
-  bottom of the panel; duplicate does not exist.
+### Settings — **Storage and About are built**
 
-### Settings is four-sevenths placeholder
+Models, Voices, Storage and About are real. **General, Audio and Runtime** are
+still named-but-empty, which the window is honest about, and none of them
+blocks a launch.
 
-Models and Voices are built. **General, Audio, Storage, Runtime and About** are
-named panes that say "Not built yet". Two of them matter at launch:
-
-- **About** — version, licences, the model licences, and credit for the fonts
-  and the runtime. A voice-cloning app that ships without this is asking for
-  trouble it does not need.
-- **Storage** — the app writes gigabytes of models and clips. There is a disk
-  line in the sidebar footer and per-model deletion, but no single place that
-  accounts for it.
-
-General, Audio and Runtime can stay named-but-empty if they must; the window is
-already honest about it.
+Storage measures what is on disk rather than estimating it, off the UI thread,
+and names the one folder it all lives in. About states the privacy position,
+explains the consent record and links to its log, and lists the licences of the
+models actually installed.
 
 ### No way to ship a fix
 
@@ -117,24 +112,21 @@ something wrong with it.
 
 ## Quality gates before any of it
 
-### There are no tests. Zero.
+### Tests — **done, as a first layer**
 
-`grep '#[test]'` across the workspace returns nothing. For an app that spawns a
-Python sidecar, writes to a user's disk, and records their voice, that is the
-gap I would close first. It does not need to be exhaustive; it needs to cover
-the things that are painful when they break:
+Thirty-one, where there were none. They cover the sidecar protocol (the
+handshake, that every request field is sent, and that an engine refusal, a bad
+reply and a dead process stay three distinct things), the runtime installer,
+and the audio bars. One runs against the real `engine.py`, ignored by default.
 
-- `speech-engine`: the sidecar protocol — a request in, a reply parsed, an
-  error surfaced. Line-delimited JSON with a process on the end of it is exactly
-  where a silent format change bites.
-- `runtime::install_from` against a fixture archive, and `is_installed`'s
-  two-part check.
-- `recorder::assess` and `envelope` — pure functions over sample buffers, cheap
-  to test and load-bearing for whether a voice is accepted.
+They have already earned it: adding `clip_id` to the request broke the suite
+rather than the app. What is still uncovered:
+
 - The clip/draft state machine in `clips.rs`: start, select, rename, generate,
-  and what happens to a draft when its voice is deleted.
-- A round-trip through the real sidecar, run behind a feature flag, so the
-  wire format is checked by something other than the app.
+  and what happens to a draft when its voice is deleted. It needs a gpui
+  context, so it needs a test harness first.
+- The takes migration in the sidecar — an old clip record becoming a clip with
+  one take. Currently only exercised by running the app.
 
 ### Verify on a machine that is not this one
 
@@ -165,15 +157,19 @@ This is the part that is unusual for a desktop app and worth getting right.
 
 ---
 
-## Suggested order
+## Where this stands
 
-1. **Tests for the sidecar protocol and the runtime installer.** Everything
-   else is riskier without them.
-2. **Finish iteration 4** — takes, and the row menu.
-3. **About and Storage panes.**
-4. **Icon, then signing and notarization**, verified on a second machine.
-5. **Gate or fix the Intel path**, and the first-run story if it is changing.
-6. **Privacy statement and terms**, then the download page.
-7. **Decide updates** before the first build goes out, not after.
+Done: tests, iteration 4, the Storage and About panes, the icon, and the
+signing and notarization path.
 
-Items 1–4 are the ones that block a build being handed to anyone at all.
+Left, in order:
+
+1. **A Developer ID certificate**, then one signed and notarized build, opened
+   on a Mac that has never seen it. This is the only remaining thing that stops
+   the app being handed to another person.
+2. **Gate or fix the Intel path.** An Intel Mac currently downloads a runtime
+   and then fails at `import mlx_speech` with nothing naming the real reason.
+3. **Terms for voice likeness**, beyond the per-voice checkbox. The checkbox
+   protects the record; terms protect the position.
+4. **Decide updates** before the first build goes out, not after.
+5. The first-run story, if it is changing from "state the wait honestly".

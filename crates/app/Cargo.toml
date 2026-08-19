@@ -31,6 +31,9 @@ authors = ["Yarngo"]
 category = "Productivity"
 # The sidecar and its locales ship alongside the binary.
 resources = ["../../sidecar/**/*", "locales/**/*"]
+# Cut from the brand mark by scripts/make-app-icon.py. Without this the app
+# ships with the generic binary icon.
+icons = ["../../packaging/YarngoStudio.icns", "../../packaging/icon-1024.png"]
 
 [package.metadata.packager.macos]
 minimum-system-version = "13.0"
