@@ -759,6 +759,19 @@ impl VoiceStudio {
                         .on_click(cx.listener(|this, _, _, cx| this.cancel_enrolment(cx))),
                 )
             })
+            // During setup there is no window behind this to close to, but
+            // there is a way past it: the bundled voice works with every model,
+            // so recording is an offer here and not a toll.
+            .when(!closable && !matches!(self.enrolment, Enrolment::Saving), |d| {
+                d.child(
+                    ui::secondary_button(None, t!("enrol.skip").to_string())
+                        .h(px(32.0))
+                        .px(px(12.0))
+                        .text_size(px(12.0))
+                        .id("skip-enrolment")
+                        .on_click(cx.listener(|this, _, _, cx| this.finish_setup(cx))),
+                )
+            })
     }
 
     /// The two columns, stacked when the pane is too narrow to read them side

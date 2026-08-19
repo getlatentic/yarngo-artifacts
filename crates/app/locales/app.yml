@@ -503,8 +503,8 @@ enrol:
     en: Save voice
     sk: Uložiť hlas
   skip:
-    en: Skip, add later
-    sk: Preskočiť, pridať neskôr
+    en: Skip — use the default voice
+    sk: Preskočiť — použiť predvolený hlas
   mic_label:
     en: Microphone
     sk: Mikrofón

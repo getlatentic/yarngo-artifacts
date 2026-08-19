@@ -446,6 +446,14 @@ impl VoiceStudio {
         cx.notify();
     }
 
+    /// Leave setup without recording. The bundled voice is already selected and
+    /// works with every model, so the last step is an offer — the workspace says
+    /// so, and making it a toll would contradict that before anyone gets there.
+    pub(crate) fn finish_setup(&mut self, cx: &mut Context<Self>) {
+        self.in_setup = false;
+        self.cancel_enrolment(cx);
+    }
+
     pub(crate) fn cancel_enrolment(&mut self, cx: &mut Context<Self>) {
         if let Some(rec) = self.recorder.as_mut() {
             rec.stop();
