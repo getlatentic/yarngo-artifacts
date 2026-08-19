@@ -190,3 +190,57 @@ Verified by running the app: empty (4a), writing (4b), generating (4c), a
 finished clip (4d), renaming from the header with the actions row staying put
 (4e), the inspector open and closed, and the transport starting a fresh clip at
 `0:00` rather than at its end.
+
+
+---
+
+## Second pass — what the audit found, and what is left
+
+Four agents read 4a–4i against the code and the screenshots. Most of it is
+applied; this is what remains, and why.
+
+### Structural, and bigger than a fix
+
+**A finished clip's inspector is a different panel.** 4d does not show VOICE /
+MODEL / DELIVERY at all. It shows **MADE WITH** — a read-only record of the
+voice, model, speed and seed, with a `Reuse` action — and **TAKES**, a list of
+this clip's takes (`Take 2 · 14:02 · 0:16 · seed 4417`, `Take 1 · 13:58`), each
+selectable, plus the line "Rename, duplicate and delete are on the row's menu."
+
+That means **a clip holds several takes**, and "Generate again" adds one rather
+than making a new clip in the list. The implementation makes a new clip each
+time, so the sidebar grows where the design's stays still. This is a data model
+change — clips gain a takes array, the sidebar keeps one row per clip, and the
+player points at the selected take — and it is the largest single thing still
+outstanding in iteration 4.
+
+**Clip rows have a `more_horiz` menu** carrying rename, duplicate and delete.
+The inspector line above refers to it; nothing implements it. Delete currently
+lives at the bottom of the inspector instead, and duplicate does not exist.
+
+### Applied, for the record
+
+The three real bugs (invisible saved-voice banner, Enter/Escape bound globally,
+`cancel_rename` firing on every Escape), filled glyphs, title-bar geometry and
+the toggle's open state, the placeholder tint, the empty-state and placeholder
+and offline copy, a fresh draft called "New clip" with no pencil and no row, the
+footer note per state, the name field's own styling and mono key caps, 40
+waveform bars filling their row, the seconds-left figure in the sidebar row, the
+sheet mounted inside the body with its in-context copy and a disabled Generate
+behind it, the sidebar footer's generating line, and `Edit text`'s 15px glyph.
+
+### Not applied, deliberately
+
+- **4c's read-only inspector.** The design greys the whole panel while a clip
+  runs — 38px locked voice row, no chevron on the model, bare seed value. The
+  implementation states it in a banner instead and leaves the controls live,
+  because changing them there sets up the *next* take rather than corrupting the
+  running one. Worth revisiting if it reads as ambiguous.
+- **4c's privacy note in the panel.** The design repeats "Runs on this machine.
+  Works offline." at the foot of the inspector while generating. It is already
+  said in the composer on the screens with room for it.
+- **4a's `1 model on disk · 1.2 GB` footer line.** The design shows the model
+  line on the empty screen and the clips line everywhere else. One line that
+  changes subject with the screen is harder to read than one that always
+  reports the same thing; the clips count is the one that belongs beside a list
+  of clips.
