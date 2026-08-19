@@ -13,7 +13,7 @@ use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::{
     input::{Input, Textarea},
-    ActiveTheme, Sizable, StyledExt,
+    ActiveTheme, StyledExt,
 };
 use rust_i18n::t;
 
@@ -29,10 +29,10 @@ pub(crate) const WORDS_PER_SECOND: f32 = 3.2;
 /// 78 on the macOS 26 SDK and 71 before it; this app targets the newer SDK.
 const TRAFFIC_LIGHT_PADDING: f32 = 78.0;
 /// Right padding of the bar, and the gear that sits inside it.
-const BAR_RIGHT_PADDING: f32 = 16.0;
-const GEAR_SIZE: f32 = 20.0;
+const BAR_RIGHT_PADDING: f32 = 14.0;
+const GEAR_SIZE: f32 = 19.0;
 /// Space between the model pill and the gear.
-const PILL_GEAR_GAP: f32 = 10.0;
+const PILL_GEAR_GAP: f32 = 12.0;
 /// Tall enough that the lights sit centred rather than crowding the top edge.
 pub(crate) const TITLE_BAR_HEIGHT: f32 = 40.0;
 
@@ -137,7 +137,7 @@ impl VoiceStudio {
                     .rounded(px(999.0))
                     .bg(theme::surface(false))
                     .border_1()
-                    .border_color(cx.theme().border)
+                    .border_color(theme::hex(theme::RULE))
                     // A live dot: green while the engine holds a model, amber
                     // while it is working, so state is visible without reading.
                     .child(
@@ -196,11 +196,10 @@ impl VoiceStudio {
                             .justify_center()
                             .rounded(px(6.0))
                             .border_1()
-                            .border_color(if self.inspector {
-                                theme::hex(0x8F4406)
-                            } else {
-                                theme::hex(0xE4DCD0)
+                            .when(self.inspector, |d| {
+                                d.bg(theme::hex(0xFFF3E6)).border_color(theme::hex(0xFFCB93))
                             })
+                            .when(!self.inspector, |d| d.border_color(theme::hex(0xE4DCD0)))
                             .child(crate::icon::icon(
                                 if self.inspector {
                                     crate::icon::name::PANEL_CLOSE
@@ -208,7 +207,11 @@ impl VoiceStudio {
                                     crate::icon::name::PANEL_OPEN
                                 },
                                 18.0,
-                                theme::hex(0x857D72),
+                                if self.inspector {
+                                    theme::hex(0x8F4406)
+                                } else {
+                                    theme::hex(0x857D72)
+                                },
                             ))
                             .id("toggle-inspector")
                             .on_click(cx.listener(|this, _, _, cx| this.toggle_inspector(cx))),
@@ -223,7 +226,7 @@ impl VoiceStudio {
                             .child(crate::icon::icon(
                                 crate::icon::name::SETTINGS,
                                 GEAR_SIZE,
-                                theme::non_text(false),
+                                theme::hex(0x5F594F),
                             ))
                             .id("settings")
                             .on_click(cx.listener(|this, _, _, cx| {
@@ -252,6 +255,7 @@ impl VoiceStudio {
         detail: String,
         current: bool,
         accent: bool,
+        filled: bool,
     ) -> Div {
         div()
             .relative()
@@ -263,7 +267,11 @@ impl VoiceStudio {
             .p(px(9.0))
             .rounded(px(8.0))
             .when(current, |d| d.bg(theme::hex(0xFFF3E6)))
-            .child(div().flex_none().child(crate::icon::icon(glyph, 17.0, theme::hex(glyph_colour))))
+            .child(div().flex_none().child(if filled {
+                crate::icon::filled(glyph, 17.0, theme::hex(glyph_colour)).into_any_element()
+            } else {
+                crate::icon::icon(glyph, 17.0, theme::hex(glyph_colour)).into_any_element()
+            }))
             .child(
                 div()
                     .v_flex()
@@ -283,6 +291,7 @@ impl VoiceStudio {
                             11.0,
                             if accent { theme::hex(0x8F4406) } else { theme::hex(0x857D72) },
                         )
+                        .when(accent, |d| d.opacity(0.8))
                         .mt(px(2.0))
                         .truncate(),
                     ),
@@ -295,13 +304,21 @@ impl VoiceStudio {
         let mut rows: Vec<AnyElement> = Vec::new();
 
         for draft in self.drafts.iter() {
+            // An untouched draft is the empty composer itself, not something to
+            // list — the header already calls it "New clip". It joins the list
+            // the moment there are words in it.
+            if !draft.generating && draft.text.trim().is_empty() {
+                continue;
+            }
             let id = draft.id.clone();
             let current = self.selected == crate::clips::Selected::Draft(id.clone());
             let running = draft.generating;
-            let detail = if running {
-                t!("clip.generating_now").to_string()
-            } else {
-                t!("clip.draft").to_string()
+            let detail = match (running, self.seconds_left()) {
+                (true, Some(left)) => {
+                    t!("clip.generating_left", seconds = format!("{left:.0}")).to_string()
+                }
+                (true, None) => t!("clip.generating_now").to_string(),
+                (false, _) => t!("clip.draft").to_string(),
             };
             let fraction = self
                 .progress
@@ -321,6 +338,7 @@ impl VoiceStudio {
                     detail,
                     current || running,
                     true,
+                    false,
                 )
                 .when(running, |d| {
                     d.child(
@@ -367,6 +385,7 @@ impl VoiceStudio {
                         duration(clip.audio_s),
                         self.voice_name(clip.voice_id.as_deref())
                     ),
+                    current,
                     current,
                     current,
                 )
@@ -454,7 +473,8 @@ impl VoiceStudio {
                     .when(empty, |d| {
                         d.child(
                             div()
-                                .m(px(6.0))
+                                .my(px(6.0))
+                                .mx(px(4.0))
                                 .p(px(14.0))
                                 .rounded(px(10.0))
                                 .border_1()
@@ -515,6 +535,7 @@ impl VoiceStudio {
                                     self.clips_bytes() as f32 / 1e6
                                 )
                             })
+                            .text_color(theme::hex(0x6B645A))
                             .id("disk-row")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.settings_open = true;
@@ -529,7 +550,13 @@ impl VoiceStudio {
     /// below it moves when the name is being edited.
     fn composer_header(&self, cx: &mut Context<Self>) -> Div {
         let renaming = self.renaming.as_ref() == Some(&self.selected);
+        // A draft with nothing in it is not yet a clip to name — the design
+        // calls it "New clip" and offers no pencil until there is something.
+        let fresh = self
+            .draft()
+            .is_some_and(|d| d.name.is_none() && d.text.trim().is_empty() && !d.generating);
         let title = match &self.selected {
+            crate::clips::Selected::Draft(_) if fresh => t!("clip.fresh_title").to_string(),
             crate::clips::Selected::Draft(_) => {
                 self.draft().map(|d| d.title()).unwrap_or_default()
             }
@@ -558,14 +585,36 @@ impl VoiceStudio {
                             .when(renaming, |d| {
                                 d.child(
                                     div()
-                                        .w(px(300.0))
-                                        .child(Input::new(&self.clip_name).small()),
+                                        .h_flex()
+                                        .h(px(26.0))
+                                        .min_w(px(300.0))
+                                        .items_center()
+                                        .px(px(9.0))
+                                        .rounded(px(7.0))
+                                        .bg(theme::surface(false))
+                                        .border_2()
+                                        .border_color(theme::hex(0x171717))
+                                        .font_family(theme::FONT_DISPLAY)
+                                        .text_size(px(15.0))
+                                        .font_semibold()
+                                        // Its own frame, so the component's
+                                        // border and focus ring do not draw a
+                                        // second box inside this one.
+                                        .key_context(crate::RENAME_CONTEXT)
+                                        .child(Input::new(&self.clip_name).appearance(false)),
                                 )
                                 .child(
                                     div()
+                                        .h_flex()
+                                        .flex_none()
+                                        .items_baseline()
+                                        .gap(px(4.0))
                                         .text_size(px(11.5))
                                         .text_color(theme::hex(0x6B645A))
-                                        .child(t!("clip.rename_keys").to_string()),
+                                        .child(Self::key_cap("Enter"))
+                                        .child(t!("clip.rename_save").to_string())
+                                        .child(Self::key_cap("Esc"))
+                                        .child(t!("clip.rename_cancel").to_string()),
                                 )
                             })
                             .when(!renaming, |d| {
@@ -576,19 +625,21 @@ impl VoiceStudio {
                                         .font_semibold()
                                         .child(title),
                                 )
-                                .child(
-                                    div()
-                                        .flex_none()
-                                        .child(crate::icon::icon(
-                                            crate::icon::name::EDIT,
-                                            17.0,
-                                            theme::hex(0xB0A79B),
-                                        ))
-                                        .id("rename-clip")
-                                        .on_click(cx.listener(|this, _, window, cx| {
-                                            this.begin_rename(window, cx)
-                                        })),
-                                )
+                                .when(!fresh, |d| {
+                                    d.child(
+                                        div()
+                                            .flex_none()
+                                            .child(crate::icon::icon(
+                                                crate::icon::name::EDIT,
+                                                17.0,
+                                                theme::hex(0xB0A79B),
+                                            ))
+                                            .id("rename-clip")
+                                            .on_click(cx.listener(|this, _, window, cx| {
+                                                this.begin_rename(window, cx)
+                                            })),
+                                    )
+                                })
                             }),
                     )
                     .child(
@@ -627,6 +678,16 @@ impl VoiceStudio {
                         ),
                 )
             })
+    }
+
+    /// A key name inside a sentence, in the mono face the design sets it in.
+    fn key_cap(key: &'static str) -> Div {
+        div()
+            .font_family(theme::FONT_MONO)
+            .text_size(px(11.0))
+            .font_semibold()
+            .text_color(theme::hex(0x171717))
+            .child(key)
     }
 
     fn header_chip(glyph: &'static str, label: String, chevron: bool) -> Div {
@@ -837,11 +898,10 @@ impl VoiceStudio {
                             .font_family(theme::FONT_DISPLAY)
                             .text_size(px(13.5))
                             .font_semibold()
-                            .child(match rtf {
-                                Some(rtf) => t!(
+                            .child(match self.seconds_left() {
+                                Some(left) => t!(
                                     "compose.generating_left",
-                                    seconds =
-                                        format!("{:.0}", (self.expected_s - written).max(0.0) * rtf)
+                                    seconds = format!("{left:.0}")
                                 )
                                 .to_string(),
                                 None => t!("compose.generating").to_string(),
@@ -907,7 +967,7 @@ impl VoiceStudio {
                 .child(
                     div()
                         .text_size(px(15.0))
-                        .line_height(px(25.0))
+                        .line_height(px(25.5))
                         .text_color(theme::hex(0x5F594F))
                         .child(self.running_text()),
                 );
@@ -949,7 +1009,7 @@ impl VoiceStudio {
                 .child(
                     div()
                         .text_size(px(15.0))
-                        .line_height(px(25.0))
+                        .line_height(px(25.5))
                         .text_color(theme::hex(0x171717))
                         .child(clip.text.clone()),
                 ),
@@ -958,7 +1018,7 @@ impl VoiceStudio {
                     .flex_1()
                     .min_h(px(0.0))
                     .text_size(px(15.0))
-                    .line_height(px(25.0))
+                    .line_height(px(25.5))
                     .child(Textarea::new(&self.text).appearance(false).h_full()),
             ),
         }
@@ -982,10 +1042,15 @@ impl VoiceStudio {
             .border_color(theme::hex(0xF1EBE1))
             .text_size(px(11.5))
             .text_color(theme::hex(0x857D72))
-            .when(self.clip().is_some(), |d| {
+            // Renaming touches nothing but the label, and the design says so
+            // here rather than leaving 4d's warning in place.
+            .when(self.renaming.is_some(), |d| {
+                d.child(t!("clip.rename_note").to_string())
+            })
+            .when(self.renaming.is_none() && self.clip().is_some() && !self.busy(), |d| {
                 d.child(t!("clip.editing_makes_take").to_string())
             })
-            .when(self.clip().is_none(), |d| {
+            .when(self.renaming.is_none() && (self.clip().is_none() || self.busy()), |d| {
                 d.child(t!("workspace.chars", chars = text.chars().count()).to_string())
                     .when(words > 0, |d| {
                         d.child(
@@ -1065,21 +1130,35 @@ impl VoiceStudio {
             )
         };
 
-        row.child(div().flex_1()).child(
-            div()
-                .h_flex()
-                .flex_none()
-                .gap(px(7.0))
-                .items_center()
-                .text_size(px(11.5))
-                .text_color(theme::hex(0x857D72))
-                .child(crate::icon::icon(
-                    crate::icon::name::WIFI_OFF,
-                    16.0,
-                    theme::hex(0x857D72),
-                ))
-                .child(t!("workspace.on_this_machine").to_string()),
-        )
+        // Stated where there is room for it and nothing more urgent to say:
+        // fully on the empty screen, briefly while writing, not at all once the
+        // card is generating or holding a finished clip.
+        let empty = self.text.read(cx).value().trim().is_empty();
+        let note = (!self.busy() && self.clip().is_none()).then(|| {
+            if empty {
+                t!("workspace.offline").to_string()
+            } else {
+                t!("workspace.on_this_machine").to_string()
+            }
+        });
+
+        row.child(div().flex_1()).when_some(note, |row, note| {
+            row.child(
+                div()
+                    .h_flex()
+                    .flex_none()
+                    .gap(px(7.0))
+                    .items_center()
+                    .text_size(px(11.5))
+                    .text_color(theme::hex(0x857D72))
+                    .child(crate::icon::icon(
+                        crate::icon::name::WIFI_OFF,
+                        16.0,
+                        theme::hex(0x857D72),
+                    ))
+                    .child(note),
+            )
+        })
     }
 
     fn primary_button(
@@ -1093,7 +1172,7 @@ impl VoiceStudio {
         div()
             .h_flex()
             .h(px(38.0))
-            .px(px(if glyph.is_some() { 20.0 } else { 16.0 }))
+            .px(px(if glyph.is_some() || enabled { 20.0 } else { 16.0 }))
             .gap(px(8.0))
             .flex_none()
             .items_center()

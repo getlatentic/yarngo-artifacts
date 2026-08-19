@@ -44,6 +44,9 @@ model:
   uses_recorded:
     en: Uses recorded voices
     sk: Použije nahraté hlasy
+  own_voices_only:
+    en: Own voices only — no cloning
+    sk: Len vlastné hlasy — bez klonovania
   own_voice_only:
     en: its own voice only
     sk: iba vlastným hlasom
@@ -74,11 +77,11 @@ voice:
     en: Default voice is chosen until you pick another. A voice you record is a reference — it needs a model that can copy one.
     sk: Predvolený hlas platí, kým nevyberiete iný. Nahratý hlas je referencia — potrebuje model, ktorý ju vie skopírovať.
   reference_explains:
-    en: The reference is used every time this clip generates.
-    sk: Referencia sa použije pri každom generovaní tejto nahrávky.
+    en: "The reference is %{time} of you. It is used every time this clip generates."
+    sk: "Referencia je %{time} vášho hlasu. Použije sa pri každom generovaní tejto nahrávky."
   saved_for_clip:
-    en: "%{voice} saved and selected for this clip. Kept on this machine."
-    sk: "%{voice} uložený a vybraný pre túto nahrávku. Zostáva v tomto počítači."
+    en: "Voice saved and selected for this clip. %{time} reference, kept on this machine."
+    sk: "Hlas uložený a vybraný pre túto nahrávku. Referencia %{time}, zostáva v tomto počítači."
   label:
     en: Voice
     sk: Hlas
@@ -235,6 +238,15 @@ clip:
   untitled:
     en: Untitled clip
     sk: Nepomenovaná nahrávka
+  generating_left:
+    en: "generating · %{seconds}s left"
+    sk: "generuje sa · ostáva %{seconds}s"
+  fresh_title:
+    en: New clip
+    sk: Nová nahrávka
+  rename_note:
+    en: A name is only a label. Renaming does not regenerate anything.
+    sk: Názov je len označenie. Premenovanie nič negeneruje znova.
   generating_now:
     en: generating…
     sk: generuje sa…
@@ -253,9 +265,12 @@ clip:
   this_clip:
     en: This clip
     sk: Táto nahrávka
-  rename_keys:
-    en: Enter to save · Esc to cancel
-    sk: Enter uloží · Esc zruší
+  rename_save:
+    en: "to save ·"
+    sk: "uloží ·"
+  rename_cancel:
+    en: to cancel
+    sk: zruší
   made_line:
     en: "%{length} · made %{at} · %{voice} · %{model}"
     sk: "%{length} · vzniklo %{at} · %{voice} · %{model}"
@@ -304,8 +319,8 @@ clip:
 
 compose:
   placeholder:
-    en: Type what you want to say…
-    sk: Napíšte, čo chcete povedať…
+    en: Type or paste what you want spoken.
+    sk: Napíšte alebo vložte, čo sa má povedať.
   generate:
     en: Generate
     sk: Generovať
@@ -330,6 +345,9 @@ compose:
   write_first:
     en: Write something first. The default voice is ready — nothing to record.
     sk: Najprv niečo napíšte. Predvolený hlas je pripravený — nič netreba nahrávať.
+  now_in_your_voice:
+    en: Now in your voice. The default voice is still there if you want it back.
+    sk: Teraz vaším hlasom. Predvolený hlas je stále k dispozícii.
   about_to_make:
     en: "About %{seconds} seconds to make."
     sk: "Vytvorenie potrvá približne %{seconds} s."
@@ -639,8 +657,8 @@ workspace:
     en: just now
     sk: práve teraz
   clips_empty:
-    en: Nothing yet. Clips stay on this machine until you delete them.
-    sk: Zatiaľ nič. Nahrávky zostávajú v tomto počítači, kým ich nevymažete.
+    en: Nothing here yet. Everything you generate lands in this list and stays on this machine.
+    sk: Zatiaľ tu nič nie je. Všetko, čo vygenerujete, sa objaví v tomto zozname a zostane v tomto počítači.
   no_voice:
     en: No voice yet
     sk: Zatiaľ žiadny hlas

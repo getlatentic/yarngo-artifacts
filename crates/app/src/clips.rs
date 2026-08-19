@@ -221,8 +221,9 @@ impl VoiceStudio {
     }
 
     pub(crate) fn cancel_rename(&mut self, cx: &mut Context<Self>) {
-        self.renaming = None;
-        cx.notify();
+        if self.renaming.take().is_some() {
+            cx.notify();
+        }
     }
 
     fn rename_clip(&mut self, id: String, name: String, cx: &mut Context<Self>) {

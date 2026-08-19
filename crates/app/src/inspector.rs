@@ -44,11 +44,13 @@ impl VoiceStudio {
             .p(px(8.0))
             .rounded(px(8.0))
             .when(chosen, |d| d.bg(theme::hex(0xFFF3E6)))
-            .child(icon::icon(
-                if chosen { icon::name::CHECK_CIRCLE } else { icon::name::RADIO_UNCHECKED },
-                18.0,
-                if chosen { theme::hex(0x8F4406) } else { theme::hex(0xB0A79B) },
-            ))
+            .child(if chosen {
+                icon::filled(icon::name::CHECK_CIRCLE, 18.0, theme::hex(0x8F4406))
+                    .into_any_element()
+            } else {
+                icon::icon(icon::name::RADIO_UNCHECKED, 18.0, theme::hex(0xB0A79B))
+                    .into_any_element()
+            })
             .child(
                 div()
                     .v_flex()
@@ -168,18 +170,39 @@ impl VoiceStudio {
                         })),
                 )
             })
-            .child(
-                div()
-                    .text_size(px(11.5))
-                    .line_height(px(17.0))
-                    .text_color(theme::hex(0x6B645A))
-                    .mt(px(2.0))
-                    .child(match (chosen.is_none(), clone_ok) {
-                        (_, false) => t!("voice.model_cannot_clone").to_string(),
-                        (true, _) => t!("voice.default_explains").to_string(),
-                        (false, _) => t!("voice.reference_explains").to_string(),
-                    }),
-            )
+            // One clipped line, as the design sets it — it explains the choice
+            // rather than arguing for it, so it must not push MODEL down.
+            .when_some(self.voice_note(chosen.as_deref(), clone_ok), |d, note| {
+                d.child(
+                    div()
+                        .w_full()
+                        .text_size(px(11.5))
+                        .line_height(px(17.0))
+                        .text_color(theme::hex(0x6B645A))
+                        .mt(px(2.0))
+                        .truncate()
+                        .child(note),
+                )
+            })
+    }
+
+    /// What to say under the voice list, if anything. The design only explains
+    /// the cases that need it.
+    fn voice_note(&self, chosen: Option<&str>, clone_ok: bool) -> Option<String> {
+        if !clone_ok {
+            return Some(t!("voice.model_cannot_clone").to_string());
+        }
+        match chosen {
+            None => Some(t!("voice.default_explains").to_string()),
+            Some(id) => self
+                .voices
+                .iter()
+                .find(|v| v.voice_id == id)
+                .filter(|v| v.seconds > 0.0)
+                .map(|v| {
+                    t!("voice.reference_explains", time = duration(v.seconds)).to_string()
+                }),
+        }
     }
 
     /// The model, and the one thing about it that changes what you can do.
@@ -220,24 +243,29 @@ impl VoiceStudio {
                     .gap(px(7.0))
                     .text_size(px(11.5))
                     .text_color(theme::hex(0x5F594F))
+                    .text_color(if self.model_can_clone() {
+                        theme::hex(0x5F594F)
+                    } else {
+                        theme::hex(0x8F4406)
+                    })
                     .child(icon::icon(
                         if self.model_can_clone() {
                             icon::name::CHECK
                         } else {
-                            icon::name::BLOCK
+                            icon::name::LOCK
                         },
                         15.0,
                         if self.model_can_clone() {
                             theme::hex(0x287A57)
                         } else {
-                            theme::hex(0x857D72)
+                            theme::hex(0xB98A55)
                         },
                     ))
                     .child(
                         if self.model_can_clone() {
                             t!("model.uses_recorded")
                         } else {
-                            t!("model.own_voice_only")
+                            t!("model.own_voices_only")
                         }
                         .to_string(),
                     ),
@@ -365,7 +393,7 @@ impl VoiceStudio {
                     })
                     // What just happened, where it happened, and only until the
                     // next thing happens.
-                    .when_some(self.voice_saved.clone(), |d, name| {
+                    .when_some(self.voice_saved.clone(), |d, saved| {
                         d.child(
                             div()
                                 .h_flex()
@@ -375,11 +403,13 @@ impl VoiceStudio {
                                 .px(px(12.0))
                                 .py(px(10.0))
                                 .rounded(px(9.0))
-                                .bg(theme::hex(0xE9F5EF))
-                                .child(icon::icon(
+                                .bg(theme::hex(0xF1F7F3))
+                                .border_1()
+                                .border_color(theme::hex(0xC9E0D3))
+                                .child(icon::filled(
                                     icon::name::CHECK_CIRCLE,
                                     17.0,
-                                    theme::hex(0x1B5C41),
+                                    theme::hex(0x287A57),
                                 ))
                                 .child(
                                     div()
@@ -387,8 +417,10 @@ impl VoiceStudio {
                                         .min_w(px(0.0))
                                         .text_size(px(11.5))
                                         .line_height(px(17.0))
-                                        .text_color(theme::hex(0x1B5C41))
-                                        .child(t!("voice.saved_for_clip", voice = name).to_string()),
+                                        .text_color(theme::hex(0x2C5C46))
+                                        .child(
+                                            t!("voice.saved_for_clip", time = saved).to_string(),
+                                        ),
                                 ),
                         )
                     })

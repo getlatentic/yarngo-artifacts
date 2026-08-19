@@ -43,6 +43,9 @@ pub mod tokens {
         pub const BORDER_STRONG: u32 = 0xD8D0C4;
         /// Icons, dividers and disabled marks — never a text string.
         pub const NON_TEXT: u32 = 0x857D72;
+        /// A step back from `NON_TEXT`: placeholder text, and a step number or
+        /// label that has not been reached yet.
+        pub const PLACEHOLDER: u32 = 0xB0A79B;
         pub const SUCCESS_SURFACE: u32 = 0xE9F5EF;
         pub const DANGER_SURFACE: u32 = 0xFBEBE8;
         /// Focus is Signal Blue, not the accent — it must not read as a brand mark.
@@ -65,6 +68,7 @@ pub mod tokens {
         pub const BG_SUBTLE: u32 = 0x1A1816;
         pub const BORDER_STRONG: u32 = 0x4A443C;
         pub const NON_TEXT: u32 = 0x857D72;
+        pub const PLACEHOLDER: u32 = 0x6E675E;
         pub const SUCCESS_SURFACE: u32 = 0x10291F;
         pub const DANGER_SURFACE: u32 = 0x2E1512;
         pub const FOCUS: u32 = 0x9AA6FB;
@@ -140,7 +144,10 @@ pub fn apply(mode: ThemeMode, cx: &mut App) {
             theme.secondary_foreground = rgb(t::TEXT);
             theme.border = rgb(t::BORDER);
             theme.muted = rgb(t::SURFACE_SUNKEN);
-            theme.muted_foreground = rgb(t::TEXT_MUTED);
+            // Read only by gpui-component, and the one place it shows is a field's
+    // placeholder — which the design sets in the pale non-text tint, not in the
+    // muted body colour.
+    theme.muted_foreground = rgb(t::PLACEHOLDER);
             theme.popover = rgb(t::SURFACE);
             theme.popover_foreground = rgb(t::TEXT);
             theme.input = rgb(t::BORDER);
@@ -177,7 +184,7 @@ pub fn apply(mode: ThemeMode, cx: &mut App) {
             theme.accent_foreground = rgb(t::ON_ACCENT);
             // Focus is Signal Blue per the tokens: a focus ring is not a brand moment.
             theme.ring = rgb(t::FOCUS);
-            theme.selection = rgb(t::ACCENT_SURFACE);
+            theme.selection = rgb(0xFFD9AE);
             theme.tab_active = rgb(t::ACCENT);
         }};
     }

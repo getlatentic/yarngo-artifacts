@@ -40,6 +40,10 @@ rust_i18n::i18n!("locales", fallback = "en");
 
 actions!(voicestudio, [Speak, CommitRename, CancelRename]);
 
+/// Key context for the inline name field, so Enter and Escape mean rename only
+/// while a name is open for editing.
+pub(crate) const RENAME_CONTEXT: &str = "ClipRename";
+
 const APP_ROOT: &str = "/Users/dev/workspace/voicestudio";
 
 /// Which full-window screen is showing. Exclusive by construction: the previous
@@ -104,7 +108,7 @@ pub struct Take {
 /// Bars in the review waveform, as the design draws it.
 const TAKE_BARS: usize = 32;
 /// Bars in the workspace player's waveform.
-const CLIP_BARS: usize = 34;
+const CLIP_BARS: usize = 40;
 
 pub struct VoiceStudio {
     pub(crate) engine: Option<Arc<EngineHandle>>,
@@ -571,11 +575,16 @@ impl VoiceStudio {
                         // recording started from its panel, so saving finishes
                         // that thought rather than leaving it to be picked.
                         let saved = voices.iter().find(|v| v.voice_id == enrolled_id);
-                        this.voice_saved = saved.map(|v| v.label.clone());
+                        this.voice_saved =
+                            saved.map(|v| crate::workspace::duration(v.seconds));
                         let picked = saved.map(|v| v.voice_id.clone());
                         this.voices = voices;
-                        if picked.is_some() {
-                            this.choose_voice(picked, cx);
+                        if let Some(id) = picked {
+                            if let Some(draft) = this.draft_mut() {
+                                draft.voice_id = Some(id.clone());
+                            }
+                            this.selected_voice = Some(id);
+                            this.warm_selected_voice(cx);
                         }
                         this.enrolment = Enrolment::Closed;
                         this.in_setup = false;
@@ -866,6 +875,9 @@ impl VoiceStudio {
     /// Choose the voice this clip speaks in. `None` is the bundled default,
     /// which is a real choice rather than the absence of one.
     pub(crate) fn choose_voice(&mut self, voice_id: Option<String>, cx: &mut Context<Self>) {
+        // Not cleared here: saving a voice chooses it, and clearing the banner
+        // from inside the choosing would erase the thing that just happened.
+        // Picking a voice by hand clears it, because then it is stale.
         self.voice_saved = None;
         if let Some(draft) = self.draft_mut() {
             draft.voice_id = voice_id.clone();
@@ -932,6 +944,15 @@ impl VoiceStudio {
     pub(crate) fn toggle_inspector(&mut self, cx: &mut Context<Self>) {
         self.inspector = !self.inspector;
         cx.notify();
+    }
+
+    /// Seconds still to run, from what has been written against what was
+    /// asked for, at the rate this machine is actually managing. `None` until
+    /// the first chunk lands, because until then there is no rate to use.
+    pub(crate) fn seconds_left(&self) -> Option<f32> {
+        let p = self.progress.as_ref()?;
+        (p.written_s > 0.0 && p.elapsed_s > 0.0)
+            .then(|| (self.expected_s - p.written_s).max(0.0) * (p.elapsed_s / p.written_s))
     }
 
     /// How far the running generation is, by chunks finished — a fact, where
@@ -2002,10 +2023,11 @@ fn main() {
         // right on every platform the app will be built for.
         cx.bind_keys([
             KeyBinding::new("secondary-enter", Speak, None),
-            // Only ever act while a name is open for editing; the handlers
-            // return immediately otherwise, so typing elsewhere is untouched.
-            KeyBinding::new("enter", CommitRename, None),
-            KeyBinding::new("escape", CancelRename, None),
+            // Scoped to the rename field. Bound globally these swallowed every
+            // Return in the composer and every Escape in the app, including
+            // the one that dismisses the enrolment sheet.
+            KeyBinding::new("enter", CommitRename, Some(RENAME_CONTEXT)),
+            KeyBinding::new("escape", CancelRename, Some(RENAME_CONTEXT)),
         ]);
         // Yarngo brand palette, so the desktop app matches the rest of the product.
         theme::apply(gpui_component::ThemeMode::Light, cx);

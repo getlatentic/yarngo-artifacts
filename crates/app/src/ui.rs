@@ -48,7 +48,8 @@ pub fn secondary_button(
         .h_flex()
         .h(px(34.0))
         .px(px(13.0))
-        .gap(px(7.0))
+        .gap(px(8.0))
+        .flex_none()
         .items_center()
         .rounded(px(8.0))
         .bg(theme::surface(false))
@@ -78,7 +79,7 @@ pub fn play_button(playing: bool, accent: bool) -> Div {
         .flex()
         .items_center()
         .justify_center()
-        .child(icon::icon(
+        .child(icon::filled(
             if playing { icon::name::PAUSE } else { icon::name::PLAY_ARROW },
             if accent { 22.0 } else { 21.0 },
             if accent { theme::hex(0x171717) } else { theme::hex(0x8F4406) },
@@ -123,7 +124,7 @@ fn waveform_bars(
         .when(!fill, |d| d.items_center().gap(px(2.0)))
         .children(levels.iter().enumerate().map(|(i, level)| {
             let bar = div()
-                .h(px(8.0 + level.clamp(0.0, 1.0) * (height - 12.0)))
+                .h(px(10.0 + level.clamp(0.0, 1.0) * (height - 10.0)))
                 .rounded(px(2.0))
                 .bg(if i < edge { played } else { rest });
             if fill {
