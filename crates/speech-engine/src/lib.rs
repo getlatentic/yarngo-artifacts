@@ -91,6 +91,10 @@ pub struct Clip {
     pub id: String,
     /// Short enough for a sidebar row, taken from the words themselves.
     pub title: String,
+    /// What the user calls it. Seeded from the first words and theirs to
+    /// change; renaming leaves the audio and the text alone.
+    #[serde(default)]
+    pub name: String,
     pub text: String,
     pub path: PathBuf,
     #[serde(default)]
@@ -117,6 +121,10 @@ pub struct SynthesisRequest {
     /// makes it give the same one with different words.
     #[serde(default)]
     pub seed: Option<u32>,
+    /// What to call the clip. `None` lets the engine name it from the first
+    /// words, which is what an unnamed draft wants.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -235,6 +243,8 @@ pub trait SpeechEngine {
     fn clips(&mut self) -> Result<Vec<Clip>>;
 
     fn delete_clip(&mut self, clip_id: &str) -> Result<Vec<Clip>>;
+
+    fn rename_clip(&mut self, clip_id: &str, name: &str) -> Result<Vec<Clip>>;
 
     fn system_info(&mut self) -> Result<SystemInfo>;
 }

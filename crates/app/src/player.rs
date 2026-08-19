@@ -90,10 +90,6 @@ impl AudioPlayer {
         self.player.get_pos().min(self.duration)
     }
 
-    pub fn duration(&self) -> Duration {
-        self.duration
-    }
-
     /// Jump to a fraction of the clip. Decoders can refuse — a stream without
     /// seek support returns an error rather than silently doing nothing, so the
     /// caller can say so instead of leaving the bar stuck.

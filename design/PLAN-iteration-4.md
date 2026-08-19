@@ -59,7 +59,7 @@ A 26×24 button, `1px #E4DCD0`, radius 6, holding `right_panel_open` /
   `Default voice · Fast` → `Named from your first words · Default voice · Fast`
   → `0:16 · made 14:02 today · Default voice · Fast`.
 - **When the inspector is closed**, two 30px chips sit right: `record_voice_over`
-  + voice name + chevron, and `tune` + `Fast · 1.0×`. Both open the inspector.
+  + voice name + chevron, and `tune` + the model name. Both open the inspector.
   When it is open, the chips are gone.
 
 ## D. The card — one frame, four states
@@ -85,7 +85,8 @@ the mono label and `right_panel_close`. Body, 14px padding, 15px gaps:
   explanatory line that changes with the case.
 - **MODEL** — a 36px select showing the model name, and under it a capability
   line: `check` + "Uses recorded voices".
-- **DELIVERY** — `Speed` and `Seed` rows, the seed with a `casino` reroll.
+- **DELIVERY** — the `Seed` row, with a `casino` reroll. Speed is not built;
+  see the decision below.
 
 While generating, a `#FFF3E6` banner tops the panel: "Settings are fixed for
 this run."
@@ -117,7 +118,7 @@ created when you start writing, not when generation finishes. Needs a `name`
 field, a `rename_clip` call, and a draft state the list can show. Straight
 work, no unknowns.
 
-### 2. `Speed 1.0×` — **decision needed**
+### 2. `Speed 1.0×` — **decided: dropped**
 
 The engine has no speed parameter; `DOTS_GEN` is guidance scale, speaker scale,
 patch cap, EOS threshold and template. Nothing there changes rate. The honest
@@ -130,10 +131,11 @@ options:
   the edges of the range.
 - **Resample.** Cheap and wrong — it moves the pitch with the rate.
 
-My recommendation is to drop it for now and keep the row out of the panel
-rather than show a control that does nothing.
+**Decided: dropped.** DELIVERY shows Seed alone and the header chip reads
+`Fast`, not `Fast · 1.0×`. Nothing on screen claims a setting that does
+nothing.
 
-### 3. Per-model built-in voices (4f, and the third case of 4g) — **decision needed**
+### 3. Per-model built-in voices (4f, and the third case of 4g) — **decided: not now**
 
 4f shows `VOICE · KOKORO'S OWN` with named voices — Aria, Kola, Noor, each with
 a character line, and `+5 more`. Nothing in the app has this: every model in the
@@ -151,8 +153,10 @@ Two halves, and they are separable:
   ids and descriptions, plus a way to preview each. Worth building only
   alongside a model that actually has them.
 
-I would build the group's shape and drive it from a catalogue field that is
-empty for every current model, so the group renders only when a model has one.
+**Decided: not built.** The panel shows the bundled default voice and yours,
+which is 4b and the first two panels of 4g. 4f is left for whenever a model
+with named voices actually joins the catalogue; until then it is unreachable
+and building it would be building against a guess.
 
 ### 4. The default voice becomes the initial selection
 
@@ -164,15 +168,25 @@ is worth doing regardless of the rest.
 
 ---
 
-## Build order
+## Build order, and where it got to
 
-1. **Sidebar → clips only**, with the New clip button, counts, 52px rows and
-   the new footer line. Largest visible change, no engine work.
-2. **Clip records**: name, draft state, rename. Unblocks 4b, 4e and the row
-   subtitles.
-3. **One frame**: rebuild the composer as header / card / actions with the four
-   states inside the card.
-4. **Inspector**: voice list with the default first, model, delivery.
-5. **Title-bar toggle and the two header chips.**
-6. **Record from the inspector**, and the switch-on-save banner.
-7. **The locked no-clone case**, once there is a model that reaches it.
+1. **Sidebar → clips only** — done. New clip button, count, 52px rows, draft and
+   generating rows with the inline progress bar, `N clips · N MB` footer.
+2. **Clip records** — done. `name` on the clip, seeded from its first words by
+   the sidecar; `rename_clip` through the engine; drafts held by the app, one
+   per clip being written, each with its own text, voice, model and seed.
+3. **One frame** — done. Header / card / actions, with the strip, the text area
+   and the counts row inside the card. 4a, 4b, 4c and 4d all render in it.
+4. **Inspector** — done. Default voice first, then yours, then Record a voice;
+   model with its capability line; seed with a reroll.
+5. **Title-bar toggle and the header chips** — done.
+6. **Record from the inspector** — wired: the panel's Record a voice opens the
+   enrolment sheet, and saving selects the new voice for the clip and shows the
+   banner. The sheet itself is the one verified in iterations 2b–2d.
+7. **The locked no-clone case and a model's own voices** — left out, per the
+   decisions above.
+
+Verified by running the app: empty (4a), writing (4b), generating (4c), a
+finished clip (4d), renaming from the header with the actions row staying put
+(4e), the inspector open and closed, and the transport starting a fresh clip at
+`0:00` rather than at its end.

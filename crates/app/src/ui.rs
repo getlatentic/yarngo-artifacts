@@ -90,21 +90,47 @@ pub fn play_button(playing: bool, accent: bool) -> Div {
 /// renderer serves both the finished take in enrolment and the clip playing in
 /// the workspace.
 pub fn waveform(levels: &[f32], progress: f32, height: f32, played: Hsla, rest: Hsla) -> Div {
+    waveform_bars(levels, progress, height, played, rest, false)
+}
+
+/// The same waveform with bars that share the width instead of taking a fixed
+/// 3px each, which is how the workspace player fills its row.
+pub fn waveform_wide(
+    levels: &[f32],
+    progress: f32,
+    height: f32,
+    played: Hsla,
+    rest: Hsla,
+) -> Div {
+    waveform_bars(levels, progress, height, played, rest, true)
+}
+
+fn waveform_bars(
+    levels: &[f32],
+    progress: f32,
+    height: f32,
+    played: Hsla,
+    rest: Hsla,
+    fill: bool,
+) -> Div {
     let edge = (progress.clamp(0.0, 1.0) * levels.len() as f32).round() as usize;
     div()
         .h_flex()
         .flex_1()
         .min_w(px(0.0))
         .h(px(height))
-        .items_center()
-        .gap(px(2.0))
+        .when(fill, |d| d.items_end().gap(px(3.0)))
+        .when(!fill, |d| d.items_center().gap(px(2.0)))
         .children(levels.iter().enumerate().map(|(i, level)| {
-            div()
-                .w(px(3.0))
+            let bar = div()
                 .h(px(8.0 + level.clamp(0.0, 1.0) * (height - 12.0)))
-                .flex_none()
                 .rounded(px(2.0))
-                .bg(if i < edge { played } else { rest })
+                .bg(if i < edge { played } else { rest });
+            if fill {
+                bar.flex_1()
+            } else {
+                bar.w(px(3.0)).flex_none()
+            }
         }))
 }
 

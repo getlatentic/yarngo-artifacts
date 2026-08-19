@@ -188,6 +188,12 @@ impl SpeechEngine for MlxSidecar {
         Ok(reply.clips)
     }
 
+    fn rename_clip(&mut self, clip_id: &str, name: &str) -> Result<Vec<Clip>> {
+        let reply: ClipsReply =
+            self.call("rename_clip", json!({ "clip_id": clip_id, "name": name }))?;
+        Ok(reply.clips)
+    }
+
     fn system_info(&mut self) -> Result<SystemInfo> {
         self.call("system_info", json!({}))
     }
@@ -201,6 +207,7 @@ impl SpeechEngine for MlxSidecar {
                 "model": request.model,
                 "voice_id": request.voice_id,
                 "seed": request.seed,
+                "name": request.name,
             }),
         )
     }

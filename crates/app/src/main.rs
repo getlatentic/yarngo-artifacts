@@ -4,6 +4,7 @@
 //! window shows an honest progress state rather than a spinner that implies
 //! something faster. Everything below `EngineHandle` is backend-agnostic.
 
+mod clips;
 mod enrolment;
 mod inspector;
 mod models;
@@ -37,7 +38,7 @@ use speech_engine::{
 
 rust_i18n::i18n!("locales", fallback = "en");
 
-actions!(voicestudio, [Speak]);
+actions!(voicestudio, [Speak, CommitRename, CancelRename]);
 
 const APP_ROOT: &str = "/Users/dev/workspace/voicestudio";
 
@@ -175,9 +176,25 @@ pub struct VoiceStudio {
     /// every later visit is a sheet over the work in progress, including the
     /// first voice added from an empty one.
     pub(crate) in_setup: bool,
-    /// The right panel, and what it is looking at. `None` is closed, which is
-    /// also the width the workspace is designed for.
-    pub(crate) inspector: Option<inspector::Inspect>,
+    /// Clips being written. A draft is a clip that has no audio yet; it sits
+    /// in the same list, so starting another one has somewhere to put the one
+    /// you were on.
+    pub(crate) drafts: Vec<clips::Draft>,
+    /// What the workspace is pointed at. Never empty — first run opens on a
+    /// blank draft, because the composer is never showing nothing.
+    pub(crate) selected: clips::Selected,
+    /// Counter behind draft ids, so two drafts never collide.
+    pub(crate) next_draft: usize,
+    /// The name being edited inline in the header, and what it belongs to.
+    pub(crate) clip_name: Entity<InputState>,
+    pub(crate) renaming: Option<clips::Selected>,
+    /// Whether the clip inspector is showing. Closed by default: the two
+    /// settings it holds are stated as chips in the composer header, and the
+    /// workspace keeps the width the design gives it.
+    pub(crate) inspector: bool,
+    /// A voice saved from the inspector, named until the next thing happens —
+    /// the panel says so where the change was made.
+    pub(crate) voice_saved: Option<String>,
     /// A seed held for the next generation. Pinning is what turns "generate
     /// again" from a different reading into the same reading of new words.
     pub(crate) pinned_seed: Option<u32>,
@@ -192,6 +209,7 @@ impl VoiceStudio {
         let voice_name = cx.new(|cx| {
             InputState::new(window, cx).default_value(t!("voice.mine").to_string())
         });
+        let clip_name = clips::name_field(window, cx);
 
         let mut this = Self {
             engine: None,
@@ -227,9 +245,17 @@ impl VoiceStudio {
             take: None,
             clip_levels: Vec::new(),
             pinned_seed: None,
-            inspector: None,
+            inspector: false,
+            drafts: vec![],
+            selected: clips::Selected::Draft("draft-1".into()),
+            next_draft: 1,
+            clip_name,
+            renaming: None,
             in_setup: false,
+            voice_saved: None,
         };
+        // First run opens on a blank draft: the composer always has a clip.
+        this.drafts.push(clips::Draft::blank());
         this.start_engine(cx);
         this
     }
@@ -276,21 +302,14 @@ impl VoiceStudio {
                             .or_else(|| models.first())
                             .map(|m| m.id.clone());
                         this.models = models;
-                        // A voice from an earlier session is the selection on
-                        // sight. With none, the model's own voice is, and
-                        // enrolment is offered rather than demanded.
-                        this.selected_voice = voices.first().map(|v| v.voice_id.clone());
-                        let first_run = voices.is_empty();
+                        // The bundled voice is the selection out of the box:
+                        // it works with every model and needs nothing recorded,
+                        // so nothing has to happen before the first clip.
                         this.voices = voices;
                         this.engine = Some(handle);
                         this.status = Status::Idle;
                         this.refresh_clips(cx);
                         this.refresh_system(cx);
-                        if first_run {
-                            this.open_recorder(cx);
-                        } else {
-                            this.warm_selected_voice(cx);
-                        }
                     }
                     Err(err) => this.status = Status::Failed(format!("{err}")),
                 }
@@ -548,13 +567,16 @@ impl VoiceStudio {
             this.update(cx, |this, cx| {
                 match result {
                     Ok(voices) => {
-                        // Select the voice just enrolled, not whichever sorts first.
-                        this.selected_voice = voices
-                            .iter()
-                            .find(|v| v.voice_id == enrolled_id)
-                            .or_else(|| voices.first())
-                            .map(|v| v.voice_id.clone());
+                        // The clip that asked for the voice switches to it —
+                        // recording started from its panel, so saving finishes
+                        // that thought rather than leaving it to be picked.
+                        let saved = voices.iter().find(|v| v.voice_id == enrolled_id);
+                        this.voice_saved = saved.map(|v| v.label.clone());
+                        let picked = saved.map(|v| v.voice_id.clone());
                         this.voices = voices;
+                        if picked.is_some() {
+                            this.choose_voice(picked, cx);
+                        }
                         this.enrolment = Enrolment::Closed;
                         this.in_setup = false;
                         this.recorder = None;
@@ -578,34 +600,68 @@ impl VoiceStudio {
     /// Speak the composed text. `seed` pins the take: `None` draws a fresh one
     /// so a second press gives a different reading, and passing the previous
     /// seed back changes only the words.
+    /// Speak whatever is selected. A draft generates itself; a finished clip
+    /// generates another take of the same words, which is what "generate
+    /// again" means with the text untouched.
     pub(crate) fn generate(&mut self, seed: Option<u32>, cx: &mut Context<Self>) {
-        let seed = seed.or(self.pinned_seed);
         let Some(engine) = self.engine.clone() else { return };
         if self.busy() {
             return;
         }
+        self.save_open_text(cx);
+
+        // The clip carries its own settings, so this is the one place they are
+        // read: the draft's, or the ones the finished clip was made with.
+        let (text, voice_id, model, name, seed) = match &self.selected {
+            clips::Selected::Draft(_) => {
+                let Some(draft) = self.draft().cloned() else { return };
+                (
+                    draft.text,
+                    draft.voice_id,
+                    draft.model.or_else(|| self.selected_model.clone()),
+                    draft.name,
+                    seed.or(draft.seed).or(self.pinned_seed),
+                )
+            }
+            clips::Selected::Clip(_) => {
+                let Some(clip) = self.clip().cloned() else { return };
+                (
+                    clip.text,
+                    clip.voice_id,
+                    Some(clip.model),
+                    Some(clip.name),
+                    seed.or(self.pinned_seed),
+                )
+            }
+        };
+
         // Nothing can speak yet. Keep the words and run them when it can.
         if !self.model_ready() {
-            let text = self.text.read(cx).value().to_string();
             if !text.trim().is_empty() {
                 self.queued = Some(text);
                 cx.notify();
             }
             return;
         }
-        let text = self.text.read(cx).value().to_string();
         if text.trim().is_empty() {
             return;
+        }
+
+        // The row in the list says it is running, which is what lets you start
+        // another clip without losing sight of this one.
+        if let Some(draft) = self.draft_mut() {
+            draft.generating = true;
         }
 
         let request = SynthesisRequest {
             text,
             output: std::env::temp_dir().join("voicestudio_output.wav"),
-            model: self.selected_model.clone(),
+            model,
             // `None` is a real choice, not a missing one: it asks the model to
             // speak in its own voice rather than clone.
-            voice_id: self.speaking_voice().map(str::to_owned),
+            voice_id,
             seed,
+            name,
         };
 
         self.status = Status::Generating;
@@ -626,6 +682,12 @@ impl VoiceStudio {
                 }
                 this.status = match result {
                     Ok(s) => {
+                        // The draft has become a clip: drop it from the list and
+                        // point the workspace at what it produced.
+                        this.drafts.retain(|d| !d.generating);
+                        if let Some(clip) = s.clip.as_ref() {
+                            this.selected = clips::Selected::Clip(clip.id.clone());
+                        }
                         // The stored clip, not the scratch file it was written
                         // to: the sidebar lists the stored path, and loading the
                         // other one leaves the row that is playing unmarked.
@@ -644,7 +706,14 @@ impl VoiceStudio {
                             gen_s: s.gen_s,
                         }
                     }
-                    Err(err) => Status::Failed(format!("{err}")),
+                    Err(err) => {
+                        // Still a draft, and still selected: the words are not
+                        // lost because the engine refused them.
+                        for draft in this.drafts.iter_mut() {
+                            draft.generating = false;
+                        }
+                        Status::Failed(format!("{err}"))
+                    }
                 };
                 cx.notify();
             })
@@ -794,6 +863,174 @@ impl VoiceStudio {
         cx.notify();
     }
 
+    /// Choose the voice this clip speaks in. `None` is the bundled default,
+    /// which is a real choice rather than the absence of one.
+    pub(crate) fn choose_voice(&mut self, voice_id: Option<String>, cx: &mut Context<Self>) {
+        self.voice_saved = None;
+        if let Some(draft) = self.draft_mut() {
+            draft.voice_id = voice_id.clone();
+        }
+        self.selected_voice = voice_id;
+        // Warm on selection, not on Generate: the wait belongs to the moment of
+        // choosing, not to the first clip.
+        self.warm_selected_voice(cx);
+        cx.notify();
+    }
+
+    /// Play a voice so it can be heard before it is picked. The bundled default
+    /// has no recording to play, so it speaks a line instead.
+    pub(crate) fn hear_voice(&mut self, voice_id: Option<String>, cx: &mut Context<Self>) {
+        match voice_id.and_then(|id| {
+            self.voices.iter().find(|v| v.voice_id == id).map(|v| v.reference_audio.clone())
+        }) {
+            Some(reference) => {
+                self.load_clip(&reference, 0.0, cx);
+                self.play_loaded(cx);
+            }
+            // The bundled voice has no recording to play — it is the model
+            // speaking as itself, so hearing it means generating a line.
+            None => {
+                self.choose_voice(None, cx);
+                self.generate(None, cx);
+            }
+        }
+    }
+
+    /// Draw a new seed, so the next take is a different reading of the same
+    /// words. Clearing it back to `None` is what "fresh each time" means.
+    pub(crate) fn reroll_seed(&mut self, cx: &mut Context<Self>) {
+        let drawn = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.subsec_nanos())
+            .unwrap_or(0);
+        if let Some(draft) = self.draft_mut() {
+            draft.seed = match draft.seed {
+                Some(_) => None,
+                None => Some(drawn % 10_000),
+            };
+        }
+        cx.notify();
+    }
+
+    /// Delete the clip being looked at, and put the workspace on a fresh
+    /// draft — there is nothing left to look at once it is gone.
+    pub(crate) fn delete_selected_clip(
+        &mut self,
+        id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.new_draft(window, cx);
+        self.delete_clip(id, cx);
+    }
+
+    pub(crate) fn open_inspector(&mut self, cx: &mut Context<Self>) {
+        self.inspector = true;
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_inspector(&mut self, cx: &mut Context<Self>) {
+        self.inspector = !self.inspector;
+        cx.notify();
+    }
+
+    /// How far the running generation is, by chunks finished — a fact, where
+    /// seconds against an estimate moves when the estimate is wrong.
+    pub(crate) fn generation_fraction(&self) -> f32 {
+        match self.progress.as_ref() {
+            Some(p) if p.chunks > 0 => p.chunks_done as f32 / p.chunks as f32,
+            _ => 0.0,
+        }
+    }
+
+    /// Whether sound is coming out and how far through, for the strip.
+    pub(crate) fn player_state(&self) -> Option<(bool, f32)> {
+        let player = self.player.as_ref()?;
+        Some((player.is_playing(), player.progress()))
+    }
+
+    pub(crate) fn player_position(&self) -> Duration {
+        self.player.as_ref().map(|p| p.position()).unwrap_or_default()
+    }
+
+    /// Turn a click on the waveform into a position in the clip. Checking one
+    /// word in a 24 second take should not mean listening to the 23 before it.
+    pub(crate) fn seek_from(&mut self, x: Pixels, cx: &mut Context<Self>) {
+        let Some(player) = self.player.as_ref() else { return };
+        let bounds = self.track.get();
+        if bounds.size.width <= px(0.0) {
+            return;
+        }
+        let fraction: f32 = ((x - bounds.origin.x) / bounds.size.width).into();
+        if let Err(err) = player.seek_to(fraction) {
+            self.status = Status::Failed(err);
+        }
+        self.tick_playback(cx);
+        cx.notify();
+    }
+
+    /// The words currently being spoken, which belong to the draft that is
+    /// running rather than to whatever is selected now.
+    pub(crate) fn running_text(&self) -> String {
+        self.drafts
+            .iter()
+            .find(|d| d.generating)
+            .map(|d| d.text.clone())
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn save_selected_clip(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(clip) = self.clip().cloned() else { return };
+        self.save_clip_as(clip.path, window, cx);
+    }
+
+    /// Put the clip on the clipboard as a file, which is what "copy audio"
+    /// means everywhere else on this machine: it pastes into Finder, Mail and
+    /// Messages as the recording itself rather than as its path.
+    pub(crate) fn copy_selected_clip(&mut self, cx: &mut Context<Self>) {
+        let Some(clip) = self.clip().cloned() else { return };
+        let script = format!(
+            "set the clipboard to (POSIX file \"{}\")",
+            clip.path.display().to_string().replace('\\', "\\\\").replace('"', "\\\"")
+        );
+        if let Err(err) = std::process::Command::new("osascript").arg("-e").arg(script).status() {
+            self.status = Status::Failed(err.to_string());
+            cx.notify();
+        }
+    }
+
+    pub(crate) fn can_generate(&self, cx: &Context<Self>) -> bool {
+        !self.busy()
+            && !self.text.read(cx).value().trim().is_empty()
+            && (self.model_ready() || self.queued.is_none())
+    }
+
+    /// The line beside Generate. It says the one thing that is true right now:
+    /// what is missing, what is downloading, or what this will cost.
+    pub(crate) fn generate_hint(&self, cx: &Context<Self>) -> String {
+        let text = self.text.read(cx).value().to_string();
+        if text.trim().is_empty() {
+            return t!("compose.write_first").to_string();
+        }
+        if !self.model_ready() {
+            return t!("compose.model_missing", model = self.model_label()).to_string();
+        }
+        // Only from this machine's own measurements — a borrowed benchmark
+        // would put a number on it that this Mac has never produced.
+        let spoken = text.split_whitespace().count() as f32 / crate::workspace::WORDS_PER_SECOND;
+        match self
+            .models
+            .iter()
+            .find(|m| Some(m.id.as_str()) == self.clip_model())
+            .and_then(|m| m.measured_rtf)
+        {
+            Some(rtf) => {
+                t!("compose.about_to_make", seconds = format!("{:.0}", spoken * rtf)).to_string()
+            }
+            None => String::new(),
+        }
+    }
+
     fn take_loaded(&self) -> bool {
         match (self.take.as_ref(), self.clip.as_ref()) {
             (Some(take), Some((path, _))) => *path == take.path,
@@ -848,195 +1085,9 @@ impl VoiceStudio {
         .detach();
     }
 
-    /// The clip, as screen 1f draws it: one card holding the transport, the
-    /// waveform, and everything you would do with a finished take. The
-    /// waveform is the seek track — checking one word in a 24 second clip
-    /// should not mean listening to the 23 seconds before it.
-    pub(crate) fn player_card(&self, cx: &mut Context<Self>) -> AnyElement {
-        // The enrolment take borrows the same player. It belongs to the sheet
-        // that is reviewing it, not to the workspace behind.
-        if self.take_loaded() {
-            return div().into_any_element();
-        }
-        let Some((path, _)) = self.clip.clone() else {
-            return div().into_any_element();
-        };
-        let Some(player) = self.player.as_ref() else {
-            return div()
-                .text_size(px(12.5))
-                .text_color(theme::hex(0x6B645A))
-                .child(t!("player.no_device").to_string())
-                .into_any_element();
-        };
 
-        let playing = player.is_playing();
-        let progress = player.progress();
-        let elapsed = format_time(player.position());
-        let total = format_time(player.duration());
-        let copying = path.clone();
 
-        ui::card()
-            .w_full()
-            .flex_none()
-            .child(
-                div()
-                    .h_flex()
-                    .w_full()
-                    .items_center()
-                    .gap(px(14.0))
-                    .px(px(16.0))
-                    .py(px(15.0))
-                    .child(
-                        ui::play_button(playing, true)
-                            .id("play")
-                            .on_click(cx.listener(|this, _, _, cx| this.toggle_playback(cx))),
-                    )
-                    .child(
-                        div()
-                            .relative()
-                            .flex_1()
-                            .min_w(px(0.0))
-                            .child(ui::waveform(
-                                &self.clip_levels,
-                                progress,
-                                56.0,
-                                theme::hex(0xFF8A1F),
-                                theme::hex(0xE4DCD0),
-                            ))
-                            .child({
-                                let track = self.track.clone();
-                                canvas(move |bounds, _, _| track.set(bounds), |_, _, _, _| {})
-                                    .absolute()
-                                    .size_full()
-                            })
-                            .id("seek")
-                            .on_click(cx.listener(|this, event: &ClickEvent, _, cx| {
-                                let Some(player) = this.player.as_ref() else { return };
-                                let bounds = this.track.get();
-                                if bounds.size.width <= px(0.0) {
-                                    return;
-                                }
-                                let x = event.position().x - bounds.origin.x;
-                                let fraction: f32 = (x / bounds.size.width).into();
-                                if let Err(err) = player.seek_to(fraction) {
-                                    this.status = Status::Failed(err);
-                                }
-                                this.tick_playback(cx);
-                                cx.notify();
-                            })),
-                    )
-                    .child(
-                        ui::mono(format!("{elapsed} / {total}"), 12.0, theme::hex(0x6B645A))
-                            .flex_none(),
-                    ),
-            )
-            .child(
-                div()
-                    .h_flex()
-                    .w_full()
-                    .items_center()
-                    .gap(px(9.0))
-                    .px(px(16.0))
-                    .pb(px(15.0))
-                    .child(self.save_as_button(cx))
-                    .when_some(self.last.clone(), |this, last| {
-                        let seed = last.seed;
-                        this.child(
-                            // The seed carries over, so editing the words and
-                            // pressing this changes only the words.
-                            ui::secondary_button(
-                                Some((icon::name::REFRESH, 0x5F594F)),
-                                t!("clip.again").to_string(),
-                            )
-                            .id("again")
-                            .on_click(cx.listener(move |this, _, _, cx| this.generate(seed, cx))),
-                        )
-                    })
-                    .child(
-                        ui::secondary_button(
-                            Some((icon::name::CONTENT_COPY, 0x5F594F)),
-                            t!("clip.copy").to_string(),
-                        )
-                        .id("copy-audio")
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.copy_clip(&copying, cx)
-                        })),
-                    )
-                    .child(div().flex_1())
-                    .when_some(self.last.clone(), |this, last| {
-                        this.child(
-                            ui::mono(self.clip_facts(&last), 11.5, theme::hex(0x857D72)).flex_none(),
-                        )
-                    }),
-            )
-            .into_any_element()
-    }
 
-    /// Saving is the primary action on a finished clip, so it is the only
-    /// filled button in the row.
-    fn save_as_button(&self, cx: &mut Context<Self>) -> AnyElement {
-        let Some((source, _)) = self.clip.clone() else {
-            return div().into_any_element();
-        };
-        div()
-            .h_flex()
-            .h(px(34.0))
-            .px(px(14.0))
-            .gap(px(7.0))
-            .flex_none()
-            .items_center()
-            .rounded(px(8.0))
-            .bg(theme::hex(0xFF6E08))
-            .text_size(px(12.5))
-            .font_semibold()
-            .text_color(theme::hex(0xFFFEFD))
-            .child(icon::icon(icon::name::DOWNLOAD, 17.0, theme::hex(0xFFFEFD)))
-            .child(t!("clip.save_as").to_string())
-            .id("save-as")
-            .on_click(cx.listener(move |this, _, window, cx| {
-                this.save_clip_as(source.clone(), window, cx)
-            }))
-            .into_any_element()
-    }
-
-    /// What made this clip, in the order the design states it: which model,
-    /// which seed, how long it took, and how that compares to playing it.
-    fn clip_facts(&self, last: &Synthesis) -> String {
-        let model = self
-            .models
-            .iter()
-            .find(|m| m.id == last.model)
-            .map(|m| m.label.clone())
-            .unwrap_or_else(|| last.model.clone());
-        let made = t!(
-            "workspace.made_with",
-            model = model,
-            seed = last.seed.map(|s| s.to_string()).unwrap_or_default(),
-            gen = format!("{:.1}", last.gen_s)
-        )
-        .to_string();
-        match last.rtf {
-            Some(rtf) => format!(
-                "{made} · {}",
-                t!("workspace.realtime", rtf = workspace::realtime(rtf))
-            ),
-            None => made,
-        }
-    }
-
-    /// Put the clip on the clipboard as a file, which is what "copy audio"
-    /// means everywhere else on this machine: it pastes into Finder, Mail and
-    /// Messages as the recording itself rather than as its path.
-    fn copy_clip(&mut self, path: &std::path::Path, cx: &mut Context<Self>) {
-        let script = format!(
-            "set the clipboard to (POSIX file \"{}\")",
-            path.display().to_string().replace('\\', "\\\\").replace('"', "\\\"")
-        );
-        if let Err(err) = std::process::Command::new("osascript").arg("-e").arg(script).status() {
-            self.status = Status::Failed(err.to_string());
-            cx.notify();
-        }
-    }
 
 
     /// Start a download and poll it until it settles. Models are gigabytes, so
@@ -1150,7 +1201,6 @@ impl VoiceStudio {
     }
 
     pub(crate) fn delete_voice(&mut self, voice_id: String, cx: &mut Context<Self>) {
-        self.inspector = None;
         let Some(engine) = self.engine.clone() else { return };
         self.confirming_voice = None;
         cx.spawn(async move |this, cx| {
@@ -1163,10 +1213,18 @@ impl VoiceStudio {
             this.update(cx, |this, cx| {
                 match result {
                     Ok(voices) => {
-                        // Keep the selection valid after a removal.
-                        if !voices.iter().any(|v| Some(&v.voice_id) == this.selected_voice.as_ref())
-                        {
-                            this.selected_voice = voices.first().map(|v| v.voice_id.clone());
+                        // A clip pointing at a deleted voice falls back to the
+                        // bundled one rather than to whichever sorts first.
+                        let gone = |id: &Option<String>| {
+                            id.as_ref().is_some_and(|id| !voices.iter().any(|v| &v.voice_id == id))
+                        };
+                        if gone(&this.selected_voice) {
+                            this.selected_voice = None;
+                        }
+                        for draft in this.drafts.iter_mut() {
+                            if gone(&draft.voice_id) {
+                                draft.voice_id = None;
+                            }
                         }
                         this.voices = voices;
                     }
@@ -1389,10 +1447,6 @@ impl VoiceStudio {
         self.models.iter().filter(|m| m.installed).count()
     }
 
-    pub(crate) fn installed_gb(&self) -> f32 {
-        self.models.iter().filter(|m| m.installed).map(|m| m.size_bytes as f32).sum::<f32>() / 1e9
-    }
-
     pub(crate) fn model_ready(&self) -> bool {
         self.selected_model
             .as_deref()
@@ -1440,18 +1494,6 @@ impl VoiceStudio {
 
 }
 
-/// Shorten a quote to fit a card without cutting mid-word where avoidable.
-pub(crate) fn truncate(text: &str, max: usize) -> String {
-    if text.chars().count() <= max {
-        return text.to_string();
-    }
-    let cut: String = text.chars().take(max).collect();
-    match cut.rsplit_once(' ') {
-        Some((head, _)) if head.len() > max / 2 => format!("{head}…"),
-        _ => format!("{cut}…"),
-    }
-}
-
 
 impl Render for VoiceStudio {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
@@ -1463,6 +1505,8 @@ impl Render for VoiceStudio {
             .size_full()
             .bg(cx.theme().background)
             .on_action(cx.listener(|this, _: &Speak, _, cx| this.generate(None, cx)))
+            .on_action(cx.listener(|this, _: &CommitRename, _, cx| this.commit_rename(cx)))
+            .on_action(cx.listener(|this, _: &CancelRename, _, cx| this.cancel_rename(cx)))
             .child(self.title_bar(window, cx))
             .child(match screen {
                 Screen::Setup => self.setup_screen(cx).into_any_element(),
@@ -1956,7 +2000,13 @@ fn main() {
         load_brand_fonts(cx);
         // "secondary" is cmd on macOS and ctrl elsewhere, so the binding is
         // right on every platform the app will be built for.
-        cx.bind_keys([KeyBinding::new("secondary-enter", Speak, None)]);
+        cx.bind_keys([
+            KeyBinding::new("secondary-enter", Speak, None),
+            // Only ever act while a name is open for editing; the handlers
+            // return immediately otherwise, so typing elsewhere is untouched.
+            KeyBinding::new("enter", CommitRename, None),
+            KeyBinding::new("escape", CancelRename, None),
+        ]);
         // Yarngo brand palette, so the desktop app matches the rest of the product.
         theme::apply(gpui_component::ThemeMode::Light, cx);
 

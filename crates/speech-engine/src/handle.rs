@@ -31,6 +31,7 @@ enum Command {
     DiskSpace(Sender<Result<DiskSpace>>),
     Clips(Sender<Result<Vec<Clip>>>),
     DeleteClip(String, Sender<Result<Vec<Clip>>>),
+    RenameClip(String, String, Sender<Result<Vec<Clip>>>),
     SystemInfo(Sender<Result<SystemInfo>>),
 }
 
@@ -102,6 +103,9 @@ impl EngineHandle {
                         }
                         Command::DeleteClip(id, reply) => {
                             let _ = reply.send(engine.delete_clip(&id));
+                        }
+                        Command::RenameClip(id, name, reply) => {
+                            let _ = reply.send(engine.rename_clip(&id, &name));
                         }
                         Command::SystemInfo(reply) => {
                             let _ = reply.send(engine.system_info());
@@ -191,6 +195,15 @@ impl EngineHandle {
     pub fn delete_clip(&self, clip_id: impl Into<String>) -> Result<Vec<Clip>> {
         let id = clip_id.into();
         self.dispatch(|reply| Command::DeleteClip(id, reply))
+    }
+
+    pub fn rename_clip(
+        &self,
+        clip_id: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Result<Vec<Clip>> {
+        let (id, name) = (clip_id.into(), name.into());
+        self.dispatch(|reply| Command::RenameClip(id, name, reply))
     }
 
     pub fn system_info(&self) -> Result<SystemInfo> {

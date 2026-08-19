@@ -32,7 +32,6 @@ pub mod name {
     pub const UPLOAD_FILE: &str = "upload_file";
     pub const ERROR_OUTLINE: &str = "error_outline";
     pub const GRAPHIC_EQ: &str = "graphic_eq";
-    pub const VOLUME_UP: &str = "volume_up";
     pub const LOCK: &str = "lock";
     pub const CLOSE: &str = "close";
     pub const STOP_CIRCLE: &str = "stop_circle";
@@ -44,8 +43,15 @@ pub mod name {
     pub const REFRESH: &str = "refresh";
     pub const CONTENT_COPY: &str = "content_copy";
     pub const RADIO_UNCHECKED: &str = "radio_button_unchecked";
-    pub const HOURGLASS: &str = "hourglass_top";
     pub const MEMORY: &str = "memory";
+    pub const EDIT_NOTE: &str = "edit_note";
+    pub const EDIT: &str = "edit";
+    pub const PROGRESS: &str = "progress_activity";
+    pub const RECORD_VOICE: &str = "record_voice_over";
+    pub const PANEL_OPEN: &str = "right_panel_open";
+    pub const PANEL_CLOSE: &str = "right_panel_close";
+    pub const CASINO: &str = "casino";
+    pub const DESCRIPTION: &str = "description";
 }
 
 /// One icon at a given size and colour.

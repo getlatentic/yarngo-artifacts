@@ -172,7 +172,12 @@ def _load_clips() -> list[dict]:
     except (json.JSONDecodeError, OSError):
         return []
     # Drop entries whose audio has gone, rather than listing a dead row.
-    return [c for c in clips if Path(c.get("path", "")).exists()]
+    live = [c for c in clips if Path(c.get("path", "")).exists()]
+    for clip in live:
+        # Clips written before names existed are named from their own words,
+        # which is the same rule a new clip follows.
+        clip.setdefault("name", _working_name(clip.get("text", "")))
+    return live
 
 
 def _save_clips(clips: list[dict]) -> None:
@@ -923,6 +928,10 @@ def m_synthesize(params: dict) -> dict:
             "id": clip_id,
             # A title short enough for a sidebar row, from the words themselves.
             "title": (text[:44] + "…") if len(text) > 45 else text,
+            # A working name taken from the first words, and the user's to
+            # change. `title` stays what the text says; `name` is what they
+            # call it.
+            "name": params.get("name") or _working_name(text),
             "text": text,
             "path": str(kept),
             "voice_id": voice_id,
@@ -950,8 +959,31 @@ def m_synthesize(params: dict) -> dict:
     }
 
 
+def _working_name(text: str) -> str:
+    """The first few words, which is what a clip is called until it is named.
+
+    Cut on a word boundary and without trailing punctuation, because this is a
+    name in a list, not a quotation.
+    """
+    words = text.split()
+    name = " ".join(words[:5]).strip(" .,;:!?—-")
+    return name or "Untitled clip"
+
+
 def m_list_clips(_params: dict) -> dict:
     return {"clips": _load_clips()}
+
+
+def m_rename_clip(params: dict) -> dict:
+    """Rename a clip. The audio and the text it was made from are untouched —
+    only what it is called in the list changes."""
+    clips = _load_clips()
+    name = (params.get("name") or "").strip()
+    for clip in clips:
+        if clip.get("id") == params["clip_id"]:
+            clip["name"] = name or _working_name(clip.get("text", ""))
+    _save_clips(clips)
+    return {"clips": clips}
 
 
 def m_delete_clip(params: dict) -> dict:
@@ -982,6 +1014,7 @@ METHODS = {
     "synthesize": m_synthesize,
     "prepare_voice": m_prepare_voice,
     "list_clips": m_list_clips,
+    "rename_clip": m_rename_clip,
     "delete_clip": m_delete_clip,
     "install_model": m_install_model,
     "delete_model": m_delete_model,

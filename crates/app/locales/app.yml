@@ -41,6 +41,9 @@ model:
   can_clone:
     en: can speak in your voice
     sk: dokáže hovoriť vaším hlasom
+  uses_recorded:
+    en: Uses recorded voices
+    sk: Použije nahraté hlasy
   own_voice_only:
     en: its own voice only
     sk: iba vlastným hlasom
@@ -52,6 +55,30 @@ model:
     sk: Sťahovanie pokračuje na pozadí.
 
 voice:
+  default:
+    en: Default voice
+    sk: Predvolený hlas
+  default_detail:
+    en: bundled · works with every model
+    sk: súčasť aplikácie · funguje s každým modelom
+  yours:
+    en: "Yours · %{count}"
+    sk: "Vaše · %{count}"
+  record_one:
+    en: Record a voice
+    sk: Nahrať hlas
+  about_a_minute:
+    en: ~1 min
+    sk: ~1 min
+  default_explains:
+    en: Default voice is chosen until you pick another. A voice you record is a reference — it needs a model that can copy one.
+    sk: Predvolený hlas platí, kým nevyberiete iný. Nahratý hlas je referencia — potrebuje model, ktorý ju vie skopírovať.
+  reference_explains:
+    en: The reference is used every time this clip generates.
+    sk: Referencia sa použije pri každom generovaní tejto nahrávky.
+  saved_for_clip:
+    en: "%{voice} saved and selected for this clip. Kept on this machine."
+    sk: "%{voice} uložený a vybraný pre túto nahrávku. Zostáva v tomto počítači."
   label:
     en: Voice
     sk: Hlas
@@ -205,6 +232,66 @@ settings:
     sk: Zatiaľ nie je hotové. Panel je pomenovaný, aby bolo jasné, čo tu bude.
 
 clip:
+  untitled:
+    en: Untitled clip
+    sk: Nepomenovaná nahrávka
+  generating_now:
+    en: generating…
+    sk: generuje sa…
+  one_on_disk:
+    en: "1 clip"
+    sk: "1 nahrávka"
+  n_on_disk:
+    en: "%{count} clips"
+    sk: "%{count} nahrávok"
+  draft:
+    en: draft · not generated
+    sk: koncept · nevygenerované
+  new:
+    en: New clip
+    sk: Nová nahrávka
+  this_clip:
+    en: This clip
+    sk: Táto nahrávka
+  rename_keys:
+    en: Enter to save · Esc to cancel
+    sk: Enter uloží · Esc zruší
+  made_line:
+    en: "%{length} · made %{at} · %{voice} · %{model}"
+    sk: "%{length} · vzniklo %{at} · %{voice} · %{model}"
+  audio_appears:
+    en: The audio appears here when you generate
+    sk: Zvuk sa objaví tu, keď vygenerujete
+  text_locked:
+    en: Text — locked while it runs
+    sk: Text — uzamknutý počas behu
+  text_from:
+    en: Text it was made from
+    sk: Text, z ktorého vzniklo
+  edit_text:
+    en: Edit text
+    sk: Upraviť text
+  editing_makes_take:
+    en: Editing the text makes another take. This one is kept until you delete it.
+    sk: Úprava textu vytvorí ďalšiu nahrávku. Táto zostane, kým ju nevymažete.
+  start_another:
+    en: Start another clip
+    sk: Začať ďalšiu nahrávku
+  keeps_running:
+    en: This one keeps running in the list.
+    sk: Táto beží ďalej v zozname.
+  settings_fixed:
+    en: Settings are fixed for this run. Change them and generate again for another take.
+    sk: Nastavenia sú pre tento beh pevné. Zmeňte ich a generujte znova pre ďalšiu verziu.
+  delivery:
+    en: Delivery
+    sk: Prednes
+  seed:
+    en: Seed
+    sk: Seed
+  seed_fresh:
+    en: fresh
+    sk: nový
   save_as:
     en: Save as WAV
     sk: Uložiť ako WAV
@@ -231,6 +318,21 @@ compose:
   while_generating:
     en: Keep typing if you want — this clip finishes either way.
     sk: Pokojne píšte ďalej — táto nahrávka sa dokončí tak či tak.
+  generating:
+    en: Generating…
+    sk: Generuje sa…
+  generating_left:
+    en: "Generating — about %{seconds} seconds left"
+    sk: "Generuje sa — ostáva približne %{seconds} s"
+  written_of:
+    en: "%{written} of %{total} seconds of audio · %{rtf}× realtime"
+    sk: "%{written} z %{total} sekúnd zvuku · %{rtf}× reálneho času"
+  write_first:
+    en: Write something first. The default voice is ready — nothing to record.
+    sk: Najprv niečo napíšte. Predvolený hlas je pripravený — nič netreba nahrávať.
+  about_to_make:
+    en: "About %{seconds} seconds to make."
+    sk: "Vytvorenie potrvá približne %{seconds} s."
   generating_with:
     en: "Generating with %{model}"
     sk: "Generujem cez %{model}"
@@ -605,6 +707,9 @@ workspace:
   hear_reference:
     en: Hear reference
     sk: Prehrať referenciu
+  on_this_machine:
+    en: On this machine
+    sk: V tomto počítači
   offline:
     en: Runs on this machine. Works offline.
     sk: Beží v tomto počítači. Funguje offline.
