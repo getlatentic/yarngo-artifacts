@@ -136,7 +136,12 @@ impl VoiceStudio {
         let id = model.id.clone();
         let current = self.selected_model.as_deref() == Some(id.as_str());
 
-        let mut facts = vec![gigabytes(model.size_bytes), model.precision.clone(), model.licence.clone()];
+        let mut facts = vec![
+            model.name.clone(),
+            gigabytes(model.size_bytes),
+            model.precision.clone(),
+            model.licence.clone(),
+        ];
         facts.push(match self.voices_using(&id) {
             0 => t!("settings.used_by_no_voice").to_string(),
             1 => t!("settings.used_by_one_voice").to_string(),
@@ -332,14 +337,28 @@ impl VoiceStudio {
                             .font_medium()
                             .child(model.label.clone()),
                     )
+                    // Named and licensed before it is downloaded, not after:
+                    // this is the moment the terms can still change the choice.
                     .child(ui::mono(
-                        match (model.download_bytes, model.notes.as_str()) {
-                            (0, notes) => notes.to_string(),
-                            (bytes, notes) => format!("{} · {}", gigabytes(bytes), notes),
-                        },
+                        [
+                            Some(model.name.clone()).filter(|n| !n.is_empty()),
+                            (model.download_bytes > 0).then(|| gigabytes(model.download_bytes)),
+                            Some(model.licence.clone()),
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .join(" · "),
                         11.5,
                         theme::hex(0x6B645A),
-                    )),
+                    ))
+                    .child(
+                        div()
+                            .text_size(px(11.5))
+                            .text_color(theme::hex(0x857D72))
+                            .mt(px(1.0))
+                            .child(model.notes.clone()),
+                    ),
             )
             .child(match downloading {
                 Some(status) => ui::mono(

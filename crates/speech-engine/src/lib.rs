@@ -22,7 +22,13 @@ pub use paths::EnginePaths;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ModelSpec {
     pub id: String,
+    /// What this app calls it — "Fast", "Best quality".
     pub label: String,
+    /// What it actually is — "dots.tts MF", "Step-Audio-EditX". The label is
+    /// ours; this is the name a licence or a paper is under, and the only one
+    /// that means anything to someone checking either.
+    #[serde(default)]
+    pub name: String,
     pub licence: String,
     /// Whether the weights are present locally. A model in the catalogue is
     /// offered whether or not it is installed; picking an absent one downloads.

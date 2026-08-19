@@ -3,8 +3,14 @@
 //! An app that clones a voice should be able to answer three questions without
 //! a support page: what version am I running, what am I allowed to do with what
 //! it produces, and where does my voice go. So this pane is the build, the
-//! licences of every model on disk, the faces and the runtime it is built on,
-//! and the privacy position stated plainly rather than linked to.
+//! privacy position stated plainly rather than linked to, the consent record,
+//! and the things the app is actually made of.
+//!
+//! Models are not among them. The app does not ship any weights — each model is
+//! downloaded by the person using it, under terms stated where they choose it,
+//! which is the only moment those terms can still change the decision. Repeating
+//! them here would attribute a licence to nothing and bury it where nobody is
+//! deciding anything.
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
@@ -20,8 +26,8 @@ struct Credit {
     terms: &'static str,
 }
 
-/// The things the app is built out of that are not its own. Models are not
-/// here — they come from the catalogue, which knows what is actually on disk.
+/// The things the app is built out of that are not its own: bundled, or
+/// installed by it. Models are neither — see the note at the top.
 const CREDITS: [Credit; 5] = [
     Credit { what: "Sora", terms: "SIL Open Font Licence 1.1" },
     Credit { what: "Noto Sans, Noto Sans Mono", terms: "SIL Open Font Licence 1.1" },
@@ -58,10 +64,6 @@ impl VoiceStudio {
     }
 
     pub(crate) fn about_pane(&self, _cx: &mut Context<Self>) -> AnyElement {
-        // Only what is actually installed: a licence for a model this machine
-        // does not have is not a term anyone here is under.
-        let installed: Vec<_> = self.models.iter().filter(|m| m.installed).collect();
-
         div()
             .v_flex()
             .flex_1()
@@ -169,26 +171,6 @@ impl VoiceStudio {
                                     ),
                             ),
                     ))
-                    .when(!installed.is_empty(), |d| {
-                        d.child(Self::about_section(
-                            t!("about.model_licences").to_string(),
-                            div()
-                                .v_flex()
-                                .w_full()
-                                .gap(px(7.0))
-                                .children(installed.iter().map(|m| {
-                                    Self::credit_row(m.label.clone(), m.licence.clone())
-                                }))
-                                .child(
-                                    div()
-                                        .text_size(px(11.5))
-                                        .line_height(px(17.0))
-                                        .text_color(theme::hex(0x6B645A))
-                                        .mt(px(2.0))
-                                        .child(t!("about.model_terms").to_string()),
-                                ),
-                        ))
-                    })
                     .child(Self::about_section(
                         t!("about.built_with").to_string(),
                         div()
@@ -203,7 +185,20 @@ impl VoiceStudio {
                             .child(Self::credit_row(
                                 format!("{} {}", runtime::NAME, runtime::VERSION),
                                 t!("about.on_this_machine").to_string(),
-                            )),
+                            ))
+                            // Models are not listed here. The app does not ship
+                            // them — each one is downloaded by the person using
+                            // it, under terms stated at the moment they choose
+                            // it, which is where those terms can still change
+                            // the decision.
+                            .child(
+                                div()
+                                    .text_size(px(11.5))
+                                    .line_height(px(17.0))
+                                    .text_color(theme::hex(0x6B645A))
+                                    .mt(px(2.0))
+                                    .child(t!("about.models_elsewhere").to_string()),
+                            ),
                     )),
             )
             .into_any_element()

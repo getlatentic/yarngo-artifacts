@@ -641,12 +641,9 @@ about:
   consent_body:
     en: A cloned voice is a likeness, so permission is recorded per voice — the wording as it stood, the build, and a fingerprint of the recording it was given about. The log is append-only; deleting a voice leaves its line.
     sk: Klonovaný hlas je podobizeň, preto sa súhlas zaznamenáva pre každý hlas — znenie, verzia aplikácie a odtlačok nahrávky, ktorej sa týkal. Záznam sa len pridáva; vymazaním hlasu jeho riadok zostáva.
-  model_licences:
-    en: Models on this machine
-    sk: Modely v tomto počítači
-  model_terms:
-    en: These terms come with anything you generate using them. Models under non-commercial terms are deliberately not offered.
-    sk: Tieto podmienky sa vzťahujú na všetko, čo s nimi vytvoríte. Modely s nekomerčnými podmienkami zámerne neponúkame.
+  models_elsewhere:
+    en: Models are downloaded by you, not shipped with the app. Each one is named and licensed where you choose it, under Models — the terms come with anything you generate using it.
+    sk: Modely si sťahujete vy, nie sú súčasťou aplikácie. Každý je pomenovaný a licencovaný tam, kde si ho vyberiete, v časti Modely — podmienky sa vzťahujú na všetko, čo s ním vytvoríte.
   built_with:
     en: Built with
     sk: Postavené na

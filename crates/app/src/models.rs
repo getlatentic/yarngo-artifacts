@@ -49,7 +49,10 @@ impl VoiceStudio {
         let selected = self.selected_model.as_deref() == Some(id.as_str());
         let downloading = self.installs.get(&id).filter(|s| s.is_downloading()).cloned();
 
+        // The real name first: "Fast" is this app's word for it, and the
+        // licence beside it belongs to the thing itself.
         let mut facts = vec![
+            self.meta(model.name.clone()),
             self.meta(model.licence.clone()),
             self.meta(model.precision.clone()),
         ];

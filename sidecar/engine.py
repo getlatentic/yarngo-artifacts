@@ -41,7 +41,9 @@ DOTS_GEN = {
     "template": "tts",
 }
 
-# Catalogue of models the app may offer. Every entry must be commercially
+# Catalogue of models the app may offer. `label` is what this app calls it;
+# `name` is what it actually is, which is the one that means anything to
+# someone checking a licence. Every entry must be commercially
 # licensed — models under non-commercial terms are deliberately absent, which
 # is why Fish S2 Pro (research-only) and F5-TTS (CC-BY-NC weights) are missing
 # despite the runtime being able to load them.
@@ -52,6 +54,7 @@ DOTS_GEN = {
 MODELS = {
     "dots-tts-mf": {
         "label": "Fast",
+        "name": "dots.tts MF",
         "alias": "dots-tts-mf",
         "repo": "appautomaton/dots-tts-mlx",
         "subfolder": "mf/mlx-int8",
@@ -63,6 +66,7 @@ MODELS = {
     },
     "dots-tts-mf-base": {
         "label": "Fast, full precision",
+        "name": "dots.tts MF",
         "alias": "dots-tts-mf-base",
         "repo": "appautomaton/dots-tts-mlx",
         "subfolder": "mf/mlx-base",
@@ -74,6 +78,7 @@ MODELS = {
     },
     "dots-tts-soar": {
         "label": "Best quality",
+        "name": "dots.tts SOAR",
         "alias": "dots-tts-soar",
         "repo": "appautomaton/dots-tts-mlx",
         "subfolder": "soar/mlx-int8",
@@ -85,6 +90,7 @@ MODELS = {
     },
     "step-audio": {
         "label": "Step Audio",
+        "name": "Step-Audio-EditX",
         "alias": "step-audio",
         "repo": "appautomaton/step-audio-editx-8bit-mlx",
         "subfolder": None,
@@ -96,6 +102,7 @@ MODELS = {
     },
     "longcat": {
         "label": "LongCat",
+        "name": "LongCat-AudioDiT 3.5B",
         "alias": "longcat",
         "repo": "appautomaton/longcat-audiodit-3.5b-8bit-mlx",
         "subfolder": None,
