@@ -30,6 +30,11 @@ pub struct Draft {
     pub seed: Option<u32>,
     /// True while this draft is the one the engine is working on.
     pub generating: bool,
+    /// Whether this clip was actually started — by New clip, or by editing a
+    /// finished one's words. The draft the app opens on is not: until then
+    /// there is no clip yet, only an empty composer, and the list says so with
+    /// its own empty state.
+    pub started: bool,
 }
 
 impl Draft {
@@ -42,12 +47,13 @@ impl Draft {
             model,
             seed: None,
             generating: false,
+            started: true,
         }
     }
 
-    /// The empty draft the app opens on.
+    /// The empty draft the app opens on, which is not yet a clip.
     pub fn blank() -> Self {
-        Self::new(1, None, None)
+        Self { started: false, ..Self::new(1, None, None) }
     }
 
     pub fn title(&self) -> String {
@@ -167,9 +173,11 @@ impl VoiceStudio {
     }
 
     /// Whatever is in the composer belongs to the draft it was typed into.
+    /// Typing into the opening draft is what starts it.
     pub(crate) fn save_open_text(&mut self, cx: &mut Context<Self>) {
         let text = self.text.read(cx).value().to_string();
         if let Some(draft) = self.draft_mut() {
+            draft.started |= !text.trim().is_empty();
             draft.text = text;
         }
     }

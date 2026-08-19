@@ -304,10 +304,10 @@ impl VoiceStudio {
         let mut rows: Vec<AnyElement> = Vec::new();
 
         for draft in self.drafts.iter() {
-            // An untouched draft is the empty composer itself, not something to
-            // list — the header already calls it "New clip". It joins the list
-            // the moment there are words in it.
-            if !draft.generating && draft.text.trim().is_empty() {
+            // The draft the app opens on is not a clip yet — the list shows its
+            // own empty state instead. Every other draft is one from the moment
+            // it is made, which is what gives New clip something to point at.
+            if !draft.started && !draft.generating {
                 continue;
             }
             let id = draft.id.clone();
@@ -403,7 +403,9 @@ impl VoiceStudio {
     /// The sidebar lists clips and nothing else. A voice belongs to the clip
     /// being made, not beside the work, so it lives in the inspector.
     pub(crate) fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let empty = self.clips.is_empty() && self.drafts.iter().all(|d| d.text.trim().is_empty());
+        // The empty state belongs to a list with nothing in it — including the
+        // draft rows, which now appear as soon as a clip is started.
+        let empty = self.clips.is_empty() && !self.drafts.iter().any(|d| d.started || d.generating);
         let count = self.clips.len();
 
         div()
@@ -566,9 +568,9 @@ impl VoiceStudio {
         let renaming = self.renaming.as_ref() == Some(&self.selected);
         // A draft with nothing in it is not yet a clip to name — the design
         // calls it "New clip" and offers no pencil until there is something.
-        let fresh = self
-            .draft()
-            .is_some_and(|d| d.name.is_none() && d.text.trim().is_empty() && !d.generating);
+        // Only the opening composer is "New clip"; a clip that has been started
+        // is "Untitled clip" until it is named, and can be renamed.
+        let fresh = self.draft().is_some_and(|d| !d.started && !d.generating);
         let title = match &self.selected {
             crate::clips::Selected::Draft(_) if fresh => t!("clip.fresh_title").to_string(),
             crate::clips::Selected::Draft(_) => {
