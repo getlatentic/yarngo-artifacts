@@ -225,6 +225,9 @@ compose:
   working:
     en: Generating
     sk: Generujem
+  starting:
+    en: getting the model ready…
+    sk: pripravujem model…
   while_generating:
     en: Keep typing if you want — this clip finishes either way.
     sk: Pokojne píšte ďalej — táto nahrávka sa dokončí tak či tak.
@@ -619,3 +622,41 @@ player:
   no_device:
     en: No speakers found — the file is still saved.
     sk: Nenašli sa reproduktory — súbor je aj tak uložený.
+
+inspect:
+  words:
+    en: Words
+    sk: Slová
+  spoken_by:
+    en: Spoken by
+    sk: Hovorí
+  made:
+    en: Made
+    sk: Vzniklo
+  took:
+    en: "%{seconds} s to generate"
+    sk: "%{seconds} s generovanie"
+  seed:
+    en: Seed
+    sk: Seed
+  pin_seed:
+    en: Use this seed again
+    sk: Použiť tento seed znova
+  unpin_seed:
+    en: Stop using this seed
+    sk: Prestať používať tento seed
+  file:
+    en: File
+    sk: Súbor
+  delete_clip:
+    en: Delete this clip
+    sk: Vymazať túto nahrávku
+  reference:
+    en: Reference
+    sk: Referencia
+  made_clips:
+    en: "%{count} clips"
+    sk: "%{count} nahrávok"
+  consent:
+    en: Permission recorded
+    sk: Zaznamenaný súhlas

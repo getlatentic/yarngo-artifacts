@@ -376,7 +376,9 @@ impl VoiceStudio {
                     })
                     .id(SharedString::from(format!("v-{id}")))
                     .on_click(cx.listener(move |this, _, _, cx| {
+                        this.inspector = Some(crate::inspector::Inspect::Voice(id.clone()));
                         if !this.model_can_clone() {
+                            cx.notify();
                             return;
                         }
                         this.selected_voice = Some(id.clone());
@@ -397,6 +399,7 @@ impl VoiceStudio {
                 let path = clip.path.clone();
                 let audio_s = clip.audio_s;
                 let remove = clip.id.clone();
+                let inspect = clip.id.clone();
                 // The clip in the player is lifted out of the list: it is the
                 // one the transport below belongs to, and without a mark the
                 // controls appear to belong to whichever row was clicked last.
@@ -457,6 +460,8 @@ impl VoiceStudio {
                     .id(SharedString::from(format!("c-{}", clip.id)))
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.load_clip(&path, audio_s, cx);
+                        this.inspector = Some(crate::inspector::Inspect::Clip(inspect.clone()));
+                        cx.notify();
                     }))
                     .into_any_element()
             })
@@ -736,6 +741,7 @@ impl VoiceStudio {
         div()
             .v_flex()
             .flex_1()
+            .min_w(px(0.0))
             .h_full()
             .gap(px(14.0))
             // Bounded so a tall composer cannot push the status row out from
@@ -1204,8 +1210,15 @@ impl VoiceStudio {
             // What the machine is doing, while it does it. A local wait can say
             // how much audio exists so far; a remote one could only spin.
             .when(matches!(self.status, Status::Generating), |this| {
-                let written = self.progress.as_ref().map(|p| p.written_s).unwrap_or(0.0);
-                let elapsed = self.progress.as_ref().map(|p| p.elapsed_s).unwrap_or(0.0);
+                // Nothing is reported until the engine reaches the first chunk:
+                // loading the model and building the speaker conditioning come
+                // first. Zeros for that stretch read as a stall, so the line
+                // says what is actually happening instead.
+                let reported = self.progress.clone();
+                let fraction = match &reported {
+                    Some(p) if p.chunks > 0 => p.chunks_done as f32 / p.chunks as f32,
+                    _ => 0.0,
+                };
                 let model = self
                     .models
                     .iter()
@@ -1249,13 +1262,16 @@ impl VoiceStudio {
                                                 ),
                                         )
                                         .child(crate::ui::mono(
-                                            t!(
-                                                "compose.written",
-                                                written = format!("{written:.1}"),
-                                                total = format!("{:.1}", self.expected_s),
-                                                elapsed = format!("{elapsed:.1}")
-                                            )
-                                            .to_string(),
+                                            match &reported {
+                                                Some(p) => t!(
+                                                    "compose.written",
+                                                    written = format!("{:.1}", p.written_s),
+                                                    total = format!("{:.1}", self.expected_s),
+                                                    elapsed = format!("{:.1}", p.elapsed_s)
+                                                )
+                                                .to_string(),
+                                                None => t!("compose.starting").to_string(),
+                                            },
                                             11.5,
                                             theme::hex(0x6B645A),
                                         )),
@@ -1277,11 +1293,10 @@ impl VoiceStudio {
                                     .h_full()
                                     .rounded_full()
                                     .bg(theme::hex(0xFF8A1F))
-                                    .w(relative(if self.expected_s > 0.0 {
-                                        (written / self.expected_s).clamp(0.0, 1.0)
-                                    } else {
-                                        0.0
-                                    })),
+                                    // Chunks finished, not seconds written
+                                    // against an estimate: the first is a fact,
+                                    // the second moves when the guess is wrong.
+                                    .w(relative(fraction)),
                             ),
                         )
                         .child(

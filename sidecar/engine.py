@@ -342,6 +342,14 @@ def m_register_voice(params: dict) -> dict:
         "reference_text": params.get("reference_text", ""),
         "label": params.get("label", voice_id),
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        # A working copy of what was agreed, so the app can show it beside the
+        # voice. `consent.log` stays the record — this one travels with the
+        # voice and would go with it if the voice were deleted.
+        "consent": {
+            "statement": params.get("consent_statement", ""),
+            "app_version": params.get("app_version", "unknown"),
+            "source": params.get("source", "recording"),
+        },
     }
     _save_voices_to_disk()
 

@@ -5,6 +5,7 @@
 //! something faster. Everything below `EngineHandle` is backend-agnostic.
 
 mod enrolment;
+mod inspector;
 mod models;
 mod settings;
 mod switcher;
@@ -174,6 +175,9 @@ pub struct VoiceStudio {
     /// every later visit is a sheet over the work in progress, including the
     /// first voice added from an empty one.
     pub(crate) in_setup: bool,
+    /// The right panel, and what it is looking at. `None` is closed, which is
+    /// also the width the workspace is designed for.
+    pub(crate) inspector: Option<inspector::Inspect>,
     /// A seed held for the next generation. Pinning is what turns "generate
     /// again" from a different reading into the same reading of new words.
     pub(crate) pinned_seed: Option<u32>,
@@ -223,6 +227,7 @@ impl VoiceStudio {
             take: None,
             clip_levels: Vec::new(),
             pinned_seed: None,
+            inspector: None,
             in_setup: false,
         };
         this.start_engine(cx);
@@ -779,6 +784,16 @@ impl VoiceStudio {
         self.take = None;
     }
 
+    /// Start whatever the transport is holding. Separate from `toggle_take`
+    /// because the caller here has just loaded something and means to hear it.
+    pub(crate) fn play_loaded(&mut self, cx: &mut Context<Self>) {
+        if let Some(player) = self.player.as_ref() {
+            player.play();
+        }
+        self.tick_playback(cx);
+        cx.notify();
+    }
+
     fn take_loaded(&self) -> bool {
         match (self.take.as_ref(), self.clip.as_ref()) {
             (Some(take), Some((path, _))) => *path == take.path,
@@ -1135,6 +1150,7 @@ impl VoiceStudio {
     }
 
     pub(crate) fn delete_voice(&mut self, voice_id: String, cx: &mut Context<Self>) {
+        self.inspector = None;
         let Some(engine) = self.engine.clone() else { return };
         self.confirming_voice = None;
         cx.spawn(async move |this, cx| {
@@ -1458,6 +1474,7 @@ impl Render for VoiceStudio {
                     .min_h(px(0.0))
                     .child(self.sidebar(cx))
                     .child(self.composer(cx))
+                    .child(self.inspector_panel(cx))
                     .into_any_element(),
             })
             // The design gives the workspace no status strip — the composer
