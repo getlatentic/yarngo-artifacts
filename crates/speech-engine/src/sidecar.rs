@@ -194,6 +194,11 @@ impl SpeechEngine for MlxSidecar {
         Ok(reply.clips)
     }
 
+    fn duplicate_clip(&mut self, clip_id: &str) -> Result<Vec<Clip>> {
+        let reply: ClipsReply = self.call("duplicate_clip", json!({ "clip_id": clip_id }))?;
+        Ok(reply.clips)
+    }
+
     fn system_info(&mut self) -> Result<SystemInfo> {
         self.call("system_info", json!({}))
     }

@@ -280,5 +280,7 @@ pub trait SpeechEngine {
 
     fn rename_clip(&mut self, clip_id: &str, name: &str) -> Result<Vec<Clip>>;
 
+    fn duplicate_clip(&mut self, clip_id: &str) -> Result<Vec<Clip>>;
+
     fn system_info(&mut self) -> Result<SystemInfo>;
 }

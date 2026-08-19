@@ -192,6 +192,9 @@ pub struct VoiceStudio {
     /// The name being edited inline in the header, and what it belongs to.
     pub(crate) clip_name: Entity<InputState>,
     pub(crate) renaming: Option<clips::Selected>,
+    /// A clip row's menu, and where on screen it was opened from. Anchored to
+    /// the click rather than to the row, because the list scrolls under it.
+    pub(crate) clip_menu: Option<(String, Point<Pixels>)>,
     /// Whether the clip inspector is showing. Closed by default: the two
     /// settings it holds are stated as chips in the composer header, and the
     /// workspace keeps the width the design gives it.
@@ -250,6 +253,7 @@ impl VoiceStudio {
             clip_levels: Vec::new(),
             pinned_seed: None,
             inspector: false,
+            clip_menu: None,
             drafts: vec![],
             selected: clips::Selected::Draft("draft-1".into()),
             next_draft: 1,
@@ -946,6 +950,24 @@ impl VoiceStudio {
         self.delete_clip(id, cx);
     }
 
+    /// Copy a clip, audio and all, so the copy can be changed or deleted
+    /// without touching the one it came from.
+    pub(crate) fn duplicate_clip(&mut self, id: String, cx: &mut Context<Self>) {
+        let Some(engine) = self.engine.clone() else { return };
+        cx.spawn(async move |this, cx| {
+            let clips = cx.background_spawn(async move { engine.duplicate_clip(id) }).await;
+            this.update(cx, |this, cx| {
+                match clips {
+                    Ok(clips) => this.clips = clips,
+                    Err(err) => this.status = Status::Failed(format!("{err}")),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     pub(crate) fn open_inspector(&mut self, cx: &mut Context<Self>) {
         self.inspector = true;
         cx.notify();
@@ -1568,6 +1590,7 @@ impl Render for VoiceStudio {
                     .when(self.enrolling_over_workspace(), |this| {
                         this.child(self.enrolment_sheet(window, cx))
                     })
+                    .child(self.clip_menu(cx))
                     .into_any_element(),
             })
             // The design gives the workspace no status strip — the composer

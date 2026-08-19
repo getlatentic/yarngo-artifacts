@@ -45,6 +45,7 @@ pub mod name {
     pub const RADIO_UNCHECKED: &str = "radio_button_unchecked";
     pub const MEMORY: &str = "memory";
     pub const EDIT_NOTE: &str = "edit_note";
+    pub const MORE_HORIZ: &str = "more_horiz";
     pub const EDIT: &str = "edit";
     pub const PROGRESS: &str = "progress_activity";
     pub const RECORD_VOICE: &str = "record_voice_over";

@@ -397,6 +397,23 @@ impl VoiceStudio {
                     current,
                     current,
                 )
+                .when(current, |d| {
+                    let menu_id = id.clone();
+                    d.child(
+                        div()
+                            .flex_none()
+                            .child(crate::icon::icon(
+                                crate::icon::name::MORE_HORIZ,
+                                17.0,
+                                theme::hex(0x8F4406),
+                            ))
+                            .id(SharedString::from(format!("menu-{menu_id}")))
+                            .on_click(cx.listener(move |this, event: &ClickEvent, _, cx| {
+                                this.clip_menu = Some((menu_id.clone(), event.position()));
+                                cx.notify();
+                            })),
+                    )
+                })
                 .id(SharedString::from(format!("c-{id}")))
                 .on_click(cx.listener(move |this, _, window, cx| {
                     this.select_clip(id.clone(), window, cx)
@@ -406,6 +423,93 @@ impl VoiceStudio {
         }
 
         rows
+    }
+
+    /// Rename, duplicate and delete, on the row rather than in the panel — a
+    /// clip you want to act on is one you can see in the list, not necessarily
+    /// the one open in the composer.
+    pub(crate) fn clip_menu(&self, cx: &mut Context<Self>) -> AnyElement {
+        let Some((id, at)) = self.clip_menu.clone() else {
+            return div().into_any_element();
+        };
+
+        fn item(label: String, danger: bool) -> Div {
+            div()
+                .h_flex()
+                .w_full()
+                .h(px(30.0))
+                .items_center()
+                .px(px(10.0))
+                .rounded(px(6.0))
+                .text_size(px(12.5))
+                .text_color(if danger { theme::hex(0xC7362B) } else { theme::hex(0x171717) })
+                .child(label)
+        }
+
+        div()
+            .absolute()
+            .inset_0()
+            // A click anywhere else puts the menu away, which is what makes it
+            // safe to open one from a row without committing to anything.
+            .id("clip-menu-scrim")
+            .on_click(cx.listener(|this, _, _, cx| {
+                this.clip_menu = None;
+                cx.notify();
+            }))
+            .child(
+                deferred(
+                    anchored().position(at).child(
+                        div()
+                            .v_flex()
+                            .w(px(180.0))
+                            .gap(px(2.0))
+                            .p(px(6.0))
+                            .rounded(px(10.0))
+                            .bg(theme::hex(0xFFFDFA))
+                            .border_1()
+                            .border_color(theme::hex(0xE4DCD0))
+                            .shadow_lg()
+                            .occlude()
+                            .child(
+                                item(t!("clip.rename").to_string(), false)
+                                    .id("menu-rename")
+                                    .on_click(cx.listener({
+                                        let id = id.clone();
+                                        move |this, _, window, cx| {
+                                            this.clip_menu = None;
+                                            this.select_clip(id.clone(), window, cx);
+                                            this.begin_rename(window, cx);
+                                        }
+                                    })),
+                            )
+                            .child(
+                                item(t!("clip.duplicate").to_string(), false)
+                                    .id("menu-duplicate")
+                                    .on_click(cx.listener({
+                                        let id = id.clone();
+                                        move |this, _, _, cx| {
+                                            this.clip_menu = None;
+                                            this.duplicate_clip(id.clone(), cx);
+                                        }
+                                    })),
+                            )
+                            .child(div().h(px(1.0)).my(px(3.0)).bg(theme::hex(0xEBE4D9)))
+                            .child(
+                                item(t!("inspect.delete_clip").to_string(), true)
+                                    .id("menu-delete")
+                                    .on_click(cx.listener({
+                                        let id = id.clone();
+                                        move |this, _, window, cx| {
+                                            this.clip_menu = None;
+                                            this.delete_selected_clip(id.clone(), window, cx);
+                                        }
+                                    })),
+                            ),
+                    ),
+                )
+                .with_priority(1),
+            )
+            .into_any_element()
     }
 
     /// The sidebar lists clips and nothing else. A voice belongs to the clip

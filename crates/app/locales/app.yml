@@ -286,6 +286,12 @@ clip:
   reuse_seed:
     en: Reuse
     sk: Použiť znova
+  rename:
+    en: Rename
+    sk: Premenovať
+  duplicate:
+    en: Duplicate
+    sk: Duplikovať
   this_clip:
     en: This clip
     sk: Táto nahrávka

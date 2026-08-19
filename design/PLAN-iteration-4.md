@@ -199,24 +199,21 @@ finished clip (4d), renaming from the header with the actions row staying put
 Four agents read 4a–4i against the code and the screenshots. Most of it is
 applied; this is what remains, and why.
 
-### Structural, and bigger than a fix
+### Structural — now built
 
-**A finished clip's inspector is a different panel.** 4d does not show VOICE /
-MODEL / DELIVERY at all. It shows **MADE WITH** — a read-only record of the
-voice, model, speed and seed, with a `Reuse` action — and **TAKES**, a list of
-this clip's takes (`Take 2 · 14:02 · 0:16 · seed 4417`, `Take 1 · 13:58`), each
-selectable, plus the line "Rename, duplicate and delete are on the row's menu."
+**A finished clip's inspector is a different panel**, and is. 4d shows
+**MADE WITH** — the voice, model and seed that produced the reading you are
+hearing, with a `Reuse` action — and **TAKES**, every reading of the clip.
 
-That means **a clip holds several takes**, and "Generate again" adds one rather
-than making a new clip in the list. The implementation makes a new clip each
-time, so the sidebar grows where the design's stays still. This is a data model
-change — clips gain a takes array, the sidebar keeps one row per clip, and the
-player points at the selected take — and it is the largest single thing still
-outstanding in iteration 4.
+So **a clip holds several takes**, and "Generate again" adds one rather than a
+second row in the list. The sidecar stores them newest-first and migrates older
+records on read; a take whose audio has gone is dropped, and a clip with none
+left is not listed. The selection carries the take as well as the clip.
 
-**Clip rows have a `more_horiz` menu** carrying rename, duplicate and delete.
-The inspector line above refers to it; nothing implements it. Delete currently
-lives at the bottom of the inspector instead, and duplicate does not exist.
+**The `more_horiz` row menu** carries rename, duplicate and delete, anchored to
+the click rather than to the row so the list can scroll under it. Duplicate
+copies the audio too — a copy you can change or delete without touching the
+original.
 
 ### Applied, for the record
 

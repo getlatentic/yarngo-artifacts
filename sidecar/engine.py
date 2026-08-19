@@ -1007,6 +1007,40 @@ def m_list_clips(_params: dict) -> dict:
     return {"clips": _load_clips()}
 
 
+def m_duplicate_clip(params: dict) -> dict:
+    """Copy a clip and its takes, audio included.
+
+    A copy, not a reference: the point of duplicating is to have a second one
+    you can change or delete without touching the first, and a shared audio
+    file would make deleting either of them break the other.
+    """
+    clips = _load_clips()
+    source = next((c for c in clips if c.get("id") == params["clip_id"]), None)
+    if source is None:
+        raise ValueError(f"unknown clip {params['clip_id']!r}")
+
+    now = int(time.time() * 1000)
+    copy = dict(source)
+    copy["id"] = f"clip-{now}"
+    copy["name"] = f"{source.get('name', '')} copy".strip()
+    copy["created"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    copy["takes"] = []
+    CLIP_DIR.mkdir(parents=True, exist_ok=True)
+    for index, take in enumerate(source.get("takes", [])):
+        audio = Path(take.get("path", ""))
+        if not audio.exists():
+            continue
+        new_take = dict(take)
+        new_take["id"] = f"take-{now}-{index}"
+        new_take["path"] = str(CLIP_DIR / f"{copy['id']}-{new_take['id']}.wav")
+        shutil.copy2(audio, new_take["path"])
+        copy["takes"].append(new_take)
+
+    clips.insert(clips.index(source), copy)
+    _save_clips(clips)
+    return {"clips": clips}
+
+
 def m_rename_clip(params: dict) -> dict:
     """Rename a clip. The audio and the text it was made from are untouched —
     only what it is called in the list changes."""
@@ -1049,6 +1083,7 @@ METHODS = {
     "prepare_voice": m_prepare_voice,
     "list_clips": m_list_clips,
     "rename_clip": m_rename_clip,
+    "duplicate_clip": m_duplicate_clip,
     "delete_clip": m_delete_clip,
     "install_model": m_install_model,
     "delete_model": m_delete_model,
