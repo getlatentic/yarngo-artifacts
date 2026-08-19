@@ -84,6 +84,30 @@ pub enum Progress {
     Failed(String),
 }
 
+/// Whether this machine can run the speech stack at all, and why not if it
+/// cannot.
+///
+/// The runtime installer is generic — python-build-standalone publishes an
+/// interpreter for Intel Macs, Linux and Windows — but the thing it exists to
+/// run is not: `mlx-speech` is built on MLX, which is Apple-silicon only. Left
+/// ungated, an Intel Mac downloads several hundred megabytes, installs them
+/// happily, and then fails at `import mlx_speech` with a Python traceback that
+/// names none of this. Refusing at the start costs nothing and explains itself.
+pub fn host_supported() -> Result<(), String> {
+    match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("macos", "aarch64") => Ok(()),
+        ("macos", _) => Err(
+            "Yarngo Studio needs an Apple silicon Mac — M1 or later. \
+             The speech models run on Apple's MLX, which Intel Macs cannot use."
+                .into(),
+        ),
+        (os, _) => Err(format!(
+            "Yarngo Studio runs on Apple silicon Macs. This is {os}, and the \
+             speech models have no runtime here yet."
+        )),
+    }
+}
+
 /// The python-build-standalone asset for this host.
 fn python_asset() -> Option<&'static str> {
     Some(match (std::env::consts::OS, std::env::consts::ARCH) {
@@ -179,6 +203,12 @@ pub fn install(report: impl FnMut(Progress)) {
 /// the link on the setup screen points at; everything after unpacking it is
 /// the same path a normal install takes.
 pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) {
+    // Before anything is downloaded, not after.
+    if let Err(reason) = host_supported() {
+        report(Progress::Failed(reason));
+        return;
+    }
+
     let runtime = paths::runtime_dir();
     let python_dir = runtime.join("python");
 

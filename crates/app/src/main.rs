@@ -1690,6 +1690,33 @@ impl VoiceStudio {
                     .w_full()
                     .max_w(px(820.0))
                     .gap(px(18.0))
+                    // Said once, at the top, on a machine that can never run
+                    // this: everything below it would be a wait for nothing.
+                    .when_some(runtime::host_supported().err(), |this, reason| {
+                        this.child(
+                            div()
+                                .h_flex()
+                                .w_full()
+                                .items_start()
+                                .gap(px(14.0))
+                                .px(px(18.0))
+                                .py(px(16.0))
+                                .rounded(px(12.0))
+                                .bg(theme::hex(0xFFF9F5))
+                                .border_1()
+                                .border_color(theme::hex(0xF0B7AF))
+                                .child(icon::icon(icon::name::BLOCK, 19.0, theme::hex(0xC7362B)))
+                                .child(
+                                    div()
+                                        .flex_1()
+                                        .min_w(px(0.0))
+                                        .text_size(px(12.5))
+                                        .line_height(px(19.0))
+                                        .text_color(theme::hex(0x5F594F))
+                                        .child(reason),
+                                ),
+                        )
+                    })
                     // What this is and what it will cost, before the steps —
                     // the wizard opens on a stranger's machine.
                     .child(
@@ -1835,7 +1862,9 @@ impl VoiceStudio {
                                                     ),
                                             ),
                                     )
-                                    .when(!started, |d| {
+                                    // Nothing to offer on a machine that cannot
+                                    // run it.
+                                    .when(!started && runtime::host_supported().is_ok(), |d| {
                                         d.child(
                                             div()
                                                 .h(px(36.0))

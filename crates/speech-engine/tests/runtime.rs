@@ -181,6 +181,47 @@ fn an_unusable_archive_fails_with_a_reason() {
 }
 
 #[test]
+fn an_unsupported_host_is_refused_before_anything_is_downloaded() {
+    let scratch = Scratch::new();
+    let source = tempfile::tempdir().unwrap();
+    let archive = fake_archive(source.path(), true);
+
+    let mut steps = Vec::new();
+    let mut failure = None;
+    runtime::install_from(Some(archive), |p| match p {
+        Progress::Step(step) => steps.push(step),
+        Progress::Failed(err) => failure = Some(err),
+        _ => {}
+    });
+
+    match runtime::host_supported() {
+        // On a machine that can run it, the install proceeds as usual.
+        Ok(()) => assert!(!steps.is_empty(), "a supported host should get on with it"),
+        Err(reason) => {
+            assert_eq!(failure.as_deref(), Some(reason.as_str()));
+            assert!(steps.is_empty(), "nothing should happen first: {steps:?}");
+            assert!(
+                !runtime::interpreter(scratch.path()).exists(),
+                "nothing should be installed on a host that cannot use it"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_refusal_names_the_reason_rather_than_the_symptom() {
+    // Whatever this host is, the message has to say what is wrong in words the
+    // person reading it can act on — never a bare "unsupported".
+    if let Err(reason) = runtime::host_supported() {
+        assert!(reason.len() > 40, "too terse to act on: {reason}");
+        assert!(
+            reason.contains("Apple silicon") || reason.contains("Apple's MLX"),
+            "the reason should name what is actually missing: {reason}"
+        );
+    }
+}
+
+#[test]
 fn the_download_url_names_the_pinned_version() {
     // Only meaningful where there is a prebuilt interpreter for the host; on
     // anything else `None` is the right answer and the installer says so.

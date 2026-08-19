@@ -68,17 +68,20 @@ own project.
 **`mlx-speech` is live on PyPI and the model repos resolve on Hugging Face** —
 both checked. The dependency is real, not aspirational.
 
-### 4. Apple Silicon only, and the app does not say so
+### 4. Apple silicon only — **now said, before anything is downloaded**
 
-MLX is Apple-silicon only. `runtime.rs` carries CPython target strings for
-`x86_64-apple-darwin`, Linux and Windows, so the *runtime* installer looks
-cross-platform while the thing it exists to run is not. On an Intel Mac the app
-will install a runtime and then fail at `import mlx_speech`, with no explanation
-that names the real reason.
+MLX is Apple-silicon only, so the runtime installer being generic was a trap:
+an Intel Mac would download several hundred megabytes, install them happily,
+and fail at `import mlx_speech` with a traceback naming none of it.
 
-Either gate it at launch — refuse early, in plain words, on anything but Apple
-silicon — or remove the misleading targets. Minimum system version is already
-declared as macOS 13.
+`runtime::host_supported()` refuses first, and the setup screen states the
+reason where the install button would be:
+
+> Yarngo Studio needs an Apple silicon Mac — M1 or later. The speech models run
+> on Apple's MLX, which Intel Macs cannot use.
+
+Two tests hold it: nothing is downloaded or unpacked on an unsupported host,
+and the message names what is missing rather than saying "unsupported".
 
 ---
 
@@ -159,17 +162,15 @@ This is the part that is unusual for a desktop app and worth getting right.
 
 ## Where this stands
 
-Done: tests, iteration 4, the Storage and About panes, the icon, and the
-signing and notarization path.
+Done: tests, iteration 4, the Storage and About panes, the icon, the signing
+and notarization path, and the Apple-silicon gate.
 
 Left, in order:
 
 1. **A Developer ID certificate**, then one signed and notarized build, opened
    on a Mac that has never seen it. This is the only remaining thing that stops
    the app being handed to another person.
-2. **Gate or fix the Intel path.** An Intel Mac currently downloads a runtime
-   and then fails at `import mlx_speech` with nothing naming the real reason.
-3. **Terms for voice likeness**, beyond the per-voice checkbox. The checkbox
+2. **Terms for voice likeness**, beyond the per-voice checkbox. The checkbox
    protects the record; terms protect the position.
-4. **Decide updates** before the first build goes out, not after.
-5. The first-run story, if it is changing from "state the wait honestly".
+3. **Decide updates** before the first build goes out, not after.
+4. The first-run story, if it is changing from "state the wait honestly".
