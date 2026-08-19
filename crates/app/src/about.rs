@@ -12,7 +12,6 @@
 //! them here would attribute a licence to nothing and bury it where nobody is
 //! deciding anything.
 
-use gpui::prelude::FluentBuilder;
 use gpui::*;
 use gpui_component::StyledExt;
 use rust_i18n::t;

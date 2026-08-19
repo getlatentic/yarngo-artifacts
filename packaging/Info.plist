@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Yarngo Studio records a short sample of your voice so it can speak in your voice. The recording stays on this Mac.</string>
+  <string>yarngo studio records a short sample of your voice so it can speak in your voice. The recording stays on this Mac.</string>
   <key>NSHighResolutionCapable</key>
   <true/>
 </dict>

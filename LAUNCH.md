@@ -44,7 +44,17 @@ Gatekeeper assessment — because each of those fails silently otherwise.
 Application certificate**, then one run with the environment set, and a check
 that the stapled artifact opens on a Mac that has never seen it.
 
-### 2. The application icon — **done**
+### 2. Naming — **all lowercase**
+
+The brand guidelines said "use Yarngo Sentence case in all writing; the
+lowercase yarngo is the visual wordmark". That rule is superseded: it is
+`yarngo studio` in writing too, including the bundle name and the microphone
+prompt. Two things deliberately keep the old spelling — the data directory,
+because renaming it would strand every existing install's voices, clips and
+consent log, and `Yarngo Studio.dc.html`, which is a filename in the design
+bundle.
+
+### 3. The application icon — **done**
 
 Cut from the brand mark by `scripts/make-app-icon.py`, following the
 guidelines' own rule for it: "The aperture fills the tile", on an orange field
@@ -52,10 +62,12 @@ rather than the in-product warm white. Apple's macOS geometry — 1024 canvas,
 824 tile, 185 corner radius — and wired into the packager, so the bundle now
 carries `YarngoStudio.icns` and names it in its plist.
 
-### 3. First run needs the network, and asks for a lot of it
+### 4. First run needs the network, and asks for a lot of it
 
-In order: ~350 MB of CPython, then `pip install mlx-speech` and its dependency
-tree, then a 3.4 GB model. The offline path covers only the first of those —
+A machine that already has MLX and `mlx-speech` skips the first two entirely —
+the app looks for an interpreter that can import the package before offering to
+download one. For everyone else, in order: ~350 MB of CPython, then
+`pip install mlx-speech` and its dependency tree, then a 3.4 GB model. The offline path covers only the first of those —
 "Install from a file" takes the interpreter archive and the card says plainly
 that the packages still come from the network.
 
@@ -68,7 +80,7 @@ own project.
 **`mlx-speech` is live on PyPI and the model repos resolve on Hugging Face** —
 both checked. The dependency is real, not aspirational.
 
-### 4. Apple silicon only — **now said, before anything is downloaded**
+### 5. Apple silicon only — **now said, before anything is downloaded**
 
 MLX is Apple-silicon only, so the runtime installer being generic was a trap:
 an Intel Mac would download several hundred megabytes, install them happily,

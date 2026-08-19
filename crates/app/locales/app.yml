@@ -4,8 +4,8 @@ _version: 2
 
 app:
   name:
-    en: Yarngo Studio
-    sk: Yarngo Studio
+    en: yarngo studio
+    sk: yarngo studio
   tagline:
     en: Your voice, on your machine. Nothing is uploaded.
     sk: Váš hlas, vo vašom počítači. Nič sa nenahráva na internet.
@@ -116,8 +116,8 @@ voice:
     en: No voice yet
     sk: Zatiaľ žiadny hlas
   none_detail:
-    en: Yarngo speaks in a voice you record. You read a short script, twenty seconds, and it is done.
-    sk: Yarngo hovorí hlasom, ktorý nahráte. Prečítate krátky text, dvadsať sekúnd, a je to.
+    en: yarngo speaks in a voice you record. You read a short script, twenty seconds, and it is done.
+    sk: yarngo hovorí hlasom, ktorý nahráte. Prečítate krátky text, dvadsať sekúnd, a je to.
   add_takes:
     en: about a minute
     sk: približne minútu
@@ -653,8 +653,8 @@ about:
 
 setup:
   explain:
-    en: Yarngo Studio downloads its speech engine the first time you open it — about 350 MB, plus a voice model. It only happens once, and everything stays on this machine.
-    sk: Yarngo Studio si pri prvom spustení stiahne rečový engine — približne 350 MB a hlasový model. Stane sa to len raz a všetko zostáva v tomto počítači.
+    en: yarngo studio downloads its speech engine the first time you open it — about 350 MB, plus a voice model. It only happens once, and everything stays on this machine.
+    sk: yarngo studio si pri prvom spustení stiahne rečový engine — približne 350 MB a hlasový model. Stane sa to len raz a všetko zostáva v tomto počítači.
   runtime_ready:
     en: Installed and running
     sk: Nainštalované a beží
@@ -665,17 +665,17 @@ setup:
     en: First run
     sk: Prvé spustenie
   header_title:
-    en: Set up Yarngo Studio
-    sk: Nastavenie Yarngo Studio
+    en: Set up yarngo studio
+    sk: Nastavenie yarngo studio
   header_detail:
     en: Three steps, a few minutes. No account. Speech is generated on this machine.
     sk: Tri kroky, pár minút. Bez účtu. Reč vzniká v tomto počítači.
   install:
-    en: Set up Yarngo Studio
-    sk: Nastaviť Yarngo Studio
+    en: Set up yarngo studio
+    sk: Nastaviť yarngo studio
   title:
-    en: Set up Yarngo Studio
-    sk: Nastavenie Yarngo Studio
+    en: Set up yarngo studio
+    sk: Nastavenie yarngo studio
   this_mac:
     en: This machine
     sk: Tento počítač
@@ -704,8 +704,8 @@ setup:
     en: Resume download
     sk: Pokračovať v sťahovaní
   runtime_detail:
-    en: "%{size} · required. Yarngo cannot generate speech without it."
-    sk: "%{size} · povinné. Yarngo bez toho nedokáže generovať reč."
+    en: "%{size} · required. yarngo cannot generate speech without it."
+    sk: "%{size} · povinné. yarngo bez toho nedokáže generovať reč."
   until_installed:
     en: Until it is installed
     sk: Kým nie je nainštalovaný
@@ -725,7 +725,7 @@ setup:
     en: No connection on this machine?
     sk: Tento počítač nie je pripojený?
   no_connection_detail:
-    en: Download the archive somewhere else and point Yarngo at the file. The speech packages still come from the network afterwards.
+    en: Download the archive somewhere else and point yarngo at the file. The speech packages still come from the network afterwards.
     sk: Stiahnite archív inde a ukážte naň Yarngu. Rečové balíky sa aj tak stiahnu zo siete.
   install_from_file:
     en: Install from a file
@@ -737,8 +737,8 @@ setup:
     en: Copy link
     sk: Kopírovať odkaz
   picked_up_next_time:
-    en: Yarngo picks up an interrupted download next time it opens.
-    sk: Yarngo pokračuje v prerušenom sťahovaní pri ďalšom spustení.
+    en: yarngo picks up an interrupted download next time it opens.
+    sk: yarngo pokračuje v prerušenom sťahovaní pri ďalšom spustení.
   where:
     en: Where things go
     sk: Kam sa veci ukladajú

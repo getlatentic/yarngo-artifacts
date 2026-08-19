@@ -28,7 +28,7 @@ const PYTHON_RELEASE: &str = "20260814";
 /// What the runtime actually is, named for the user. Not a marketing version:
 /// the interpreter pin above is the thing that decides reproducibility, so it
 /// is what gets shown.
-pub const NAME: &str = "Yarngo Runtime";
+pub const NAME: &str = "yarngo runtime";
 pub const VERSION: &str = PYTHON_VERSION;
 /// Installed size, measured on macOS arm64 rather than estimated: interpreter
 /// plus MLX and its dependencies.
@@ -97,12 +97,12 @@ pub fn host_supported() -> Result<(), String> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("macos", "aarch64") => Ok(()),
         ("macos", _) => Err(
-            "Yarngo Studio needs an Apple silicon Mac — M1 or later. \
+            "yarngo studio needs an Apple silicon Mac — M1 or later. \
              The speech models run on Apple's MLX, which Intel Macs cannot use."
                 .into(),
         ),
         (os, _) => Err(format!(
-            "Yarngo Studio runs on Apple silicon Macs. This is {os}, and the \
+            "yarngo studio runs on Apple silicon Macs. This is {os}, and the \
              speech models have no runtime here yet."
         )),
     }

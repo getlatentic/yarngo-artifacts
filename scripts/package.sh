@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Package Yarngo Studio.
+# Package yarngo studio.
 #
 # cargo-packager reads [package.metadata.packager] and emits the right artifact
 # per host: .app/.dmg on macOS, NSIS/MSI on Windows, deb/AppImage on Linux.
@@ -20,17 +20,30 @@ command -v cargo-packager >/dev/null || {
 }
 
 PROFILE="${PROFILE:-debug}"
-# cargo's dev profile writes to target/debug; cargo-packager names the directory
-# directly, so the two need translating rather than passing through.
+APP="target/$PROFILE/yarngo studio.app"
+
+# The .app is built and signed BEFORE the disk image is made, so the image
+# wraps a signed app rather than the ad-hoc one cargo-packager leaves behind.
+# Built the other way round, the artifact people actually download carries the
+# wrong signature — and a failure making the image used to abort the run before
+# signing happened at all, which is the same bug wearing a different hat.
+pack() {
+  # cargo's dev profile writes to target/debug; cargo-packager names the
+  # directory directly, so the two need translating rather than passing through.
+  if [[ "$PROFILE" == "release" ]]; then
+    cargo packager --release --formats "$1" "${@:2}"
+  else
+    cargo packager --formats "$1" "${@:2}"
+  fi
+}
+
 if [[ "$PROFILE" == "release" ]]; then
   cargo build --release -p voicestudio
-  cargo packager --release ${FORMATS:+--formats "$FORMATS"} "$@"
 else
   cargo build -p voicestudio
-  cargo packager ${FORMATS:+--formats "$FORMATS"} "$@"
 fi
 
-APP="target/$PROFILE/Yarngo Studio.app"
+pack app "$@"
 [[ -d "$APP" ]] || { echo "no bundle at $APP" >&2; exit 1; }
 
 # cargo-packager ad-hoc signs without entitlements and derives an identifier
@@ -55,6 +68,40 @@ sign "$APP"
 
 codesign --verify --strict --verbose=2 "$APP" 2>&1 | tail -2
 echo "packaged: $APP"
+
+# Now the image, around the signed app — built here rather than by
+# cargo-packager, because `--formats dmg` re-creates the .app as a dependency
+# and would replace the bundle that was just signed with a fresh ad-hoc one.
+# The image people download has to contain the signature, not a copy of it made
+# a moment too early.
+if [[ "${FORMATS:-dmg}" == *dmg* ]]; then
+  VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+  DMG="target/$PROFILE/yarngo studio_${VERSION}_aarch64.dmg"
+  STAGE=$(mktemp -d)
+
+  # A run that failed part way can leave its volume mounted, and every later
+  # attempt then fails on a name already taken. Clear it rather than reporting
+  # it as a new fault.
+  while IFS= read -r stale; do
+    [[ -n "$stale" ]] && hdiutil detach "$stale" -force >/dev/null 2>&1 || true
+  done < <(ls -d "/Volumes/yarngo studio"* 2>/dev/null || true)
+
+  cp -R "$APP" "$STAGE/"
+  # Somewhere to drop it, so the image explains itself without instructions.
+  ln -s /Applications "$STAGE/Applications"
+  rm -f "$DMG"
+  if hdiutil create -volname "yarngo studio" -srcfolder "$STAGE" \
+      -ov -format UDZO "$DMG" >/dev/null; then
+    [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]] &&
+      codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$DMG"
+    echo "packaged: $DMG"
+  else
+    # A disk image is a convenience; the signed app is the artifact that
+    # matters, and losing the run over the wrapper would be the wrong trade.
+    echo "the disk image could not be built; the signed app stands" >&2
+  fi
+  rm -rf "$STAGE"
+fi
 
 # --- Notarization, when a Developer ID is configured -------------------------
 # Ad-hoc signing is enough for this machine: microphone access needs the bundle

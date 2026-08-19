@@ -25,10 +25,10 @@ rust-i18n = "4.2"
 # Inno Setup) because it predates the tooling; cargo-bundle still has no Windows
 # support, so it is not an option for a cross-platform target.
 [package.metadata.packager]
-product-name = "Yarngo Studio"
+product-name = "yarngo studio"
 identifier = "dev.yarngo.studio"
 description = "Speak text in your own voice, entirely on your machine."
-authors = ["Yarngo"]
+authors = ["yarngo"]
 category = "Productivity"
 # The sidecar and its locales ship alongside the binary.
 resources = ["../../sidecar/**/*", "locales/**/*"]
