@@ -171,13 +171,27 @@ def _load_clips() -> list[dict]:
         clips = json.loads(path.read_text())
     except (json.JSONDecodeError, OSError):
         return []
-    # Drop entries whose audio has gone, rather than listing a dead row.
-    live = [c for c in clips if Path(c.get("path", "")).exists()]
-    for clip in live:
+    for clip in clips:
         # Clips written before names existed are named from their own words,
         # which is the same rule a new clip follows.
         clip.setdefault("name", _working_name(clip.get("text", "")))
-    return live
+        # Clips written before takes existed are one take, described by the
+        # fields that used to sit on the clip itself.
+        if "takes" not in clip:
+            clip["takes"] = [
+                {
+                    "id": f"take-{clip['id']}",
+                    "path": clip.get("path", ""),
+                    "audio_s": clip.get("audio_s", 0.0),
+                    "gen_s": clip.get("gen_s", 0.0),
+                    "seed": clip.get("seed"),
+                    "created": clip.get("created", ""),
+                }
+            ]
+        # A take whose audio has gone is not listed; a clip with none left is
+        # not either, rather than showing a row that cannot play.
+        clip["takes"] = [t for t in clip["takes"] if Path(t.get("path", "")).exists()]
+    return [c for c in clips if c["takes"]]
 
 
 def _save_clips(clips: list[dict]) -> None:
@@ -836,9 +850,11 @@ def m_system_info(_params: dict) -> dict:
 def _measured_rtf(model_id: str) -> float | None:
     """Speed from this user's own clips, not a benchmark from another machine."""
     samples = [
-        c["gen_s"] / c["audio_s"]
+        t["gen_s"] / t["audio_s"]
         for c in _load_clips()
-        if c.get("model") == model_id and c.get("audio_s")
+        if c.get("model") == model_id
+        for t in c["takes"]
+        if t.get("audio_s")
     ]
     if not samples:
         return None
@@ -920,29 +936,46 @@ def m_synthesize(params: dict) -> dict:
     clip = None
     if params.get("keep", True):
         CLIP_DIR.mkdir(parents=True, exist_ok=True)
-        clip_id = f"clip-{int(time.time() * 1000)}"
-        kept = CLIP_DIR / f"{clip_id}.wav"
-        shutil.copy2(out, kept)
-        text = params["text"].strip()
-        clip = {
-            "id": clip_id,
-            # A title short enough for a sidebar row, from the words themselves.
-            "title": (text[:44] + "…") if len(text) > 45 else text,
-            # A working name taken from the first words, and the user's to
-            # change. `title` stays what the text says; `name` is what they
-            # call it.
-            "name": params.get("name") or _working_name(text),
-            "text": text,
-            "path": str(kept),
-            "voice_id": voice_id,
-            "model": model_id,
+        now = int(time.time() * 1000)
+        take = {
+            "id": f"take-{now}",
+            "path": "",
             "audio_s": round(audio_s, 2),
             "gen_s": round(gen_s, 2),
             "seed": int(seed),
             "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
+
         clips = _load_clips()
-        clips.insert(0, clip)
+        # Generating again adds a take to the clip it came from rather than a
+        # second clip: the words are the same, the reading is not, and the list
+        # should stay one row per thing you wrote.
+        existing = next(
+            (c for c in clips if c["id"] == params.get("clip_id")), None
+        )
+        clip = existing
+        if clip is None:
+            text = params["text"].strip()
+            clip = {
+                "id": f"clip-{now}",
+                # A title short enough for a sidebar row, from the words.
+                "title": (text[:44] + "…") if len(text) > 45 else text,
+                # A working name taken from the first words, and the user's to
+                # change. `title` stays what the text says; `name` is what they
+                # call it.
+                "name": params.get("name") or _working_name(text),
+                "text": text,
+                "voice_id": voice_id,
+                "model": model_id,
+                "created": take["created"],
+                "takes": [],
+            }
+            clips.insert(0, clip)
+
+        take["path"] = str(CLIP_DIR / f"{clip['id']}-{take['id']}.wav")
+        shutil.copy2(out, take["path"])
+        # Newest first, which is the order the panel lists them in.
+        clip["takes"].insert(0, take)
         _save_clips(clips)
 
     return {
@@ -991,9 +1024,10 @@ def m_delete_clip(params: dict) -> dict:
     keep = []
     for clip in clips:
         if clip.get("id") == params["clip_id"]:
-            audio = Path(clip.get("path", ""))
-            if audio.exists() and audio.is_relative_to(CLIP_DIR):
-                audio.unlink()
+            for take in clip.get("takes", []):
+                audio = Path(take.get("path", ""))
+                if audio.exists() and audio.is_relative_to(CLIP_DIR):
+                    audio.unlink()
         else:
             keep.append(clip)
     _save_clips(keep)

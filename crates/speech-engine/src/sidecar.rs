@@ -208,6 +208,7 @@ impl SpeechEngine for MlxSidecar {
                 "voice_id": request.voice_id,
                 "seed": request.seed,
                 "name": request.name,
+                "clip_id": request.clip_id,
             }),
         )
     }

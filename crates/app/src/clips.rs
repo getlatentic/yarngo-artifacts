@@ -66,7 +66,9 @@ impl Draft {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Selected {
     Draft(String),
-    Clip(String),
+    /// A clip, and which of its takes is being listened to. Generating again
+    /// adds a take, so "the clip" is never enough on its own.
+    Clip(String, String),
 }
 
 impl VoiceStudio {
@@ -74,7 +76,7 @@ impl VoiceStudio {
     pub(crate) fn draft(&self) -> Option<&Draft> {
         match &self.selected {
             Selected::Draft(id) => self.drafts.iter().find(|d| &d.id == id),
-            Selected::Clip(_) => None,
+            Selected::Clip(..) => None,
         }
     }
 
@@ -84,14 +86,24 @@ impl VoiceStudio {
                 let id = id.clone();
                 self.drafts.iter_mut().find(|d| d.id == id)
             }
-            Selected::Clip(_) => None,
+            Selected::Clip(..) => None,
         }
     }
 
     /// The finished clip being looked at, if the selection is one.
     pub(crate) fn clip(&self) -> Option<&speech_engine::Clip> {
         match &self.selected {
-            Selected::Clip(id) => self.clips.iter().find(|c| &c.id == id),
+            Selected::Clip(id, _) => self.clips.iter().find(|c| &c.id == id),
+            Selected::Draft(_) => None,
+        }
+    }
+
+    /// The take being listened to: the one selected, or the newest if that one
+    /// has gone.
+    pub(crate) fn take(&self) -> Option<&speech_engine::Take> {
+        let clip = self.clip()?;
+        match &self.selected {
+            Selected::Clip(_, take) => clip.take(take).or_else(|| clip.latest()),
             Selected::Draft(_) => None,
         }
     }
@@ -101,7 +113,7 @@ impl VoiceStudio {
     pub(crate) fn clip_voice(&self) -> Option<&str> {
         match &self.selected {
             Selected::Draft(_) => self.draft().and_then(|d| d.voice_id.as_deref()),
-            Selected::Clip(_) => self.clip().and_then(|c| c.voice_id.as_deref()),
+            Selected::Clip(..) => self.clip().and_then(|c| c.voice_id.as_deref()),
         }
     }
 
@@ -111,7 +123,7 @@ impl VoiceStudio {
                 .draft()
                 .and_then(|d| d.model.as_deref())
                 .or(self.selected_model.as_deref()),
-            Selected::Clip(_) => self.clip().map(|c| c.model.as_str()),
+            Selected::Clip(..) => self.clip().map(|c| c.model.as_str()),
         }
     }
 
@@ -163,12 +175,34 @@ impl VoiceStudio {
     /// Point the workspace at a finished clip and load its audio, without
     /// starting it — the design shows a player, not a surprise.
     pub(crate) fn select_clip(&mut self, id: String, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(latest) = self
+            .clips
+            .iter()
+            .find(|c| c.id == id)
+            .and_then(|c| c.latest())
+            .map(|t| t.id.clone())
+        else {
+            return;
+        };
+        self.select_take(id, latest, window, cx);
+    }
+
+    /// Point the workspace at one reading of a clip and load its audio, without
+    /// starting it — the design shows a player, not a surprise.
+    pub(crate) fn select_take(
+        &mut self,
+        clip_id: String,
+        take_id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.save_open_text(cx);
-        let Some(clip) = self.clips.iter().find(|c| c.id == id).cloned() else { return };
-        self.selected = Selected::Clip(id);
+        let Some(clip) = self.clips.iter().find(|c| c.id == clip_id).cloned() else { return };
+        let Some(take) = clip.take(&take_id).or_else(|| clip.latest()).cloned() else { return };
+        self.selected = Selected::Clip(clip_id, take.id);
         self.text.update(cx, |state, cx| state.set_value(clip.text.clone(), window, cx));
         self.renaming = None;
-        self.load_clip(&clip.path, clip.audio_s, cx);
+        self.load_clip(&take.path, take.audio_s, cx);
         cx.notify();
     }
 
@@ -194,7 +228,7 @@ impl VoiceStudio {
         );
         draft.text = clip.text.clone();
         draft.name = Some(clip.name.clone());
-        draft.seed = clip.seed;
+        draft.seed = self.take().and_then(|t| t.seed);
         self.selected = Selected::Draft(draft.id.clone());
         self.drafts.insert(0, draft);
         self.text.update(cx, |state, cx| state.set_value(clip.text, window, cx));
@@ -205,7 +239,7 @@ impl VoiceStudio {
     pub(crate) fn begin_rename(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let current = match &self.selected {
             Selected::Draft(_) => self.draft().map(Draft::title),
-            Selected::Clip(_) => self.clip().map(|c| c.name.clone()),
+            Selected::Clip(..) => self.clip().map(|c| c.name.clone()),
         };
         let Some(current) = current else { return };
         self.clip_name.update(cx, |state, cx| state.set_value(current, window, cx));
@@ -224,7 +258,7 @@ impl VoiceStudio {
                 }
                 cx.notify();
             }
-            Selected::Clip(id) => self.rename_clip(id, name, cx),
+            Selected::Clip(id, _) => self.rename_clip(id, name, cx),
         }
     }
 
@@ -253,7 +287,8 @@ impl VoiceStudio {
     pub(crate) fn clips_bytes(&self) -> u64 {
         self.clips
             .iter()
-            .filter_map(|c| std::fs::metadata(&c.path).ok())
+            .flat_map(|c| c.takes.iter())
+            .filter_map(|t| std::fs::metadata(&t.path).ok())
             .map(|m| m.len())
             .sum()
     }

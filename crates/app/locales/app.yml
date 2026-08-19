@@ -61,6 +61,12 @@ voice:
   default:
     en: Default voice
     sk: Predvolený hlas
+  bundled:
+    en: bundled
+    sk: súčasť aplikácie
+  recorded:
+    en: recorded here
+    sk: nahraté tu
   default_detail:
     en: bundled · works with every model
     sk: súčasť aplikácie · funguje s každým modelom
@@ -265,6 +271,21 @@ clip:
   new:
     en: New clip
     sk: Nová nahrávka
+  made_with:
+    en: Made with
+    sk: Vzniklo pomocou
+  takes:
+    en: Takes
+    sk: Verzie
+  take_line:
+    en: "Take %{number} · %{at}"
+    sk: "Verzia %{number} · %{at}"
+  take_seed:
+    en: "seed %{seed}"
+    sk: "seed %{seed}"
+  reuse_seed:
+    en: Reuse
+    sk: Použiť znova
   this_clip:
     en: This clip
     sk: Táto nahrávka

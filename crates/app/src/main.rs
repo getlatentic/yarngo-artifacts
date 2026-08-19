@@ -619,6 +619,9 @@ impl VoiceStudio {
         }
         self.save_open_text(cx);
 
+        // Generating again adds a take to the clip it came from; a draft makes
+        // a new one.
+        let mut clip_id = None;
         // The clip carries its own settings, so this is the one place they are
         // read: the draft's, or the ones the finished clip was made with.
         let (text, voice_id, model, name, seed) = match &self.selected {
@@ -632,8 +635,9 @@ impl VoiceStudio {
                     seed.or(draft.seed).or(self.pinned_seed),
                 )
             }
-            clips::Selected::Clip(_) => {
+            clips::Selected::Clip(..) => {
                 let Some(clip) = self.clip().cloned() else { return };
+                clip_id = Some(clip.id);
                 (
                     clip.text,
                     clip.voice_id,
@@ -671,6 +675,7 @@ impl VoiceStudio {
             voice_id,
             seed,
             name,
+            clip_id,
         };
 
         self.status = Status::Generating;
@@ -695,7 +700,11 @@ impl VoiceStudio {
                         // point the workspace at what it produced.
                         this.drafts.retain(|d| !d.generating);
                         if let Some(clip) = s.clip.as_ref() {
-                            this.selected = clips::Selected::Clip(clip.id.clone());
+                            let take = clip
+                                .latest()
+                                .map(|t| t.id.clone())
+                                .unwrap_or_else(|| clip.id.clone());
+                            this.selected = clips::Selected::Clip(clip.id.clone(), take);
                         }
                         // The stored clip, not the scratch file it was written
                         // to: the sidebar lists the stored path, and loading the
@@ -703,7 +712,8 @@ impl VoiceStudio {
                         let source = s
                             .clip
                             .as_ref()
-                            .map(|c| c.path.clone())
+                            .and_then(|c| c.latest())
+                            .map(|t| t.path.clone())
                             .unwrap_or_else(|| s.output.clone());
                         this.load_clip(&source, s.audio_s, cx);
                         this.refresh_clips(cx);
@@ -997,22 +1007,25 @@ impl VoiceStudio {
             .iter()
             .find(|d| d.generating)
             .map(|d| d.text.clone())
+            // Generating again runs a finished clip's own words, and there is
+            // no draft holding them.
+            .or_else(|| self.clip().map(|c| c.text.clone()))
             .unwrap_or_default()
     }
 
     pub(crate) fn save_selected_clip(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(clip) = self.clip().cloned() else { return };
-        self.save_clip_as(clip.path, window, cx);
+        let Some(take) = self.take().cloned() else { return };
+        self.save_clip_as(take.path, window, cx);
     }
 
     /// Put the clip on the clipboard as a file, which is what "copy audio"
     /// means everywhere else on this machine: it pastes into Finder, Mail and
     /// Messages as the recording itself rather than as its path.
     pub(crate) fn copy_selected_clip(&mut self, cx: &mut Context<Self>) {
-        let Some(clip) = self.clip().cloned() else { return };
+        let Some(take) = self.take().cloned() else { return };
         let script = format!(
             "set the clipboard to (POSIX file \"{}\")",
-            clip.path.display().to_string().replace('\\', "\\\\").replace('"', "\\\"")
+            take.path.display().to_string().replace('\\', "\\\\").replace('"', "\\\"")
         );
         if let Err(err) = std::process::Command::new("osascript").arg("-e").arg(script).status() {
             self.status = Status::Failed(err.to_string());

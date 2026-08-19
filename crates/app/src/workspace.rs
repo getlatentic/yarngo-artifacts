@@ -36,7 +36,7 @@ const PILL_GEAR_GAP: f32 = 12.0;
 /// Tall enough that the lights sit centred rather than crowding the top edge.
 pub(crate) const TITLE_BAR_HEIGHT: f32 = 40.0;
 
-fn clock(created: &str) -> String {
+pub(crate) fn clock(created: &str) -> String {
     // "2026-08-18T15:39:00" -> "15:39"
     created.split('T').nth(1).map(|t| t[..5].to_string()).unwrap_or_default()
 }
@@ -369,8 +369,16 @@ impl VoiceStudio {
 
         for clip in self.clips.iter() {
             let id = clip.id.clone();
-            let current = self.selected == crate::clips::Selected::Clip(id.clone());
-            let sounding = self.playing_clip() == Some(clip.path.as_path()) && self.is_playing();
+            let current = matches!(
+                &self.selected,
+                crate::clips::Selected::Clip(selected, _) if selected == &id
+            );
+            let sounding = clip
+                .takes
+                .iter()
+                .any(|t| self.playing_clip() == Some(t.path.as_path()))
+                && self.is_playing();
+            let length = clip.latest().map(|t| t.audio_s).unwrap_or(0.0);
             rows.push(
                 Self::clip_row(
                     if sounding {
@@ -382,7 +390,7 @@ impl VoiceStudio {
                     clip.name.clone(),
                     format!(
                         "{} · {}",
-                        duration(clip.audio_s),
+                        duration(length),
                         self.voice_name(clip.voice_id.as_deref())
                     ),
                     current,
@@ -576,7 +584,7 @@ impl VoiceStudio {
             crate::clips::Selected::Draft(_) => {
                 self.draft().map(|d| d.title()).unwrap_or_default()
             }
-            crate::clips::Selected::Clip(_) => {
+            crate::clips::Selected::Clip(..) => {
                 self.clip().map(|c| c.name.clone()).unwrap_or_default()
             }
         };
@@ -745,16 +753,16 @@ impl VoiceStudio {
     fn composer_subtitle(&self) -> String {
         let voice = self.voice_name(self.clip_voice());
         let model = self.model_label();
-        match self.clip() {
-            Some(clip) => t!(
+        match (self.clip(), self.take()) {
+            (Some(_), Some(take)) => t!(
                 "clip.made_line",
-                length = duration(clip.audio_s),
-                at = clock(&clip.created),
+                length = duration(take.audio_s),
+                at = clock(&take.created),
                 voice = voice,
                 model = model
             )
             .to_string(),
-            None => format!("{voice} · {model}"),
+            _ => format!("{voice} · {model}"),
         }
     }
 
@@ -786,8 +794,8 @@ impl VoiceStudio {
             );
         }
 
-        match self.clip() {
-            Some(clip) => {
+        match self.take().cloned() {
+            Some(take) => {
                 let (playing, progress) = match self.player_state() {
                     Some(state) => state,
                     None => (false, 0.0),
@@ -827,7 +835,7 @@ impl VoiceStudio {
                     )
                     .child(
                         crate::ui::mono(
-                            format!("{position} / {}", duration(clip.audio_s)),
+                            format!("{position} / {}", duration(take.audio_s)),
                             12.0,
                             theme::hex(0x6B645A),
                         )

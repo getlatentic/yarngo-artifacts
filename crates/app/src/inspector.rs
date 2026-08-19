@@ -277,7 +277,7 @@ impl VoiceStudio {
     fn delivery_section(&self, cx: &mut Context<Self>) -> Div {
         let seed = match &self.selected {
             Selected::Draft(_) => self.draft().and_then(|d| d.seed),
-            Selected::Clip(_) => self.clip().and_then(|c| c.seed),
+            Selected::Clip(..) => self.take().and_then(|t| t.seed),
         };
 
         div()
@@ -320,6 +320,188 @@ impl VoiceStudio {
                             .on_click(cx.listener(|this, _, _, cx| this.reroll_seed(cx))),
                     ),
             )
+    }
+
+    /// A `label  value` line, which is how the record of a finished clip reads.
+    fn record_line(label: String, value: String) -> Div {
+        div()
+            .h_flex()
+            .w_full()
+            .items_center()
+            .gap(px(10.0))
+            .p(px(2.0))
+            .child(
+                div()
+                    .flex_1()
+                    .text_size(px(12.5))
+                    .text_color(theme::hex(0x5F594F))
+                    .child(label),
+            )
+            .child(ui::mono(value, 12.0, theme::hex(0x171717)))
+    }
+
+    /// What produced this clip. Read-only: these are not settings any more,
+    /// they are the description of something that already exists.
+    fn made_with_section(&self, clip: &speech_engine::Clip, cx: &mut Context<Self>) -> Div {
+        let voice = clip.voice_id.clone();
+        let seed = self.take().and_then(|t| t.seed);
+
+        div()
+            .v_flex()
+            .w_full()
+            .gap(px(7.0))
+            .child(ui::section_label(t!("clip.made_with").to_string().to_uppercase()))
+            .child(
+                div()
+                    .h_flex()
+                    .w_full()
+                    .h(px(44.0))
+                    .items_center()
+                    .gap(px(10.0))
+                    .p(px(8.0))
+                    .rounded(px(8.0))
+                    .bg(theme::surface(false))
+                    .border_1()
+                    .border_color(theme::hex(0xEBE4D9))
+                    .child(icon::icon(icon::name::RECORD_VOICE, 18.0, theme::hex(0x5F594F)))
+                    .child(
+                        div()
+                            .v_flex()
+                            .flex_1()
+                            .min_w(px(0.0))
+                            .child(
+                                div()
+                                    .text_size(px(12.5))
+                                    .font_semibold()
+                                    .truncate()
+                                    .child(self.voice_name(clip.voice_id.as_deref())),
+                            )
+                            .child(
+                                ui::mono(
+                                    match clip.voice_id.as_deref() {
+                                        None => t!("voice.bundled").to_string(),
+                                        Some(_) => t!("voice.recorded").to_string(),
+                                    },
+                                    11.0,
+                                    theme::hex(0x6B645A),
+                                )
+                                .mt(px(1.0)),
+                            ),
+                    )
+                    .child(
+                        div()
+                            .flex_none()
+                            .child(icon::icon(
+                                icon::name::PLAY_CIRCLE,
+                                17.0,
+                                theme::hex(0x5F594F),
+                            ))
+                            .id("made-with-hear")
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.hear_voice(voice.clone(), cx)
+                            })),
+                    ),
+            )
+            .child(Self::record_line(t!("model.label").to_string(), self.model_label()))
+            .when_some(seed, |d, seed| {
+                d.child(
+                    Self::record_line(t!("clip.seed").to_string(), seed.to_string()).child(
+                        // The one setting worth carrying forward: it makes the
+                        // next clip a different reading of the same voice.
+                        ui::secondary_button(None, t!("clip.reuse_seed").to_string())
+                            .h(px(24.0))
+                            .px(px(8.0))
+                            .rounded(px(6.0))
+                            .text_size(px(11.0))
+                            .id("reuse-seed")
+                            .on_click(cx.listener(move |this, _, _, cx| {
+                                this.pinned_seed = Some(seed);
+                                cx.notify();
+                            })),
+                    ),
+                )
+            })
+    }
+
+    /// Every reading of this clip. Generating again adds one rather than making
+    /// a second clip, so this is where they are compared and chosen between.
+    fn takes_section(&self, clip: &speech_engine::Clip, cx: &mut Context<Self>) -> Div {
+        let total = clip.takes.len();
+        let listening = self.take().map(|t| t.id.clone());
+
+        div()
+            .v_flex()
+            .w_full()
+            .gap(px(7.0))
+            .child(ui::section_label(t!("clip.takes").to_string().to_uppercase()))
+            .children(clip.takes.iter().enumerate().map(|(index, take)| {
+                // Numbered oldest-first the way a person counts them, while the
+                // list stays newest-first.
+                let number = total - index;
+                let chosen = listening.as_deref() == Some(take.id.as_str());
+                let (clip_id, take_id) = (clip.id.clone(), take.id.clone());
+                let facts = match take.seed {
+                    Some(seed) => format!(
+                        "{} · {}",
+                        duration(take.audio_s),
+                        t!("clip.take_seed", seed = seed)
+                    ),
+                    None => duration(take.audio_s),
+                };
+
+                div()
+                    .h_flex()
+                    .w_full()
+                    .h(px(44.0))
+                    .items_center()
+                    .gap(px(10.0))
+                    .p(px(8.0))
+                    .rounded(px(8.0))
+                    .when(chosen, |d| d.bg(theme::hex(0xFFF3E6)))
+                    .child(if chosen {
+                        icon::filled(icon::name::CHECK_CIRCLE, 17.0, theme::hex(0x8F4406))
+                            .into_any_element()
+                    } else {
+                        icon::icon(icon::name::RADIO_UNCHECKED, 17.0, theme::hex(0xB0A79B))
+                            .into_any_element()
+                    })
+                    .child(
+                        div()
+                            .v_flex()
+                            .flex_1()
+                            .min_w(px(0.0))
+                            .child(
+                                div()
+                                    .text_size(px(12.0))
+                                    .when(chosen, |d| d.font_semibold())
+                                    .when(!chosen, |d| d.font_medium())
+                                    .truncate()
+                                    .child(t!(
+                                        "clip.take_line",
+                                        number = number,
+                                        at = crate::workspace::clock(&take.created)
+                                    )
+                                    .to_string()),
+                            )
+                            .child(
+                                ui::mono(
+                                    facts,
+                                    11.0,
+                                    if chosen {
+                                        theme::hex(0x6B645A)
+                                    } else {
+                                        theme::hex(0x857D72)
+                                    },
+                                )
+                                .mt(px(1.0))
+                                .truncate(),
+                            ),
+                    )
+                    .id(SharedString::from(format!("take-{take_id}")))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        this.select_take(clip_id.clone(), take_id.clone(), window, cx)
+                    }))
+            }))
     }
 
     pub(crate) fn inspector_panel(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -424,9 +606,17 @@ impl VoiceStudio {
                                 ),
                         )
                     })
-                    .child(self.voice_section(cx))
-                    .child(self.model_section(cx))
-                    .child(self.delivery_section(cx))
+                    // A finished clip is a record, not a set of controls: what
+                    // made it, and every reading of it.
+                    .when_some(self.clip().cloned(), |d, clip| {
+                        d.child(self.made_with_section(&clip, cx))
+                            .child(self.takes_section(&clip, cx))
+                    })
+                    .when(self.clip().is_none(), |d| {
+                        d.child(self.voice_section(cx))
+                            .child(self.model_section(cx))
+                            .child(self.delivery_section(cx))
+                    })
                     // Not in the design's action row, and it has to live
                     // somewhere: a clip is the one thing here that takes disk.
                     .when_some(self.clip().map(|c| c.id.clone()), |d, id| {

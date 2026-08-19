@@ -85,6 +85,28 @@ pub struct Consent {
     pub source: String,
 }
 
+/// One reading of a clip. Generating again adds a take rather than a second
+/// clip: the words are the same, only the reading differs, so they belong
+/// together under one name.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Take {
+    pub id: String,
+    pub path: PathBuf,
+    pub audio_s: f32,
+    pub gen_s: f32,
+    /// The seed that produced it, so it can be reproduced exactly.
+    #[serde(default)]
+    pub seed: Option<u32>,
+    pub created: String,
+}
+
+impl Take {
+    /// Inference seconds per audio second. Lower is better; 1.0 is real time.
+    pub fn rtf(&self) -> Option<f32> {
+        (self.audio_s > 0.0).then(|| self.gen_s / self.audio_s)
+    }
+}
+
 /// A generated clip, kept until the user deletes it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Clip {
@@ -96,16 +118,24 @@ pub struct Clip {
     #[serde(default)]
     pub name: String,
     pub text: String,
-    pub path: PathBuf,
     #[serde(default)]
     pub voice_id: Option<String>,
     pub model: String,
-    pub audio_s: f32,
-    pub gen_s: f32,
-    /// The seed that produced this clip, so it can be reproduced exactly.
-    #[serde(default)]
-    pub seed: Option<u32>,
     pub created: String,
+    /// Newest first. Never empty — a clip whose audio has gone is not listed.
+    #[serde(default)]
+    pub takes: Vec<Take>,
+}
+
+impl Clip {
+    /// The most recent reading, which is what the workspace opens on.
+    pub fn latest(&self) -> Option<&Take> {
+        self.takes.first()
+    }
+
+    pub fn take(&self, id: &str) -> Option<&Take> {
+        self.takes.iter().find(|t| t.id == id)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +144,10 @@ pub struct SynthesisRequest {
     pub output: PathBuf,
     /// `None` uses the catalogue default.
     pub model: Option<String>,
+    /// The clip this reading belongs to. `None` starts a new one; naming an
+    /// existing clip adds a take to it.
+    #[serde(default)]
+    pub clip_id: Option<String>,
     /// `None` synthesises without cloning.
     pub voice_id: Option<String>,
     /// Pin the take. `None` draws a fresh seed, which is what makes "generate
