@@ -44,6 +44,15 @@ pub fn secondary_button(
     glyph: Option<(&'static str, u32)>,
     label: impl Into<SharedString>,
 ) -> Div {
+    secondary_button_sized(glyph, label, 17.0)
+}
+
+/// The same button where the design gives the glyph its own size.
+pub fn secondary_button_sized(
+    glyph: Option<(&'static str, u32)>,
+    label: impl Into<SharedString>,
+    glyph_size: f32,
+) -> Div {
     div()
         .h_flex()
         .h(px(34.0))
@@ -59,7 +68,7 @@ pub fn secondary_button(
         .font_semibold()
         .text_color(theme::hex(0x171717))
         .when_some(glyph, |this, (name, colour)| {
-            this.child(icon::icon(name, 17.0, theme::hex(colour)))
+            this.child(icon::icon(name, glyph_size, theme::hex(colour)))
         })
         .child(label.into())
 }

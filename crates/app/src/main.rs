@@ -1021,7 +1021,8 @@ impl VoiceStudio {
     }
 
     pub(crate) fn can_generate(&self, cx: &Context<Self>) -> bool {
-        !self.busy()
+        !self.enrolling_over_workspace()
+            && !self.busy()
             && !self.text.read(cx).value().trim().is_empty()
             && (self.model_ready() || self.queued.is_none())
     }
@@ -1029,6 +1030,14 @@ impl VoiceStudio {
     /// The line beside Generate. It says the one thing that is true right now:
     /// what is missing, what is downloading, or what this will cost.
     pub(crate) fn generate_hint(&self, cx: &Context<Self>) -> String {
+        // The sheet has the floor; the row behind it says nothing.
+        if self.enrolling_over_workspace() {
+            return String::new();
+        }
+        // Right after saving a voice, the thing worth saying is what changed.
+        if self.voice_saved.is_some() {
+            return t!("compose.now_in_your_voice").to_string();
+        }
         let text = self.text.read(cx).value().to_string();
         if text.trim().is_empty() {
             return t!("compose.write_first").to_string();
@@ -1534,12 +1543,18 @@ impl Render for VoiceStudio {
                 Screen::Models => self.models_screen(window, cx).into_any_element(),
                 Screen::Enrolment => self.enrolment_screen(window, cx).into_any_element(),
                 Screen::Workspace => div()
+                    .relative()
                     .h_flex()
                     .flex_1()
                     .min_h(px(0.0))
                     .child(self.sidebar(cx))
                     .child(self.composer(cx))
                     .child(self.inspector_panel(cx))
+                    // Inside the body, so the title bar stays lit and the sheet
+                    // sits centred on the work rather than on the window.
+                    .when(self.enrolling_over_workspace(), |this| {
+                        this.child(self.enrolment_sheet(window, cx))
+                    })
                     .into_any_element(),
             })
             // The design gives the workspace no status strip — the composer
@@ -1551,9 +1566,6 @@ impl Render for VoiceStudio {
             )
             .child(self.model_menu(cx))
             .child(self.settings_window(cx))
-            .when(self.enrolling_over_workspace(), |this| {
-                this.child(self.enrolment_sheet(window, cx))
-            })
     }
 }
 

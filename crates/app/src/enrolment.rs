@@ -715,6 +715,9 @@ impl VoiceStudio {
                 (t!("enrol.check_title"), t!("enrol.imported_detail"))
             }
             Enrolment::Review(_) => (t!("enrol.check_title"), t!("enrol.check_detail")),
+            // Opened from a clip's panel, the sheet says what saving will do
+            // to that clip; opened during setup it introduces the idea.
+            _ if !self.in_setup => (t!("enrol.record_title"), t!("enrol.record_subtitle")),
             _ => (t!("enrol.title"), t!("enrol.subtitle")),
         };
         div()

@@ -521,21 +521,35 @@ impl VoiceStudio {
                             .h_flex()
                             .gap(px(8.0))
                             .items_center()
-                            .child(crate::icon::icon(
-                                crate::icon::name::HARD_DRIVE,
-                                15.0,
-                                theme::hex(0x857D72),
-                            ))
-                            .child({
-                                let n = self.clips.len();
-                                let key = if n == 1 { "clip.one_on_disk" } else { "clip.n_on_disk" };
-                                format!(
-                                    "{} · {:.0} MB",
-                                    t!(key, count = n),
-                                    self.clips_bytes() as f32 / 1e6
-                                )
+                            // While something is running that is the fact worth
+                            // stating; the rest of the time it is the disk.
+                            .when(self.busy(), |d| {
+                                d.child(crate::icon::icon(
+                                    crate::icon::name::GRAPHIC_EQ,
+                                    15.0,
+                                    theme::hex(0xFF8A1F),
+                                ))
+                                .child(t!("clip.one_generating").to_string())
+                                .text_color(theme::hex(0x8F4406))
                             })
-                            .text_color(theme::hex(0x6B645A))
+                            .when(!self.busy(), |d| {
+                                d.child(crate::icon::icon(
+                                    crate::icon::name::HARD_DRIVE,
+                                    15.0,
+                                    theme::hex(0x857D72),
+                                ))
+                                .child({
+                                    let n = self.clips.len();
+                                    let key =
+                                        if n == 1 { "clip.one_on_disk" } else { "clip.n_on_disk" };
+                                    format!(
+                                        "{} · {:.0} MB",
+                                        t!(key, count = n),
+                                        self.clips_bytes() as f32 / 1e6
+                                    )
+                                })
+                                .text_color(theme::hex(0x6B645A))
+                            })
                             .id("disk-row")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.settings_open = true;
@@ -991,9 +1005,10 @@ impl VoiceStudio {
                         ))
                         .child(div().flex_1())
                         .child(
-                            crate::ui::secondary_button(
+                            crate::ui::secondary_button_sized(
                                 Some((crate::icon::name::EDIT, 0x5F594F)),
                                 t!("clip.edit_text").to_string(),
+                                15.0,
                             )
                             .h(px(26.0))
                             .px(px(10.0))

@@ -250,6 +250,9 @@ clip:
   generating_now:
     en: generating…
     sk: generuje sa…
+  one_generating:
+    en: 1 clip generating
+    sk: generuje sa 1 nahrávka
   one_on_disk:
     en: "1 clip"
     sk: "1 nahrávka"
@@ -409,6 +412,12 @@ enrol:
   subtitle:
     en: Read the script out loud. The words are how the model lines your voice up with speech.
     sk: Prečítajte text nahlas a uložte. Potrebné sú obe časti — slová sú to, ako model zosúladí váš hlas s rečou.
+  record_title:
+    en: Record a voice
+    sk: Nahrať hlas
+  record_subtitle:
+    en: Read the script out loud. When you save it, this clip switches from the default voice to yours.
+    sk: Prečítajte text nahlas. Po uložení sa táto nahrávka prepne z predvoleného hlasu na váš.
   reference_audio:
     en: Reference audio
     sk: Referenčný zvuk
