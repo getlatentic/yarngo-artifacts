@@ -2014,7 +2014,18 @@ impl VoiceStudio {
                                                 .line_height(px(19.0))
                                                 .text_color(theme::hex(0x5F594F))
                                                 .child(
-                                                    t!("setup.no_connection_detail").to_string(),
+                                                    t!(
+                                                        "setup.no_connection_detail",
+                                                        size = format!(
+                                                            "{:.0} MB",
+                                                            runtime::ARCHIVE_BYTES as f32 / 1e6
+                                                        ),
+                                                        total = format!(
+                                                            "{:.0} MB",
+                                                            runtime::APPROX_BYTES as f32 / 1e6
+                                                        )
+                                                    )
+                                                    .to_string(),
                                                 ),
                                         )
                                         .child(div().flex_1())

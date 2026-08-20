@@ -19,6 +19,17 @@ command -v cargo-packager >/dev/null || {
   cargo install cargo-packager --locked
 }
 
+# `package.sh release` is the obvious thing to type, so accept it rather than
+# forwarding it to cargo-packager as an unknown subcommand. Anything else
+# positional is a mistake worth naming here instead of failing further down.
+if [[ "${1:-}" == "release" || "${1:-}" == "debug" ]]; then
+  PROFILE="$1"; shift
+fi
+if [[ $# -gt 0 ]]; then
+  echo "unexpected argument: $1 (usage: package.sh [release|debug])" >&2
+  exit 2
+fi
+
 PROFILE="${PROFILE:-debug}"
 APP="target/$PROFILE/yarngo studio.app"
 
@@ -37,20 +48,6 @@ pack() {
   fi
 }
 
-if [[ "$PROFILE" == "release" ]]; then
-  cargo build --release -p voicestudio
-else
-  cargo build -p voicestudio
-fi
-
-pack app "$@"
-[[ -d "$APP" ]] || { echo "no bundle at $APP" >&2; exit 1; }
-
-# cargo-packager ad-hoc signs without entitlements and derives an identifier
-# from the binary name. Both matter here: without the audio-input entitlement
-# recording silently produces nothing, and a derived identifier changes between
-# builds so macOS treats each build as a new app and re-asks for the microphone.
-# Re-sign explicitly, with a real identity when one is configured.
 # uv installs the speech packages from the committed locks. Fetched here rather
 # than committed: it is a 40 MB binary, and it must match the machine being
 # packaged for.
@@ -83,6 +80,25 @@ if [[ ! -x packaging/uv ]]; then
 fi
 packaging/uv --version
 
+# Running the sidecar leaves __pycache__ beside it, which the resource glob
+# matches and the packager cannot copy — packaging fails on any machine that has
+# actually run the app, which is every machine that would package it.
+find sidecar -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
+
+if [[ "$PROFILE" == "release" ]]; then
+  cargo build --release -p voicestudio
+else
+  cargo build -p voicestudio
+fi
+
+pack app "$@"
+[[ -d "$APP" ]] || { echo "no bundle at $APP" >&2; exit 1; }
+
+# cargo-packager ad-hoc signs without entitlements and derives an identifier
+# from the binary name. Both matter here: without the audio-input entitlement
+# recording silently produces nothing, and a derived identifier changes between
+# builds so macOS treats each build as a new app and re-asks for the microphone.
+# Re-sign explicitly, with a real identity when one is configured.
 IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
 sign() {
   codesign --force --timestamp --options runtime \

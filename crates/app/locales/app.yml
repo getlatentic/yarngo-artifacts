@@ -728,8 +728,8 @@ setup:
     en: No connection on this machine?
     sk: Tento počítač nie je pripojený?
   no_connection_detail:
-    en: Download the archive somewhere else and point yarngo at the file. The speech packages still come from the network afterwards.
-    sk: Stiahnite archív inde a ukážte naň Yarngu. Rečové balíky sa aj tak stiahnu zo siete.
+    en: "Download the interpreter somewhere else and point yarngo at the file. It is %{size} — the rest of the %{total} is speech packages, and those still come from the network."
+    sk: "Stiahnite interpret inde a ukážte naň yarngo. Má %{size} — zvyšok z %{total} tvoria rečové balíky, ktoré sa aj tak stiahnu zo siete."
   install_from_file:
     en: Install from a file
     sk: Inštalovať zo súboru

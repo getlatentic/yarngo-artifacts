@@ -55,6 +55,10 @@ pub struct Pack {
     pub probe: &'static str,
     /// Installed size, measured rather than estimated.
     pub approx_bytes: u64,
+    /// Size of the interpreter archive alone — the only piece that can be
+    /// fetched by hand. It is a fraction of `approx_bytes`, and showing the
+    /// installed figure beside a link to this one reads as a failed download.
+    pub archive_bytes: u64,
 }
 
 /// Apple silicon. Measured: interpreter plus MLX and its dependencies.
@@ -66,6 +70,7 @@ pub const MLX: Pack = Pack {
     packages: &["mlx-speech"],
     probe: "import mlx_speech",
     approx_bytes: 350_000_000,
+    archive_bytes: 25_304_407,
 };
 
 /// Windows and Linux, and unproven — nothing selects it yet.
@@ -88,6 +93,8 @@ pub const TORCH: Pack = Pack {
     packages: &["torch", "torchaudio", "dots.tts"],
     probe: "import dots_tts",
     approx_bytes: 3_000_000_000,
+    // Unmeasured: nothing has installed this pack from an archive yet.
+    archive_bytes: 0,
 };
 
 /// The pack this host runs. Only one is proven, and [`host_supported`] refuses
@@ -103,6 +110,7 @@ pub const fn pack() -> &'static Pack {
 pub const NAME: &str = "yarngo runtime";
 pub const VERSION: &str = pack().python;
 pub const APPROX_BYTES: u64 = pack().approx_bytes;
+pub const ARCHIVE_BYTES: u64 = pack().archive_bytes;
 
 /// Where a running generation reports what it has written, and where a stop is
 /// signalled. Files rather than messages: the sidecar is blocking on one

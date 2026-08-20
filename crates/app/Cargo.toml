@@ -35,16 +35,20 @@ identifier = "dev.yarngo.studio"
 description = "Speak text in your own voice, entirely on your machine."
 authors = ["yarngo"]
 category = "Productivity"
-# The sidecar, its locales, the pack manifests, and the uv that installs them.
-# uv is fetched by scripts/package.sh rather than committed — it is a 40 MB
-# binary, and the packaging script signs it along with every other executable
-# it finds under Resources.
+# Resources are copied with `{ src, target }` rather than bare globs. A bare
+# glob flattens everything into Resources/, which would land both packs'
+# pyproject.toml at the same path — the second silently overwriting the first —
+# and fails outright on any directory the glob matches.
 resources = [
-  "../../sidecar/**/*",
-  "locales/**/*",
-  "../../packaging/packs/**/*",
-  "../../packaging/catalog.json",
-  "../../packaging/uv",
+  # Named rather than globbed, so a new file beside the sidecar — a test, a
+  # scratch script — cannot ship by accident.
+  { src = "../../sidecar/engine.py", target = "sidecar/engine.py" },
+  { src = "../../sidecar/dots_torch.py", target = "sidecar/dots_torch.py" },
+  { src = "locales/app.yml", target = "locales/app.yml" },
+  { src = "../../packaging/catalog.json", target = "catalog.json" },
+  { src = "../../packaging/packs/mlx/*", target = "packs/mlx" },
+  { src = "../../packaging/packs/torch/*", target = "packs/torch" },
+  { src = "../../packaging/uv", target = "uv" },
 ]
 # Cut from the brand mark by scripts/make-app-icon.py. Without this the app
 # ships with the generic binary icon.
