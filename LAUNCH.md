@@ -289,7 +289,8 @@ What their shipping practice confirms or adds:
   `bin-win-{cpu,vulkan,cuda}-x64` plus a separate `cudart-…-win-cuda-x64.zip`;
   FluidVoice ships an on-demand CUDA overlay (with app-local MSVC runtime
   files) over a CPU/Vulkan base, as its own release tag. For a future ggml
-  runtime that pattern is literal. For the torch pack it translates: a CUDA
+  runtime that pattern is literal. What follows is **yarngo design derived
+  from that pattern, not the pattern itself**: for a torch pack, a CUDA
   variant and a CPU variant are different locks against different wheel
   indexes, not one pack with a flag. MSVC runtime files are a shipping
   concern, not a spike concern.
@@ -300,10 +301,12 @@ What their shipping practice confirms or adds:
   never reclaimed (0.0.9) — so replacing a model or runtime must delete what
   it replaced, and our Storage pane would make that leak visible.
 - **Models update independently of the app** — "Update available" on the model
-  row, the current one keeps working until the user chooses (0.0.9). That is
-  the shape our model catalogue already has, and it feeds the open "no way to
-  ship a fix" decision: the app updater and the model/runtime updater are two
-  different mechanisms.
+  row, the current one keeps working until the user chooses. Source: release
+  tag `windows-v0.0.9`, published 11 Aug 2026, **marked prerelease** — which
+  hides it from the releases page's default view, so checking the page alone
+  concludes 0.0.8 is latest. The stale-model fix quoted above is in that tag's
+  notes verbatim. This feeds the open "no way to ship a fix" decision: the app
+  updater and the model/runtime updater are two different mechanisms.
 - **Feature parity is not a launch gate.** Superwhisper's Windows build openly
   lags its Mac features. A Windows v1 that does clone → Fast/Best quality →
   generate → play/export, with panes missing, is a legitimate release.
@@ -311,6 +314,86 @@ What their shipping practice confirms or adds:
   `platforms: [.macOS("15.0")]`, links CoreAudio, pins FluidAudio to a branch —
   and Windows is a separate implementation anyway. MLX staying Mac-only is the
   normal pattern, not a compromise.
+
+#### Windows, locked — against source that is actually public
+
+Superwhisper and FluidVoice ship Windows but hide its source. Four projects do
+not, and together they cover every piece of the Windows design. All four are
+cloned under `third-party/` and the claims below were read in their code, not
+in their marketing.
+
+**The torch stack has shipped, at scale, with our exact choices.** Buzz
+(21k stars) pins `requires-python = ">=3.12,<3.13"` — the same pin as our
+torch pack — uses uv with a committed `uv.lock` (315 packages), and routes
+torch per platform in `[tool.uv.sources]`: PyPI on macOS, the
+`download.pytorch.org/whl/cu129` index elsewhere, NVIDIA's NGC index for the
+CUDA runtime libraries. Its Windows CI runs
+`uv pip install torch==2.8.0+cu129 torchaudio==2.8.0+cu129` and its installer
+collects `msvc-runtime` app-locally. Python 3.12 + uv + torch CUDA on Windows
+is not our hypothesis any more; it is Buzz's production configuration. What
+remains ours to prove is dots.tts specifically — which is what the spike is.
+
+**The process boundary we already have is the one the field converged on.**
+Sona describes itself as "designed to be spawned and owned by another
+process"; Vibe *migrated to* that after starting with in-process FFI, which is
+the direction of travel worth noticing. Our sidecar protocol is already this
+boundary. The lock is: **the protocol is the runtime interface.** The torch
+pack reuses `engine.py` over the same stdin/stdout JSON; a future ggml runtime
+implements the same protocol as a native process; the app cannot tell them
+apart. No HTTP needed — the transport is already ours.
+
+**Probing must happen in the child process, because the failure mode is dying
+before main.** Handy's Cargo.toml documents why: the prebuilt ONNX Runtime is
+compiled `/arch:AVX2` and executes BMI2 **in a static initializer** — on a
+pre-Haswell CPU the process crashes at startup, before any capability check
+could run. (The relayed claim that Handy "removed DirectML" is not what the
+code shows — DirectML is still an option; the real lesson is the initializer
+crash.) Our runtime-as-child-process shape already contains the fix: launching
+the runtime *is* the probe, and a crash kills the sidecar, not yarngo.
+OpenWhispr then shows the fallback done properly, at two levels: any startup
+rejection falls back to CPU, and so does the *first request* failing — "CUDA
+aborting on an unsupported GPU at the first kernel launch". READY is earned by
+a loaded model answering, never by a vendor string.
+
+**Runtime binaries are pinned and digest-checked, like ours.** OpenWhispr pins
+its runtime release tag with per-tag SHA-256 digests — "Pinned so untested
+future binaries never auto-ship" — which is the same rule our uv fetch and
+locks already follow. When native runtime packs exist, they get the same
+treatment. One more OpenWhispr comment worth keeping: a stale flag "must be
+dropped, or ggml silently runs on CPU forever" — degraded-but-working needs to
+be *visible*, or nobody ever finds out.
+
+**The Windows traps checklist, each from a wound in public:**
+
+- 260-character path limit breaks native builds even with long paths enabled —
+  MSBuild tooling ignores the setting; Handy compiles through a short NTFS
+  junction (`BUILD.md`).
+- Non-ASCII user paths break discovery — Handy #1187, "fix cyrillic (unicode)
+  path problems". Test under `C:\Users\Jérôme`, not only `C:\Users\dev`.
+- Prebuilt binaries carry an ISA baseline — AVX2 crashes pre-Haswell CPUs at
+  startup (Handy). Applies to any wheel or GGUF runtime we ship.
+- MSVC runtime files ship app-local — Buzz collects `msvc-runtime`; FluidVoice
+  ships VC++ files inside its CUDA overlay.
+
+**Selection sequence, locked** (implemented when the second Windows runtime
+exists; v1 needs only its one row):
+
+```text
+model chosen → detect host capabilities → find installed compatible runtime
+→ else offer the recommended one, download, verify digest
+→ launch the runtime process → capability probe inside it → load model
+→ READY — and on failure at any stage: fall back, say so, never silently
+```
+
+**Windows v1 capability map** — the target row is the spike; ggml rows are
+Best-quality-only until an MF port exists:
+
+| Windows hardware | Runtime | Fast (MF) | Best quality (SOAR) |
+| --- | --- | --- | --- |
+| NVIDIA x64 | torch CUDA | target | target |
+| AMD / Intel GPU x64 | ggml Vulkan | no path | yes |
+| CPU-only x64 | ggml CPU | no path | plausible, unmeasured |
+| ARM64 | — | no path | undecided |
 
 #### Runtimes are infrastructure; models are the choice
 
