@@ -41,6 +41,12 @@ DOTS_GEN = {
     "template": "tts",
 }
 
+# Every entry is pinned to an immutable revision. Without one the hub resolves
+# `main` at download time, so two people installing a fortnight apart could get
+# different weights under the same model id — and the installed-check, which
+# compares cached bytes, would never notice the repo had moved. Same rule the
+# committed uv.lock enforces for packages; weights are not exempt.
+#
 # Catalogue of models the app may offer. `label` is what this app calls it;
 # `name` is what it actually is, which is the one that means anything to
 # someone checking a licence. Every entry must be commercially
@@ -57,6 +63,7 @@ MODELS = {
         "name": "dots.tts MF",
         "alias": "dots-tts-mf",
         "repo": "appautomaton/dots-tts-mlx",
+        "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3",
         "subfolder": "mf/mlx-int8",
         "licence": "Apache-2.0",
         "default": True,
@@ -69,6 +76,7 @@ MODELS = {
         "name": "dots.tts MF",
         "alias": "dots-tts-mf-base",
         "repo": "appautomaton/dots-tts-mlx",
+        "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3",
         "subfolder": "mf/mlx-base",
         "licence": "Apache-2.0",
         "default": False,
@@ -81,6 +89,7 @@ MODELS = {
         "name": "dots.tts SOAR",
         "alias": "dots-tts-soar",
         "repo": "appautomaton/dots-tts-mlx",
+        "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3",
         "subfolder": "soar/mlx-int8",
         "licence": "Apache-2.0",
         "default": False,
@@ -93,6 +102,7 @@ MODELS = {
         "name": "Step-Audio-EditX",
         "alias": "step-audio",
         "repo": "appautomaton/step-audio-editx-8bit-mlx",
+        "revision": "3b4a7dac975d8cd779fb90e3b86bced59f6df567",
         "subfolder": None,
         "licence": "Apache-2.0",
         "default": False,
@@ -105,6 +115,7 @@ MODELS = {
         "name": "LongCat-AudioDiT 3.5B",
         "alias": "longcat",
         "repo": "appautomaton/longcat-audiodit-3.5b-8bit-mlx",
+        "revision": "1df8412b787e773a460bb5f67b173f750edf6175",
         "subfolder": None,
         "licence": "MIT",
         "default": False,
