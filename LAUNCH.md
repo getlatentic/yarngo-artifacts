@@ -1,6 +1,7 @@
 # Launch plan
 
-Written 19 Aug 2026 against the repository as it stands. Everything below was
+Written 19 Aug 2026, revised 20 Aug 2026, against the repository as it
+stands. Everything below was
 checked in the code or on the wire, not assumed; where something is a decision
 rather than a fact, it says so.
 
@@ -16,7 +17,8 @@ before anything else:
 2. **A public download** from a page you control. Adds the page, an icon, an
    About pane with licences, a privacy statement, and some way to ship a fix.
 3. **The Mac App Store.** Adds sandboxing, which the current design fights: the
-   app downloads a CPython runtime and pip-installs into it at first run. That
+   app downloads a CPython runtime and builds the speech environment inside it
+   at first run. That
    is not a small change — assume it rules the Store out for now.
 
 The rest of this assumes **2**, and marks what 1 could skip.
@@ -71,8 +73,9 @@ would be running different versions of the engine and its whole dependency
 tree, which is the thing the committed lock exists to prevent — and it risked
 Apple's command-line-tools dialog appearing over our own setup screen, since a
 bare `/usr/bin/python3` is a stub on a Mac without them. `YARNGO_PYTHON` remains
-as a developer override. So, in order: ~350 MB of CPython, then
-`pip install mlx-speech` and its dependency tree, then a 3.4 GB model. The offline path covers only the first of those —
+as a developer override. So, in order: ~350 MB of CPython, then `uv sync
+--frozen --no-dev` builds the speech environment from the pack's committed
+lock, then a 3.4 GB model. The offline path covers only the first of those —
 "Install from a file" takes the interpreter archive and the card says plainly
 that the packages still come from the network.
 
@@ -93,21 +96,34 @@ SOAR on both. Substituting f5-tts or qwen3-tts under a label called "Fast"
 would throw away the checkpoint that was validated on Nigerian speakers, which
 is the whole reason the eval was run.
 
-Four separate layers, and every earlier confusion here came from merging two
+Five separate layers, and every earlier confusion here came from merging two
 of them:
 
 | Layer | Values |
 | --- | --- |
 | Product label | Fast, Best quality |
-| Model identity | dots.tts MF, dots.tts SOAR |
+| Logical model | dots.tts MF, dots.tts SOAR |
+| Model artifact | `mf/mlx-int8`, upstream BF16, `dots-tts-soar-q4_k.gguf` |
 | Runtime | MLX, PyTorch, ggml/CrispASR |
 | Hardware backend | Metal, CUDA, Vulkan, CPU |
 
+The artifact row is why "same model" needs saying carefully: the MLX build of
+MF is an int8 conversion, and a torch build would run upstream's checkpoint —
+the same logical model, different bytes, and potentially different numerics
+and cloning quality. The catalogue already half-records this (`precision`, and
+separate ids for `mlx-int8` against `mlx-base`); what will make it matter is
+MADE WITH provenance, once a clip can have been made by either artifact. Not an
+abstraction to build now — a distinction to stop collapsing in prose.
+
 The catalogue already splits the first two — `ModelSpec.label` against
-`ModelSpec.name`. The third and fourth are not represented yet, and the fourth
-is why **the OS alone cannot be the selection key**: two Windows machines need
-different runtimes (NVIDIA → torch CUDA; AMD → ggml Vulkan; no GPU → ggml CPU),
-so choosing one means detecting the accelerator, not reading `target_os`.
+`ModelSpec.name`. Runtime and hardware backend are not represented yet, and
+they are why **runtime selection keys on host capabilities, not any one field**.
+The OS alone cannot separate two Windows machines (NVIDIA wants torch CUDA;
+AMD has no torch path), and the accelerator alone cannot separate two CUDA
+machines (CUDA does not say whether the Windows or the Linux pack fits). The
+eventual resolver reads OS, architecture, accelerator and what each runtime
+actually supports — replacing `if target_os` with an equally wrong
+`if gpu_vendor` would repeat the same mistake one layer down.
 
 When the second runtime actually lands, which model runs on which runtime on
 which hardware becomes a small table resolved at startup — data, not an
@@ -217,8 +233,22 @@ port. If it fails, diagnose the failing operation — do not reopen the runtime
 comparison.
 
 If it passes: macOS on MLX, Windows and Linux NVIDIA on PyTorch CUDA, and ggml
-as the portable and low-memory fallback wherever it is supported — which today
-means SOAR only.
+as the portable fallback where it is supported — which today means SOAR only.
+
+**Be precise about what "Windows support" means at first.** The same-models
+requirement can only be met where MF has a runtime, and MF today runs on MLX
+and — pending the spike — torch CUDA. So the first Windows release means
+**Windows x86-64 with a supported NVIDIA GPU**. A Windows AMD or CPU-only
+machine currently has no MF path at all: ggml is SOAR-only. Those machines
+follow later, either as an explicitly reduced tier or once MF has a portable
+implementation — shipping them under the same "Fast / Best quality" promise
+today would silently break the requirement this section opens with.
+
+On the ggml fallback's footprint: what is established is small weights —
+roughly a 2.2 GB Q4_K core plus a ~330 MB vocoder — which makes an 8 GB
+machine plausible, not proven. RAM headroom and generation speed there are
+unmeasured, so it is a smaller-footprint fallback, not yet a low-memory
+promise.
 
 **Torch is the transitional Windows runtime, not a candidate for the Mac.**
 Upstream's device selection is `cuda` if available, else `cpu` — verified in
@@ -305,11 +335,13 @@ something wrong with it.
 
 ### Tests — **done, as a first layer**
 
-Thirty-eight, where there were none. They cover the sidecar protocol (the
+Forty-five, where there were none. They cover the sidecar protocol (the
 handshake, that every request field is sent, and that an engine refusal, a bad
-reply and a dead process stay three distinct things), the runtime installer,
-the audio bars, and file import against real fixtures in four formats. One runs
-against the real `engine.py`, ignored by default.
+reply and a dead process stay three distinct things), the runtime installer and
+its packs (per-pack Python pins, the committed locks, the scoped pynini
+exclusion, that nothing selects the unproven pack), the audio bars, and file
+import against real fixtures in four formats. One runs against the real
+`engine.py`, ignored by default.
 
 They have already earned it: adding `clip_id` to the request broke the suite
 rather than the app. What is still uncovered:
@@ -363,6 +395,5 @@ Left, in order:
    protects the record; terms protect the position.
 3. **Decide updates** before the first build goes out, not after.
 4. The first-run story, if it is changing from "state the wait honestly".
-5. **If Windows is in scope**, run the one spike in section 5 — and settle the
-   CPython pin regardless, because 3.13.15 cannot install upstream dots.tts on
-   any platform.
+5. **If Windows is in scope**, run the Windows NVIDIA spike in section 5. The
+   Python question is closed — each pack pins its own.
