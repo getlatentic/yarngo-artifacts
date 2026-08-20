@@ -42,9 +42,28 @@ profile) or `APPLE_ID` + `APPLE_TEAM_ID` + `APPLE_PASSWORD`, alongside
 signature verify, the audio-input entitlement present, the icon present, and a
 Gatekeeper assessment — because each of those fails silently otherwise.
 
-**What is still needed: an Apple Developer account and a Developer ID
-Application certificate**, then one run with the environment set, and a check
-that the stapled artifact opens on a Mac that has never seen it.
+**Done, 20 Aug 2026.** The certificate was already held for another app —
+Developer ID Application is issued per team, not per app, so one covers both.
+`yarngo studio_0.1.0-alpha.1_aarch64.dmg`, 16.7 MB, signed by
+`Developer ID Application: Tosin Amuda (94SW7AUBMX)`, notarized and stapled.
+Gatekeeper reports `source=Notarized Developer ID · accepted` for the image,
+for the app, and for the app mounted from inside the image, and all three
+staple-validate offline.
+
+Producing it exposed two faults in the packaging script, both of which only
+appear the first time a real Developer ID is used:
+
+- `notarytool submit` accepts only a `.zip`, `.pkg` or `.dmg` — never a bare
+  `.app`. Bundles are now zipped with `ditto` for submission, which preserves
+  the symlinks and extended attributes a signature depends on, and the ticket
+  is stapled onto the original directory.
+- The image was built *before* notarization, so it carried a copy of the app
+  made before its ticket existed. The app is now notarized and stapled first
+  and the image built around it, so a bundle dragged out of the image validates
+  offline rather than only while the machine can reach Apple.
+
+What remains is opening it on a Mac that has never seen it — the one check this
+machine cannot perform for itself.
 
 ### 2. Naming — **all lowercase**
 

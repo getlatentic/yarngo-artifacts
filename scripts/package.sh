@@ -90,35 +90,6 @@ echo "packaged: $APP"
 # and would replace the bundle that was just signed with a fresh ad-hoc one.
 # The image people download has to contain the signature, not a copy of it made
 # a moment too early.
-if [[ "${FORMATS:-dmg}" == *dmg* ]]; then
-  VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
-  DMG="target/$PROFILE/yarngo studio_${VERSION}_aarch64.dmg"
-  STAGE=$(mktemp -d)
-
-  # A run that failed part way can leave its volume mounted, and every later
-  # attempt then fails on a name already taken. Clear it rather than reporting
-  # it as a new fault.
-  while IFS= read -r stale; do
-    [[ -n "$stale" ]] && hdiutil detach "$stale" -force >/dev/null 2>&1 || true
-  done < <(ls -d "/Volumes/yarngo studio"* 2>/dev/null || true)
-
-  cp -R "$APP" "$STAGE/"
-  # Somewhere to drop it, so the image explains itself without instructions.
-  ln -s /Applications "$STAGE/Applications"
-  rm -f "$DMG"
-  if hdiutil create -volname "yarngo studio" -srcfolder "$STAGE" \
-      -ov -format UDZO "$DMG" >/dev/null; then
-    [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]] &&
-      codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$DMG"
-    echo "packaged: $DMG"
-  else
-    # A disk image is a convenience; the signed app is the artifact that
-    # matters, and losing the run over the wrapper would be the wrong trade.
-    echo "the disk image could not be built; the signed app stands" >&2
-  fi
-  rm -rf "$STAGE"
-fi
-
 # --- Notarization, when a Developer ID is configured -------------------------
 # Ad-hoc signing is enough for this machine: microphone access needs the bundle
 # identity, not a certificate. It is not enough for anyone else's — Gatekeeper
@@ -151,6 +122,13 @@ notary_args() {
   fi
 }
 
+# Notarize one artifact and staple the ticket onto it.
+#
+# `notarytool submit` accepts only a .zip, .pkg or .dmg — never a bare .app —
+# so a bundle is zipped for submission and the ticket is stapled onto the
+# original directory afterwards. Stapling a zip is meaningless; stapling the
+# .app is what lets it validate offline once someone has copied it out of the
+# disk image.
 notarize() {
   local artifact="$1"
   [[ -f "$artifact" || -d "$artifact" ]] || return 0
@@ -162,12 +140,26 @@ notarize() {
     return 0
   fi
 
-  echo "notarizing $artifact …"
-  xcrun notarytool submit "$artifact" "${creds[@]}" --wait || {
+  local submission="$artifact" scratch=""
+  if [[ -d "$artifact" ]]; then
+    scratch="$(mktemp -d)"
+    submission="$scratch/$(basename "$artifact").zip"
+    # ditto rather than zip: it preserves the symlinks and extended attributes
+    # a signed bundle depends on, and a signature that does not survive the
+    # round trip fails notarization for reasons that read as unrelated.
+    ditto -c -k --keepParent "$artifact" "$submission"
+  fi
+
+  echo "notarizing $(basename "$artifact") …"
+  if ! xcrun notarytool submit "$submission" "${creds[@]}" --wait; then
     echo "notarization failed for $artifact" >&2
+    [[ -n "$scratch" ]] && rm -rf "$scratch"
     return 1
-  }
-  # Staple so the artifact validates without a network round-trip on first open.
+  fi
+  [[ -n "$scratch" ]] && rm -rf "$scratch"
+
+  # Staple onto the artifact itself, so it validates without a network
+  # round-trip on first open.
   xcrun stapler staple "$artifact"
   xcrun stapler validate "$artifact"
 }
@@ -181,12 +173,48 @@ if [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]]; then
 
 NOTE
 else
-  # The .app has to be notarized inside a container; the .dmg is what people
-  # download, so notarize and staple that, and staple the .app too so a bare
-  # copy of it also validates.
+  # The app is notarized and stapled *first*, and only then wrapped in a disk
+  # image. Built the other way round the image carries a copy of the app made
+  # before its ticket existed, so a bundle dragged out of it validates only
+  # while the machine is online — which is exactly when a first-run user is
+  # least likely to forgive a delay.
   notarize "$APP"
-  DMG=$(ls -t "target/$PROFILE"/*.dmg 2>/dev/null | head -1 || true)
-  [[ -n "$DMG" ]] && notarize "$DMG"
+fi
+
+if [[ "${FORMATS:-dmg}" == *dmg* ]]; then
+  VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+  DMG="target/$PROFILE/yarngo studio_${VERSION}_aarch64.dmg"
+  STAGE=$(mktemp -d)
+
+  # A run that failed part way can leave its volume mounted, and every later
+  # attempt then fails on a name already taken. Clear it rather than reporting
+  # it as a new fault.
+  while IFS= read -r stale; do
+    [[ -n "$stale" ]] && hdiutil detach "$stale" -force >/dev/null 2>&1 || true
+  done < <(ls -d "/Volumes/yarngo studio"* 2>/dev/null || true)
+
+  cp -R "$APP" "$STAGE/"
+  # Somewhere to drop it, so the image explains itself without instructions.
+  ln -s /Applications "$STAGE/Applications"
+  rm -f "$DMG"
+  if hdiutil create -volname "yarngo studio" -srcfolder "$STAGE" \
+      -ov -format UDZO "$DMG" >/dev/null; then
+    [[ -n "${APPLE_SIGNING_IDENTITY:-}" ]] &&
+      codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$DMG"
+    echo "packaged: $DMG"
+  else
+    # A disk image is a convenience; the signed app is the artifact that
+    # matters, and losing the run over the wrapper would be the wrong trade.
+    echo "the disk image could not be built; the signed app stands" >&2
+  fi
+  rm -rf "$STAGE"
+fi
+
+
+# The image itself is notarized too, so the download validates before it is
+# even opened.
+if [[ -n "${APPLE_SIGNING_IDENTITY:-}" && -f "${DMG:-}" ]]; then
+  notarize "$DMG"
 fi
 
 # --- What a released build must satisfy --------------------------------------
