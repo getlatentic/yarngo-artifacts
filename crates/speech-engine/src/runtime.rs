@@ -21,18 +21,73 @@ use std::process::{Command, Stdio};
 
 use crate::paths;
 
-/// Pinned so an install is reproducible; bumping this is a deliberate act.
-const PYTHON_VERSION: &str = "3.13.15";
-const PYTHON_RELEASE: &str = "20260814";
+/// An interpreter and the packages that make it able to speak.
+///
+/// There are two because the two inference backends disagree about Python, and
+/// the disagreement is total: `mlx-speech` declares `>=3.13`, upstream
+/// `dots.tts` declares `>=3.10,<3.13`. No single pin satisfies both, so the
+/// version belongs to the pack rather than to the application. A global pin
+/// would mean picking one backend and silently breaking the other.
+pub struct Pack {
+    /// Which backend this pack exists to run.
+    pub id: &'static str,
+    /// Pinned so an install is reproducible; bumping is a deliberate act.
+    pub python: &'static str,
+    /// python-build-standalone release the interpreter comes from.
+    pub release: &'static str,
+    /// Installed with pip, in order.
+    pub packages: &'static [&'static str],
+    /// The import that proves this pack works. A version number or a path would
+    /// only be a guess about it.
+    pub probe: &'static str,
+    /// Installed size, measured rather than estimated.
+    pub approx_bytes: u64,
+}
+
+/// Apple silicon. Measured: interpreter plus MLX and its dependencies.
+pub const MLX: Pack = Pack {
+    id: "mlx",
+    python: "3.13.15",
+    release: "20260814",
+    packages: &["mlx-speech"],
+    probe: "import mlx_speech",
+    approx_bytes: 350_000_000,
+};
+
+/// Windows and Linux, and unproven — nothing selects it yet.
+///
+/// It carries the same checkpoints as [`MLX`], which is the point: the product
+/// promises dots.tts MF and SOAR on every platform, and a backend with a
+/// different catalogue would be a different product wearing the same labels.
+///
+/// `dots.tts` is deliberately installed without `WeTextProcessing`. That pulls
+/// `pynini`, which publishes manylinux wheels only, and would drag conda into a
+/// runtime that is otherwise pip into a standalone interpreter. It buys text
+/// normalisation, which the upstream runtime defaults to off. Note that
+/// dropping the dependency is not sufficient on its own: `dots_tts.utils.text`
+/// imports `tn.*` at module scope, so the import has to be made lazy first.
+pub const TORCH: Pack = Pack {
+    id: "torch",
+    python: "3.12.14",
+    release: "20260814",
+    packages: &["torch", "torchaudio", "dots.tts"],
+    probe: "import dots_tts",
+    approx_bytes: 3_000_000_000,
+};
+
+/// The pack this host runs. Only one is proven, and [`host_supported`] refuses
+/// every machine the other would serve, so this cannot silently pick an
+/// untested path.
+pub const fn pack() -> &'static Pack {
+    &MLX
+}
 
 /// What the runtime actually is, named for the user. Not a marketing version:
-/// the interpreter pin above is the thing that decides reproducibility, so it
-/// is what gets shown.
+/// the interpreter pin is the thing that decides reproducibility, so it is what
+/// gets shown.
 pub const NAME: &str = "yarngo runtime";
-pub const VERSION: &str = PYTHON_VERSION;
-/// Installed size, measured on macOS arm64 rather than estimated: interpreter
-/// plus MLX and its dependencies.
-pub const APPROX_BYTES: u64 = 350_000_000;
+pub const VERSION: &str = pack().python;
+pub const APPROX_BYTES: u64 = pack().approx_bytes;
 
 /// Where a running generation reports what it has written, and where a stop is
 /// signalled. Files rather than messages: the sidecar is blocking on one
@@ -122,9 +177,10 @@ fn python_asset() -> Option<&'static str> {
 
 fn python_url() -> Option<String> {
     let target = python_asset()?;
+    let Pack { python, release, .. } = pack();
     Some(format!(
         "https://github.com/astral-sh/python-build-standalone/releases/download/\
-         {PYTHON_RELEASE}/cpython-{PYTHON_VERSION}+{PYTHON_RELEASE}-{target}-install_only.tar.gz"
+         {release}/cpython-{python}+{release}-{target}-install_only.tar.gz"
     ))
 }
 
@@ -153,11 +209,10 @@ pub fn existing_interpreter() -> Option<PathBuf> {
     candidates.into_iter().find(|python| can_speak(python))
 }
 
-/// Whether this interpreter has the speech package. The import is the test:
-/// a version number or a path would only be a guess about it.
+/// Whether this interpreter has the speech package this host's pack needs.
 fn can_speak(python: &Path) -> bool {
     Command::new(python)
-        .args(["-c", "import mlx_speech"])
+        .args(["-c", pack().probe])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -295,7 +350,7 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
     report(Progress::Fraction(0.35));
 
     let mut pip = Command::new(&python);
-    pip.args(["-m", "pip", "install", "--upgrade", "--no-input", "mlx-speech"]);
+    pip.args(["-m", "pip", "install", "--upgrade", "--no-input"]).args(pack().packages);
     let mut seen = 0usize;
     let result = run_streaming(pip, &mut |line| {
         // pip prints one line per package collected; enough to move a bar

@@ -125,19 +125,31 @@ An earlier note here claimed "the same checkpoints run under torch on Windows".
 That was an inference stated as a fact. Checking upstream
 (`studio-dots-ai/dots.tts`) turns up two specific problems:
 
-1. **A dependency with no Windows wheels.** dots.tts requires
-   `WeTextProcessing`, which requires `pynini>=2.1.6`. Pynini 2.1.7 publishes
-   manylinux wheels only — no `win_amd64`, no `win32` — and its own guidance
-   sends Windows users to conda-forge or WSL. Our runtime installs with pip into
-   a python-build-standalone interpreter, which is neither. Nothing else in the
-   dependency list is Linux-bound: no triton, flash-attn, deepspeed, vllm or
-   xformers, and no manylinux pins. So pynini is the blocker, and it is the
-   first thing the spike should hit.
-2. **Our Python pin is already incompatible, on every platform.** The runtime
-   installs CPython **3.13.15**; upstream declares
-   `requires-python = ">=3.10,<3.13"`. The current pin cannot install upstream
-   dots.tts at all. This is not a Windows problem — it needs deciding before any
-   torch route is attempted anywhere.
+1. **A packaging blocker, not an inference blocker.** dots.tts requires
+   `WeTextProcessing`, which requires `pynini>=2.1.6`, and pynini 2.1.7
+   publishes manylinux wheels only — no `win_amd64`, no `win32` — with its own
+   guidance sending Windows users to conda-forge or WSL. But that dependency
+   buys **text normalisation, which the upstream runtime defaults to off**
+   (`normalize_text: bool = False`). So it blocks `pip install dots.tts`; it
+   does not block generating audio. Nothing else in the dependency list is
+   Linux-bound: no triton, flash-attn, deepspeed, vllm or xformers, and no
+   manylinux pins.
+
+   Dropping it from the install list is not sufficient on its own.
+   `dots_tts/utils/text.py` imports `tn.chinese.normalizer` and
+   `tn.english.normalizer` **at module scope**, and `runtime.py` imports from
+   that module at module scope in turn — so a runtime without the package fails
+   at import, before any generation. The fix is to make those two imports lazy,
+   which is a few lines and worth sending upstream rather than carrying.
+
+2. **No single Python version can serve both backends.** `mlx-speech` declares
+   `requires-python = ">=3.13"`; upstream `dots.tts` declares `>=3.10,<3.13`.
+   The two are mutually exclusive, so moving the runtime to 3.12 wholesale would
+   break the macOS path that currently works. The version is now a property of
+   the runtime pack (`runtime::MLX` at 3.13.15, `runtime::TORCH` at 3.12.14),
+   both from the same pinned python-build-standalone release, which publishes
+   3.12.14 for `x86_64-pc-windows-msvc` as well. Three tests hold the split, and
+   one of them asserts that nothing selects the unproven pack.
 
 Upstream's trove classifiers list POSIX::Linux and MacOS and omit Windows, which
 means untested rather than impossible — but combined with pynini it is enough
@@ -145,11 +157,20 @@ that "torch on Windows" stays a hypothesis until a machine says otherwise.
 
 #### The spike, and nothing larger
 
-One Windows 11 machine with an NVIDIA GPU. Resolve the Python version, install
-torch CUDA, install upstream dots.tts — **expect to fight pynini here, and stop
-if it cannot be resolved without conda** — load MF, clone the same Nigerian
-reference, generate; then the same with SOAR. Pass is two valid clips. That is
-the whole test, and it decides the shape of the port.
+One Windows 11 machine with an NVIDIA GPU:
+
+1. CPython 3.12.14 — already the `TORCH` pack's pin.
+2. Install PyTorch CUDA.
+3. Install dots.tts **without** `WeTextProcessing`, with the two `tn.*` imports
+   in `utils/text.py` made lazy.
+4. Run with `normalize_text = False`, which is the default anyway.
+5. Load dots.tts MF, clone the Nigerian reference already used for validation,
+   generate one clip.
+6. Same again with SOAR.
+
+Pass is two valid clips. That is the whole test, and it decides the shape of the
+port. If it fails, diagnose the failing operation — do not reopen the runtime
+comparison.
 
 If it passes: macOS on MLX, Windows and Linux on PyTorch CUDA, and ggml as the
 portable and low-memory fallback wherever it is supported — which today means
@@ -159,6 +180,15 @@ ONNX is not a route yet. There is no maintained ONNX build of the dots pipeline,
 and exporting it means exporting the whole iterative stack — semantic encoder,
 Qwen backbone, AR patch generation, flow-matching DiT, vocoder, speaker
 conditioning — not one graph. Worth revisiting only if both routes above fail.
+
+#### Runtimes are infrastructure; models are the choice
+
+Adding `runtime` to the model metadata is right, but it does not belong under
+every row in the picker. What a person chooses is "Fast · dots.tts MF · 3.4 GB".
+Which engine executes it is the app's business, and belongs where runtimes are
+managed — one line saying what is installed and what it runs on. The picker is
+already close to reading like a technical tool; a backend name on every row
+would push it over.
 
 #### Not every machine offers every model
 

@@ -258,6 +258,40 @@ fn an_interpreter_that_cannot_import_the_package_is_not_used() {
 }
 
 #[test]
+fn the_two_packs_cannot_share_an_interpreter() {
+    // This is the whole reason the Python version belongs to the pack. mlx-speech
+    // declares >=3.13; upstream dots.tts declares >=3.10,<3.13. A single pin
+    // would quietly break whichever backend it was not chosen for, and the
+    // breakage would appear as a failed install on someone else's machine.
+    let (mlx, torch) = (&runtime::MLX, &runtime::TORCH);
+    assert_ne!(mlx.python, torch.python, "one pin cannot satisfy both backends");
+    assert!(mlx.python.starts_with("3.13"), "mlx-speech needs 3.13: {}", mlx.python);
+    assert!(torch.python.starts_with("3.12"), "dots.tts refuses 3.13: {}", torch.python);
+}
+
+#[test]
+fn both_packs_carry_the_same_checkpoints() {
+    // The product promises dots.tts MF and SOAR everywhere. A second backend
+    // that installed a different model family would be a different product
+    // wearing the same two labels.
+    assert!(runtime::TORCH.packages.iter().any(|p| p.contains("dots")));
+    // And it must not drag in the normaliser: that pulls pynini, which has no
+    // Windows wheels, for a feature the upstream runtime defaults to off.
+    assert!(
+        !runtime::TORCH.packages.iter().any(|p| p.eq_ignore_ascii_case("WeTextProcessing")),
+        "the normaliser is what forces conda onto Windows"
+    );
+}
+
+#[test]
+fn only_the_proven_pack_is_selected() {
+    // The torch pack is declared but has never run anywhere. Until the spike
+    // passes, nothing may choose it.
+    assert_eq!(runtime::pack().id, runtime::MLX.id);
+    assert_eq!(runtime::VERSION, runtime::MLX.python);
+}
+
+#[test]
 fn the_download_url_names_the_pinned_version() {
     // Only meaningful where there is a prebuilt interpreter for the host; on
     // anything else `None` is the right answer and the installer says so.
