@@ -268,6 +268,50 @@ backbone — an afternoon that decides whether the rest is worth anyone's month.
 The `SpeechEngine` trait is what keeps torch replaceable by one of these
 without the app noticing.
 
+#### Prior art, checked in the clones rather than believed
+
+Superwhisper and FluidVoice both ship cross-platform voice apps; both are
+cloned under `third-party/` (gitignored) and were read, not summarised. The
+first finding is negative and saves effort: **neither publishes Windows
+inference source.** Superwhisper's repo is a download page — macOS, Windows
+x64, Windows ARM, iOS installers, no code. FluidVoice's macOS app is real open
+source, but its `windows-main` branch is a single README: "The Windows source
+code is not published here." There is nothing to copy; what is learnable is
+deployment architecture, from release artifacts and release notes.
+
+What their shipping practice confirms or adds:
+
+- **The app installer stays small; heavy things arrive on demand.** FluidVoice's
+  Windows installer is 11 MB. Runtimes and models download after. Our macOS
+  build already works this way; the torch runtime must never be bundled into a
+  Windows installer.
+- **Accelerator packs are separate artifacts.** parakeet.cpp publishes
+  `bin-win-{cpu,vulkan,cuda}-x64` plus a separate `cudart-…-win-cuda-x64.zip`;
+  FluidVoice ships an on-demand CUDA overlay (with app-local MSVC runtime
+  files) over a CPU/Vulkan base, as its own release tag. For a future ggml
+  runtime that pattern is literal. For the torch pack it translates: a CUDA
+  variant and a CPU variant are different locks against different wheel
+  indexes, not one pack with a flag. MSVC runtime files are a shipping
+  concern, not a spike concern.
+- **Their bugs are the checklist.** FluidVoice shipped, then fixed: older GPUs
+  attempting an unsupported CUDA runtime instead of falling back (0.0.8) — so
+  the capability probe must verify the runtime actually loads, not trust the
+  vendor string; and model updates leaving the previous version on disk,
+  never reclaimed (0.0.9) — so replacing a model or runtime must delete what
+  it replaced, and our Storage pane would make that leak visible.
+- **Models update independently of the app** — "Update available" on the model
+  row, the current one keeps working until the user chooses (0.0.9). That is
+  the shape our model catalogue already has, and it feeds the open "no way to
+  ship a fix" decision: the app updater and the model/runtime updater are two
+  different mechanisms.
+- **Feature parity is not a launch gate.** Superwhisper's Windows build openly
+  lags its Mac features. A Windows v1 that does clone → Fast/Best quality →
+  generate → play/export, with panes missing, is a legitimate release.
+- **They did not universalise the Mac engine.** FluidVoice's Mac app declares
+  `platforms: [.macOS("15.0")]`, links CoreAudio, pins FluidAudio to a branch —
+  and Windows is a separate implementation anyway. MLX staying Mac-only is the
+  normal pattern, not a compromise.
+
 #### Runtimes are infrastructure; models are the choice
 
 Adding `runtime` to the model metadata is right, but it does not belong under

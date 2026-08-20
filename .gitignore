@@ -11,3 +11,4 @@ __pycache__/
 # Screenshots taken while comparing the app against the design export.
 /design/current/
 packaging/uv
+third-party/
