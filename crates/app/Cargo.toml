@@ -18,6 +18,11 @@ gpui-component = { git = "https://github.com/longbridge/gpui-component" }
 rodio = "0.22.2"
 cpal = "0.18.2"
 hound = "3.5.1"
+# Reading is not the same job as writing. hound writes the WAV the recorder
+# produces; Symphonia reads whatever the user actually has, which is usually a
+# voice memo — .m4a — and never a WAV. Pure Rust, so nothing is shipped
+# alongside the binary and Windows behaves identically.
+symphonia = { version = "0.5", features = ["aac", "alac", "isomp4", "mp3"] }
 rust-i18n = "4.2"
 
 # cargo-packager produces macOS .app/.dmg, Windows NSIS/MSI and Linux

@@ -866,11 +866,25 @@ impl VoiceStudio {
     /// which is the right thing to read while choosing one and the wrong thing
     /// to read afterwards — a clip was made by dots.tts MF, not by "Fast".
     pub(crate) fn model_label(&self) -> String {
+        // No model chosen yet is a draft, and a draft has nothing to name.
+        let Some(id) = self.clip_model() else { return String::new() };
         self.models
             .iter()
-            .find(|m| Some(m.id.as_str()) == self.clip_model())
+            .find(|m| m.id == id)
             .map(model_name)
-            .unwrap_or_default()
+            // A clip records what actually made it and that record is never
+            // rewritten, so an id with no catalogue entry is a real state: the
+            // model was removed, or the clip came from a machine running a
+            // different backend. The id is the truest thing left to show, and
+            // showing nothing — which is what this did — reads as a bug.
+            .unwrap_or_else(|| id.to_string())
+    }
+
+    /// Whether the model a clip names is one this machine can offer. False for
+    /// a model since uninstalled, and for every clip carried over from a
+    /// platform whose backend has a different catalogue.
+    pub(crate) fn model_available(&self) -> bool {
+        self.clip_model().is_none_or(|id| self.models.iter().any(|m| m.id == id))
     }
 
     /// One line under the name saying what this clip is set up with, or what it

@@ -141,6 +141,21 @@ impl VoiceStudio {
         }
     }
 
+    /// A model this machine can actually generate with.
+    ///
+    /// What carries over is normally right — the next clip usually wants the
+    /// last one's model. But a finished clip holds the model that *made* it,
+    /// which may be one this backend has never had: a clip carried over from
+    /// another platform, or a model since uninstalled. Carrying that into a new
+    /// draft pins it to something that cannot run, and the failure arrives at
+    /// Generate rather than here.
+    fn usable_model(&self, carried: Option<&str>) -> Option<String> {
+        carried
+            .filter(|id| self.models.iter().any(|m| m.id == *id))
+            .map(str::to_owned)
+            .or_else(|| self.selected_model.clone())
+    }
+
     /// Start a clip. The voice and model carry over from what was last used,
     /// because that is nearly always what the next clip wants too.
     pub(crate) fn new_draft(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -148,7 +163,7 @@ impl VoiceStudio {
         let draft = Draft::new(
             self.next_draft,
             self.clip_voice().map(str::to_owned),
-            self.clip_model().map(str::to_owned),
+            self.usable_model(self.clip_model()),
         );
         self.selected = Selected::Draft(draft.id.clone());
         self.drafts.insert(0, draft);
@@ -224,7 +239,9 @@ impl VoiceStudio {
         let mut draft = Draft::new(
             self.next_draft,
             clip.voice_id.clone(),
-            Some(clip.model.clone()),
+            // The new take would rather use the model that made the original,
+            // but only if this machine has it.
+            self.usable_model(Some(&clip.model)),
         );
         draft.text = clip.text.clone();
         draft.name = Some(clip.name.clone());

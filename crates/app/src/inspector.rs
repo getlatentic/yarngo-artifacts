@@ -403,6 +403,19 @@ impl VoiceStudio {
                     ),
             )
             .child(Self::record_line(t!("model.label").to_string(), self.model_label()))
+            // The clip still names the model that made it, but this machine
+            // cannot offer it — uninstalled, or a catalogue from another
+            // platform's backend. Say so, rather than showing a name that
+            // looks selectable and is not.
+            .when(!self.model_available(), |d| {
+                d.child(
+                    div()
+                        .text_size(px(11.5))
+                        .line_height(px(17.0))
+                        .text_color(theme::hex(0x6B645A))
+                        .child(t!("clip.model_unavailable").to_string()),
+                )
+            })
             .when_some(seed, |d, seed| {
                 d.child(
                     Self::record_line(t!("clip.seed").to_string(), seed.to_string()).child(

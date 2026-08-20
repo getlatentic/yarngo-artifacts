@@ -241,6 +241,9 @@ settings:
     sk: Zatiaľ nie je hotové. Panel je pomenovaný, aby bolo jasné, čo tu bude.
 
 clip:
+  model_unavailable:
+    en: Not available on this machine. The clip keeps the name of what made it.
+    sk: Na tomto počítači nie je k dispozícii. Nahrávka si ponecháva názov toho, čo ju vytvorilo.
   untitled:
     en: Untitled clip
     sk: Nepomenovaná nahrávka
@@ -572,8 +575,8 @@ enrol:
     en: Upload a recording
     sk: Použiť existujúcu nahrávku
   upload_detail:
-    en: A wav of someone reading this exact script — an earlier recording of yours, or one sent to you. Nothing checks the words, so a file of anything else will slur every clip.
-    sk: Wav súbor s prečítaním presne tohto textu — vaša staršia nahrávka alebo nahrávka, ktorú vám niekto poslal. Slová sa nekontrolujú, takže iný obsah pokazí každú nahrávku.
+    en: A recording of someone reading this exact script — wav, m4a, mp3, flac or ogg. Nothing checks the words, so a file of anything else will slur every clip, and the voice must be yours or one you have permission to use.
+    sk: Nahrávka s prečítaním presne tohto textu — wav, m4a, mp3, flac alebo ogg. Slová sa nekontrolujú, takže iný obsah pokazí každú nahrávku, a hlas musí byť váš alebo taký, na ktorý máte súhlas.
   imported_detail:
     en: Brought in from a file. Listen once — it should be this script, read by the person whose voice this is.
     sk: Načítané zo súboru. Vypočujte si to — mal by to byť tento text, prečítaný osobou, ktorej hlas to je.

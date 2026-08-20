@@ -395,7 +395,7 @@ impl VoiceStudio {
             let checked = {
                 let path = path.clone();
                 cx.background_spawn(async move {
-                    let (samples, rate) = recorder::load_wav(&path)?;
+                    let (samples, rate) = recorder::load_audio(&path)?;
                     let quality = recorder::assess(&samples, rate)?;
                     Ok::<_, String>((quality, recorder::envelope(&samples, TAKE_BARS)))
                 })
@@ -841,7 +841,7 @@ impl VoiceStudio {
     /// Hand a finished clip to the player, ready but not playing.
     pub(crate) fn load_clip(&mut self, path: &std::path::Path, audio_s: f32, cx: &mut Context<Self>) {
         self.clip = Some((path.to_path_buf(), audio_s));
-        self.clip_levels = recorder::load_wav(path)
+        self.clip_levels = recorder::load_audio(path)
             .map(|(samples, _)| recorder::envelope(&samples, CLIP_BARS))
             .unwrap_or_default();
         if let Some(player) = self.player.as_mut() {

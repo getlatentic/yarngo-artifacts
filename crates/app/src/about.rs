@@ -27,12 +27,13 @@ struct Credit {
 
 /// The things the app is built out of that are not its own: bundled, or
 /// installed by it. Models are neither — see the note at the top.
-const CREDITS: [Credit; 5] = [
+const CREDITS: [Credit; 6] = [
     Credit { what: "Sora", terms: "SIL Open Font Licence 1.1" },
     Credit { what: "Noto Sans, Noto Sans Mono", terms: "SIL Open Font Licence 1.1" },
     Credit { what: "Material Symbols Rounded", terms: "Apache-2.0" },
     Credit { what: "CPython, via python-build-standalone", terms: "PSF Licence" },
     Credit { what: "MLX", terms: "MIT" },
+    Credit { what: "Symphonia", terms: "MPL-2.0" },
 ];
 
 impl VoiceStudio {

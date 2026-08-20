@@ -160,31 +160,106 @@ impl Recorder {
     }
 }
 
-/// Read a wav file into mono samples. Used to bring in a reading of the script
-/// made somewhere else — on another machine, or by the person whose voice it
-/// is — which is possible only because the script is fixed, so the transcript
-/// is known without transcribing anything.
-pub fn load_wav(path: &std::path::Path) -> Result<(Vec<f32>, u32), String> {
-    let mut reader = hound::WavReader::open(path)
-        .map_err(|e| format!("cannot read that file: {e}"))?;
-    let spec = reader.spec();
-    let raw: Result<Vec<f32>, _> = match spec.sample_format {
-        hound::SampleFormat::Float => reader.samples::<f32>().collect(),
-        hound::SampleFormat::Int => {
-            let scale = 1.0 / (1i64 << (spec.bits_per_sample - 1)) as f32;
-            reader.samples::<i32>().map(|s| s.map(|v| v as f32 * scale)).collect()
+/// Read an audio file into mono samples at its own sample rate.
+///
+/// Used to bring in a reading of the script made somewhere else — on another
+/// machine, or by the person whose voice it is — which is possible only because
+/// the script is fixed, so the transcript is known without transcribing.
+///
+/// Deliberately not WAV-only. The file a person reaches for is a voice memo,
+/// which is `.m4a`, and the platform file picker has no extension filter to
+/// steer them away from it. Refusing that file is refusing the common case, so
+/// the decoder covers what people actually have: wav, m4a, mp3, flac, ogg.
+pub fn load_audio(path: &std::path::Path) -> Result<(Vec<f32>, u32), String> {
+    use symphonia::core::audio::SampleBuffer;
+    use symphonia::core::codecs::DecoderOptions;
+    use symphonia::core::errors::Error;
+    use symphonia::core::formats::FormatOptions;
+    use symphonia::core::io::MediaSourceStream;
+    use symphonia::core::meta::MetadataOptions;
+    use symphonia::core::probe::Hint;
+
+    let file = std::fs::File::open(path).map_err(|e| format!("cannot open that file: {e}"))?;
+    let stream = MediaSourceStream::new(Box::new(file), Default::default());
+
+    // The extension is a hint only — a mislabelled file is still probed by
+    // content, so a .wav that is really an m4a opens rather than misleads.
+    let mut hint = Hint::new();
+    if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
+        hint.with_extension(extension);
+    }
+
+    let probed = symphonia::default::get_probe()
+        .format(&hint, stream, &FormatOptions::default(), &MetadataOptions::default())
+        .map_err(|_| unreadable(path))?;
+    let mut format = probed.format;
+
+    let track = format
+        .tracks()
+        .iter()
+        .find(|t| t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL)
+        .ok_or_else(|| "that file has no audio in it".to_string())?;
+    let track_id = track.id;
+    let mut decoder = symphonia::default::get_codecs()
+        .make(&track.codec_params, &DecoderOptions::default())
+        .map_err(|_| unreadable(path))?;
+
+    let mut samples: Vec<f32> = Vec::new();
+    let mut sample_rate = track.codec_params.sample_rate.unwrap_or(0);
+    let mut channels = 0usize;
+    let mut buffer: Option<SampleBuffer<f32>> = None;
+
+    loop {
+        let packet = match format.next_packet() {
+            Ok(packet) => packet,
+            // Both of these are how a file ends, not how one fails.
+            Err(Error::IoError(e)) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(Error::ResetRequired) => break,
+            Err(e) => return Err(format!("that file could not be decoded: {e}")),
+        };
+        if packet.track_id() != track_id {
+            continue;
         }
-    };
-    let raw = raw.map_err(|e| format!("that file could not be decoded: {e}"))?;
+        match decoder.decode(&packet) {
+            Ok(decoded) => {
+                let spec = *decoded.spec();
+                sample_rate = spec.rate;
+                channels = spec.channels.count();
+                let buffer = buffer.get_or_insert_with(|| {
+                    SampleBuffer::new(decoded.capacity() as u64, spec)
+                });
+                buffer.copy_interleaved_ref(decoded);
+                samples.extend_from_slice(buffer.samples());
+            }
+            // A damaged packet mid-file loses that packet, not the recording.
+            Err(Error::DecodeError(_)) => continue,
+            Err(e) => return Err(format!("that file could not be decoded: {e}")),
+        }
+    }
+
+    if samples.is_empty() || sample_rate == 0 {
+        return Err(unreadable(path));
+    }
 
     // Downmix rather than refuse: a stereo reading is still a reading.
-    let channels = spec.channels.max(1) as usize;
-    let samples = if channels == 1 {
-        raw
+    let samples = if channels <= 1 {
+        samples
     } else {
-        raw.chunks(channels).map(|f| f.iter().sum::<f32>() / channels as f32).collect()
+        samples.chunks(channels).map(|f| f.iter().sum::<f32>() / channels as f32).collect()
     };
-    Ok((samples, spec.sample_rate))
+    Ok((samples, sample_rate))
+}
+
+/// What to say when a file will not open. Names the format the person chose,
+/// because "unsupported" leaves them guessing which part was wrong.
+fn unreadable(path: &std::path::Path) -> String {
+    match path.extension().and_then(|e| e.to_str()) {
+        Some(ext) => format!(
+            "That .{} file could not be read. Try a wav, m4a, mp3, flac or ogg recording.",
+            ext.to_lowercase()
+        ),
+        None => "That file could not be read. Try a wav, m4a, mp3, flac or ogg recording.".into(),
+    }
 }
 
 /// The same bar for a recording and an imported file. Shared deliberately: a
@@ -397,5 +472,60 @@ mod tests {
         // or return a short row.
         assert_eq!(envelope(&[], 34).len(), 34);
         assert!(envelope(&[0.0; 1000], 34).iter().all(|l| *l == 0.0));
+    }
+
+    /// The same second of speech, encoded four ways. Real files rather than
+    /// synthesised bytes: the decoder's job is to open what a person actually
+    /// has, and an m4a is what comes off a phone.
+    fn fixture(name: &str) -> std::path::PathBuf {
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
+    }
+
+    #[test]
+    fn a_voice_memo_opens() {
+        // The case that used to fail: the picker has no extension filter, so
+        // this is the file people were choosing and being refused.
+        let (samples, rate) = load_audio(&fixture("voice-memo.m4a")).expect("m4a should decode");
+        assert_eq!(rate, 16_000);
+        assert!(!samples.is_empty(), "decoded to silence");
+        assert!(samples.iter().any(|s| s.abs() > 0.01), "decoded to nothing audible");
+    }
+
+    #[test]
+    fn every_format_gives_back_the_same_recording() {
+        // One source encoded four ways, so a decoder that opens a file but
+        // mangles it — wrong channel count, wrong scaling — is still a failure.
+        let reference = load_audio(&fixture("tone.wav")).expect("wav should decode");
+        for name in ["voice-memo.m4a", "voice-memo.mp3", "voice-memo.flac"] {
+            let (samples, rate) = load_audio(&fixture(name)).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(rate, reference.1, "{name} changed the sample rate");
+
+            let seconds = samples.len() as f32 / rate as f32;
+            let expected = reference.0.len() as f32 / reference.1 as f32;
+            // Lossy formats pad with encoder delay; a tenth of a second of
+            // slack catches a dropped channel without failing on that.
+            assert!(
+                (seconds - expected).abs() < 0.12,
+                "{name} is {seconds:.2}s against {expected:.2}s"
+            );
+
+            let peak = samples.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+            let want = reference.0.iter().fold(0.0f32, |m, s| m.max(s.abs()));
+            assert!((peak - want).abs() < 0.25, "{name} peaks at {peak:.2}, wanted {want:.2}");
+        }
+    }
+
+    #[test]
+    fn a_file_that_is_not_audio_says_so_in_words() {
+        let dir = std::env::temp_dir().join("yarngo-load-audio");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("notes.txt");
+        std::fs::write(&path, b"this is not a recording").unwrap();
+
+        let err = load_audio(&path).expect_err("a text file is not audio");
+        // The old failure was a hound RIFF parse error shown verbatim. What a
+        // person needs is the format they picked and the ones that work.
+        assert!(err.contains(".txt"), "should name what was picked: {err}");
+        assert!(err.contains("m4a"), "should name what would work: {err}");
     }
 }
