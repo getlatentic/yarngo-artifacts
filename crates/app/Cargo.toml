@@ -35,8 +35,16 @@ identifier = "dev.yarngo.studio"
 description = "Speak text in your own voice, entirely on your machine."
 authors = ["yarngo"]
 category = "Productivity"
-# The sidecar and its locales ship alongside the binary.
-resources = ["../../sidecar/**/*", "locales/**/*"]
+# The sidecar, its locales, the pack manifests, and the uv that installs them.
+# uv is fetched by scripts/package.sh rather than committed — it is a 40 MB
+# binary, and the packaging script signs it along with every other executable
+# it finds under Resources.
+resources = [
+  "../../sidecar/**/*",
+  "locales/**/*",
+  "../../packaging/packs/**/*",
+  "../../packaging/uv",
+]
 # Cut from the brand mark by scripts/make-app-icon.py. Without this the app
 # ships with the generic binary icon.
 icons = ["../../packaging/YarngoStudio.icns", "../../packaging/icon-1024.png"]

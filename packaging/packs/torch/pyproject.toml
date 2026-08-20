@@ -1,0 +1,22 @@
+# The Windows and Linux speech pack. Unproven — nothing selects it yet.
+#
+# It carries the same checkpoints as the MLX pack, which is the point: the
+# product promises dots.tts MF and SOAR on every platform.
+[project]
+name = "yarngo-speech-torch"
+version = "0"
+# Upstream dots.tts declares >=3.10,<3.13.
+requires-python = ">=3.12,<3.13"
+dependencies = ["dots.tts", "torch", "torchaudio"]
+
+[tool.uv]
+# WeTextProcessing pulls pynini, which publishes manylinux wheels only and
+# sends Windows users to conda — for text normalisation, which the upstream
+# runtime defaults to off (`normalize_text: bool = False`).
+#
+# An unsatisfiable marker rather than a removal: the dependency stays visible in
+# the lock, gated, so the next person can see the decision instead of wondering
+# where it went. Note that dropping the package is not sufficient on its own —
+# dots_tts/utils/text.py imports tn.* at module scope, so those imports have to
+# be made lazy too.
+override-dependencies = ["WeTextProcessing ; sys_platform == 'never'"]

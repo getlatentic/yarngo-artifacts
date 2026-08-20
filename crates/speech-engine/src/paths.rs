@@ -54,6 +54,19 @@ fn bundle_resources() -> Option<PathBuf> {
     resources.is_dir().then_some(resources)
 }
 
+/// A file shipped alongside the app: inside `Contents/Resources` in a bundle,
+/// or under `packaging/` in a checkout. `None` when it is not there, so the
+/// caller can fall back rather than build a path to nothing.
+pub fn resource(name: &str) -> Option<PathBuf> {
+    let candidates = [
+        bundle_resources().map(|r| r.join(name)),
+        std::env::var("CARGO_MANIFEST_DIR")
+            .ok()
+            .map(|d| PathBuf::from(d).join("../../packaging").join(name)),
+    ];
+    candidates.into_iter().flatten().find(|p| p.exists())
+}
+
 /// Directory holding `sidecar/engine.py`, whichever layout we are in.
 fn sidecar_root(dev_root: &Path) -> PathBuf {
     if let Ok(dir) = std::env::var("YARNGO_SIDECAR_ROOT") {

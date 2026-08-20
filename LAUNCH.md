@@ -142,7 +142,32 @@ That was an inference stated as a fact. Checking upstream
    at import, before any generation. The fix is to make those two imports lazy,
    which is a few lines and worth sending upstream rather than carrying.
 
-2. **No single Python version can serve both backends.** `mlx-speech` declares
+2. **uv installs the packages, for every pack; the interpreter pin stays ours.**
+   uv cannot fetch our interpreter — its downloadable versions are compiled into
+   the uv binary, and the one tested here (0.9.8) tops out at 3.13.9 against our
+   pinned 3.13.15. Pinning through uv would tie the Python version to uv's
+   release cadence. So the split is one tool per job, applied to both packs:
+   we fetch the interpreter, `uv sync --frozen` builds the environment beside it
+   from a committed lock. Proven end to end — a real install from an empty
+   directory reaches a venv that imports `mlx_speech`, and `uv sync` against our
+   own unpacked 3.13.15 took 1.6 seconds.
+
+   Two things this buys beyond consistency. **Installs became reproducible**:
+   `pip install --upgrade` resolved fresh on every machine, so two people
+   installing a week apart got different dependency trees; the lock pins all 26
+   with hashes. And **the pynini exclusion became declarative** —
+   `[tool.uv] override-dependencies` in the torch pack's manifest, committed and
+   reviewable, rather than `--no-deps` plus a hand-maintained copy of upstream's
+   17 dependencies. Verified: without it the resolution pulls `pynini==2.1.7`
+   and `wetextprocessing==1.2.0`; with it both are gated behind
+   `sys_platform == 'never'` and `dots-tts==0.3.1` still resolves alongside
+   torch 2.13.0.
+
+   `uv add` is the dev-time way to edit a pack manifest, not part of the install
+   path. `uv tool` is for CLI tools in isolated environments; the sidecar is
+   imported as a library, so it has no use here.
+
+3. **No single Python version can serve both backends.** `mlx-speech` declares
    `requires-python = ">=3.13"`; upstream `dots.tts` declares `>=3.10,<3.13`.
    The two are mutually exclusive, so moving the runtime to 3.12 wholesale would
    break the macOS path that currently works. The version is now a property of

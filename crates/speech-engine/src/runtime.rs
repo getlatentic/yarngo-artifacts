@@ -35,7 +35,13 @@ pub struct Pack {
     pub python: &'static str,
     /// python-build-standalone release the interpreter comes from.
     pub release: &'static str,
-    /// Installed with pip, in order.
+    /// Directory under `packs/` holding this pack's `pyproject.toml` and
+    /// `uv.lock`. The lock is what makes an install reproducible: resolving
+    /// fresh on each machine gave two people installing a week apart two
+    /// different dependency trees.
+    pub manifest: &'static str,
+    /// What the lock resolves to, for the record. Not what gets installed —
+    /// `uv sync` reads the lock, not this.
     pub packages: &'static [&'static str],
     /// The import that proves this pack works. A version number or a path would
     /// only be a guess about it.
@@ -49,6 +55,7 @@ pub const MLX: Pack = Pack {
     id: "mlx",
     python: "3.13.15",
     release: "20260814",
+    manifest: "mlx",
     packages: &["mlx-speech"],
     probe: "import mlx_speech",
     approx_bytes: 350_000_000,
@@ -70,6 +77,7 @@ pub const TORCH: Pack = Pack {
     id: "torch",
     python: "3.12.14",
     release: "20260814",
+    manifest: "torch",
     packages: &["torch", "torchaudio", "dots.tts"],
     probe: "import dots_tts",
     approx_bytes: 3_000_000_000,
@@ -184,13 +192,39 @@ fn python_url() -> Option<String> {
     ))
 }
 
-/// The interpreter inside an installed runtime.
-pub fn interpreter(runtime: &Path) -> PathBuf {
+/// Where the CPython we fetched is unpacked. Not what runs the sidecar — the
+/// pack environment below is built against it.
+///
+/// uv cannot fetch this itself: its downloadable versions are compiled into the
+/// uv binary, so pinning through uv would tie our Python to uv's release
+/// cadence. The pin stays ours; uv installs the packages.
+pub fn base_interpreter(runtime: &Path) -> PathBuf {
+    let python = runtime.join("interpreter").join("python");
     if cfg!(windows) {
-        runtime.join("python").join("python.exe")
+        python.join("python.exe")
     } else {
-        runtime.join("python").join("bin").join("python3")
+        python.join("bin").join("python3")
     }
+}
+
+/// This pack's environment, built by `uv sync` from the committed lock. This is
+/// the interpreter the sidecar runs under.
+pub fn interpreter(runtime: &Path) -> PathBuf {
+    let venv = runtime.join(pack().manifest).join(".venv");
+    if cfg!(windows) {
+        venv.join("Scripts").join("python.exe")
+    } else {
+        venv.join("bin").join("python3")
+    }
+}
+
+/// The `uv` that installs packages: an override for tests, the copy inside the
+/// bundle, then whatever is on PATH so a checkout works without one.
+fn uv_binary() -> PathBuf {
+    if let Ok(explicit) = std::env::var("YARNGO_UV") {
+        return PathBuf::from(explicit);
+    }
+    paths::resource("uv").unwrap_or_else(|| PathBuf::from("uv"))
 }
 
 /// An interpreter already on this machine that can run the speech stack.
@@ -269,8 +303,23 @@ fn run_streaming(
     })
 }
 
+/// Put this pack's manifest and lock where `uv sync` can build beside them.
+///
+/// Both files, always: a `pyproject.toml` without its lock would make uv
+/// resolve from scratch, which is the behaviour the lock exists to replace.
+fn stage_manifest(project: &Path) -> Result<(), String> {
+    std::fs::create_dir_all(project).map_err(|e| format!("cannot create {}: {e}", project.display()))?;
+    for file in ["pyproject.toml", "uv.lock"] {
+        let source = paths::resource(&format!("packs/{}/{file}", pack().manifest))
+            .ok_or_else(|| format!("{file} for the {} pack is missing", pack().id))?;
+        std::fs::copy(&source, project.join(file))
+            .map_err(|e| format!("cannot stage {file}: {e}"))?;
+    }
+    Ok(())
+}
+
 /// Install the runtime, reporting progress. Safe to re-run: an existing
-/// interpreter is reused and pip is idempotent.
+/// interpreter is reused and `uv sync` converges on the lock.
 pub fn install(report: impl FnMut(Progress)) {
     install_from(None, report)
 }
@@ -287,7 +336,7 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
     }
 
     let runtime = paths::runtime_dir();
-    let python_dir = runtime.join("python");
+    let base = runtime.join("interpreter");
 
     if let Err(err) = std::fs::create_dir_all(&runtime) {
         report(Progress::Failed(format!("cannot create {}: {err}", runtime.display())));
@@ -295,7 +344,7 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
     }
 
     // --- 1. interpreter ---
-    if !interpreter(&runtime).exists() {
+    if !base_interpreter(&runtime).exists() {
         let Some(url) = python_url() else {
             report(Progress::Failed(format!(
                 "no prebuilt Python for {} {}",
@@ -313,7 +362,8 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
             None => {
                 report(Progress::Step("Downloading Python…".into()));
                 report(Progress::Fraction(0.05));
-                let into = runtime.join("python.tar.gz");
+                let _ = std::fs::create_dir_all(&base);
+                let into = base.join("python.tar.gz");
                 let mut curl = Command::new("curl");
                 curl.args(["-fL", "--retry", "3", "-o"]).arg(&into).arg(&url);
                 if let Err(err) = run_streaming(curl, &mut |_| {}) {
@@ -326,10 +376,10 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
 
         report(Progress::Step("Unpacking Python…".into()));
         report(Progress::Fraction(0.25));
-        let _ = std::fs::create_dir_all(&python_dir);
+        let _ = std::fs::create_dir_all(&base);
         let mut tar = Command::new("tar");
         // The archive holds a top-level `python/` directory already.
-        tar.arg("-xzf").arg(&source).arg("-C").arg(&runtime);
+        tar.arg("-xzf").arg(&source).arg("-C").arg(&base);
         if let Err(err) = run_streaming(tar, &mut |_| {}) {
             report(Progress::Failed(format!("unpacking Python failed: {err}")));
             return;
@@ -339,9 +389,9 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
         }
     }
 
-    let python = interpreter(&runtime);
-    if !python.exists() {
-        report(Progress::Failed(format!("interpreter missing after unpack: {}", python.display())));
+    let base = base_interpreter(&runtime);
+    if !base.exists() {
+        report(Progress::Failed(format!("interpreter missing after unpack: {}", base.display())));
         return;
     }
 
@@ -349,13 +399,30 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
     report(Progress::Step("Installing the speech engine…".into()));
     report(Progress::Fraction(0.35));
 
-    let mut pip = Command::new(&python);
-    pip.args(["-m", "pip", "install", "--upgrade", "--no-input"]).args(pack().packages);
+    // The manifest is copied out of the bundle rather than synced in place:
+    // `uv sync` writes a `.venv` beside it, and writing inside a signed bundle
+    // would break its signature.
+    let project = runtime.join(pack().manifest);
+    if let Err(err) = stage_manifest(&project) {
+        report(Progress::Failed(err));
+        return;
+    }
+
+    let mut sync = Command::new(uv_binary());
+    sync.arg("sync")
+        // The lock is the whole point — resolving again here would defeat it.
+        .arg("--frozen")
+        .arg("--project")
+        .arg(&project)
+        .arg("--python")
+        .arg(&base)
+        // uv must not reach for an interpreter of its own: the pin is ours, and
+        // uv's downloadable versions are whatever its binary was built with.
+        .env("UV_PYTHON_DOWNLOADS", "never");
     let mut seen = 0usize;
-    let result = run_streaming(pip, &mut |line| {
-        // pip prints one line per package collected; enough to move a bar
-        // without parsing its output format, which is not a stable interface.
-        if line.starts_with("Collecting") || line.starts_with("Downloading") {
+    let result = run_streaming(sync, &mut |line| {
+        // uv prints one ` + name==version` line per package installed.
+        if line.trim_start().starts_with('+') {
             seen += 1;
             report(Progress::Fraction((0.35 + seen as f32 * 0.01).min(0.95)));
         }

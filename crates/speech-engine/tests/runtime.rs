@@ -67,11 +67,46 @@ fn fake_archive(dir: &Path, executable: bool) -> std::path::PathBuf {
 }
 
 #[test]
-fn interpreter_sits_where_the_archive_unpacks_it() {
+fn the_interpreter_is_the_pack_environment_not_the_raw_unpack() {
     let runtime_dir = Path::new("/tmp/anywhere");
     let python = runtime::interpreter(runtime_dir);
     assert!(python.starts_with(runtime_dir));
     assert!(python.ends_with("python3") || python.ends_with("python.exe"), "{python:?}");
+    // The sidecar runs inside the pack's environment, built from the lock —
+    // not the interpreter the tarball unpacked, which has no packages in it.
+    assert!(python.to_string_lossy().contains(".venv"), "{python:?}");
+    assert!(python.to_string_lossy().contains(runtime::MLX.manifest), "{python:?}");
+    assert_ne!(python, runtime::base_interpreter(runtime_dir));
+}
+
+#[test]
+fn every_pack_ships_a_manifest_and_a_lock() {
+    // A pyproject without its lock would send uv back to resolving from
+    // scratch, which is the behaviour the lock exists to replace.
+    for pack in [&runtime::MLX, &runtime::TORCH] {
+        for file in ["pyproject.toml", "uv.lock"] {
+            let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../packaging/packs")
+                .join(pack.manifest)
+                .join(file);
+            assert!(path.exists(), "the {} pack has no {file}", pack.id);
+        }
+    }
+}
+
+#[test]
+fn the_torch_lock_keeps_pynini_out() {
+    // The dependency stays in the lock, gated behind a marker no platform
+    // satisfies, so the decision is visible rather than vanished.
+    let lock = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/packs/torch/uv.lock"),
+    )
+    .unwrap();
+    assert!(lock.contains("pynini"), "expected it recorded, not removed");
+    assert!(
+        lock.contains("sys_platform == 'never'"),
+        "pynini must be gated: it has no Windows wheels and would drag in conda"
+    );
 }
 
 #[test]
@@ -109,7 +144,7 @@ fn a_supplied_archive_is_unpacked_and_left_alone() {
     });
 
     assert!(
-        runtime::interpreter(scratch.path()).exists(),
+        runtime::base_interpreter(scratch.path()).exists(),
         "the archive was not unpacked into the runtime directory"
     );
     assert!(archive.exists(), "a file the user supplied must not be deleted");
@@ -121,8 +156,16 @@ fn a_supplied_archive_is_unpacked_and_left_alone() {
         steps.iter().any(|s| s.contains("Unpacking")),
         "expected an unpacking step, got {steps:?}"
     );
-    // The stub answers every invocation with success, so the run completes.
-    assert!(failure.is_none(), "unexpected failure: {failure:?}");
+    // The package step then fails, and that is the correct outcome: the stub is
+    // a shell script, not an interpreter. pip used to accept it, because
+    // `-m pip install` on a script that exits 0 looks like success; uv queries
+    // the interpreter and refuses. The stricter behaviour is worth asserting —
+    // a fake runtime should never reach the point of being called installed.
+    let failure = failure.expect("a stub interpreter must not pass for a real one");
+    assert!(
+        failure.contains("Python interpreter") || failure.contains("interpreter"),
+        "the reason should name what was wrong with it: {failure}"
+    );
 }
 
 #[test]
@@ -140,7 +183,7 @@ fn a_failing_package_step_is_reported_with_its_output() {
         Progress::Failed(err) => failure = Some(err),
         _ => {}
     });
-    let python = runtime::interpreter(scratch.path());
+    let python = runtime::base_interpreter(scratch.path());
     std::fs::write(&python, "#!/bin/sh\necho 'no module named pip' >&2\nexit 1\n").unwrap();
     Command::new("chmod").arg("+x").arg(&python).status().unwrap();
 
@@ -175,7 +218,7 @@ fn an_unusable_archive_fails_with_a_reason() {
     let failure = failure.expect("a corrupt archive must fail rather than continue");
     assert!(failure.contains("unpacking"), "the reason should name the step: {failure}");
     assert!(
-        !runtime::interpreter(scratch.path()).exists(),
+        !runtime::base_interpreter(scratch.path()).exists(),
         "nothing should be left behind by a failed unpack"
     );
 }
@@ -201,7 +244,7 @@ fn an_unsupported_host_is_refused_before_anything_is_downloaded() {
             assert_eq!(failure.as_deref(), Some(reason.as_str()));
             assert!(steps.is_empty(), "nothing should happen first: {steps:?}");
             assert!(
-                !runtime::interpreter(scratch.path()).exists(),
+                !runtime::base_interpreter(scratch.path()).exists(),
                 "nothing should be installed on a host that cannot use it"
             );
         }

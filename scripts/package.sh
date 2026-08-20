@@ -51,6 +51,21 @@ pack app "$@"
 # recording silently produces nothing, and a derived identifier changes between
 # builds so macOS treats each build as a new app and re-asks for the microphone.
 # Re-sign explicitly, with a real identity when one is configured.
+# uv installs the speech packages from the committed locks. Fetched here rather
+# than committed: it is a 40 MB binary, and it must match the machine being
+# packaged for. Pinned, because it decides what a reproducible install means.
+UV_VERSION="0.9.8"
+if [[ ! -x packaging/uv ]]; then
+  UV_TARGET="$(uname -m)-apple-darwin"
+  echo "fetching uv $UV_VERSION ($UV_TARGET)"
+  curl -fL --retry 3 -o /tmp/uv.tar.gz \
+    "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-$UV_TARGET.tar.gz"
+  tar -xzf /tmp/uv.tar.gz -C /tmp
+  mv "/tmp/uv-$UV_TARGET/uv" packaging/uv
+  chmod +x packaging/uv
+  rm -rf /tmp/uv.tar.gz "/tmp/uv-$UV_TARGET"
+fi
+
 IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
 sign() {
   codesign --force --timestamp --options runtime \
