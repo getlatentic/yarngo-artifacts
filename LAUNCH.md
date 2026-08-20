@@ -280,8 +280,16 @@ One Windows 11 machine with an NVIDIA GPU:
 4. Confirm CUDA is actually in use (upstream logs its device) and record the
    RTF. Then SOAR, same steps.
 
-Pass is two valid clips at a usable speed. If it fails, diagnose the failing
-operation — do not reopen the runtime comparison.
+Pass is two valid clips at a usable speed, **plus a likeness listen** against
+the same enrolled voice's MLX clip. The macOS CPU harness already bounded the
+gap: across two seeds, torch-fp32-CPU scored 0.969–0.974 against the enrolled
+reference where MLX-int8-Metal scored 0.980, with the words intact and the
+speaker-embedding input verified identical (both backends read the same first
+10 s) — a small, consistent residual attributable to the numeric profile, and
+audible to the voice's owner. CUDA runs bf16, a third profile no Mac clip
+represents, so the ear test on real hardware is part of the pass, not an
+afterthought. If it fails, diagnose the failing operation — do not reopen the
+runtime comparison.
 
 If it passes: macOS on MLX, Windows and Linux NVIDIA on PyTorch CUDA, and ggml
 as the portable fallback where it is supported — which today means SOAR only.
