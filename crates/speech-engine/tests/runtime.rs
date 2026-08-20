@@ -187,6 +187,39 @@ fn a_pack_runtime_is_left_alone() {
 }
 
 #[test]
+fn uv_is_pinned_and_its_digest_is_compiled_in() {
+    // The digest lives in the binary rather than being fetched beside the
+    // archive: a .sha256 published next to the file it describes proves the
+    // download survived the wire, not that it is the build this app was tested
+    // against. If the pin moves, this fails and the digest must move with it.
+    let (asset, digest) = runtime::uv_asset().expect("this host has a uv build");
+    assert!(asset.starts_with("uv-"), "{asset}");
+    assert_eq!(digest.len(), 64, "a sha256 is 64 hex characters: {digest}");
+    assert!(digest.chars().all(|c| c.is_ascii_hexdigit()), "{digest}");
+    assert!(
+        asset.ends_with(".tar.gz") || asset.ends_with(".zip"),
+        "the installer only unpacks these: {asset}"
+    );
+}
+
+#[test]
+fn a_tampered_uv_download_is_refused() {
+    // The point of the digest. A file that is not what the build expects must
+    // never be unpacked, let alone run — it is the thing that installs
+    // everything else.
+    let scratch = Scratch::new();
+    let (asset, _) = runtime::uv_asset().expect("this host has a uv build");
+    let planted = scratch.path().join(&asset);
+    std::fs::create_dir_all(scratch.path()).unwrap();
+    std::fs::write(&planted, b"not uv at all").unwrap();
+
+    let checked = runtime::sha256_of(&planted).unwrap();
+    let (_, expected) = runtime::uv_asset().unwrap();
+    assert_ne!(checked, expected, "a planted file must not match the pinned digest");
+    assert_eq!(checked.len(), 64);
+}
+
+#[test]
 fn production_never_borrows_the_machines_python() {
     // The PATH probe is gone deliberately. Using whatever `python3` resolved to
     // meant two people ran different versions of the engine and its whole

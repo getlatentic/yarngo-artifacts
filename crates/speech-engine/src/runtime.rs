@@ -233,13 +233,130 @@ pub fn interpreter(runtime: &Path) -> PathBuf {
     }
 }
 
-/// The `uv` that installs packages: an override for tests, the copy inside the
-/// bundle, then whatever is on PATH so a checkout works without one.
-fn uv_binary() -> PathBuf {
+/// uv, which installs the packages. Pinned, and its digest compiled in.
+///
+/// It used to ship inside the bundle, where it was 42 MB of a 37.5 MB download
+/// — larger than the application itself. It is fetched once instead, into the
+/// runtime directory it serves, so it is removed along with the runtime and
+/// never sits in the download of someone who already has one.
+const UV_VERSION: &str = "0.12.5";
+
+/// `(asset, sha256)` for this host. The digest is here rather than fetched
+/// beside the archive: a `.sha256` published next to the file it describes
+/// proves the download was not corrupted in transit, not that it is the file
+/// this app was built against.
+pub fn uv_asset() -> Option<(String, &'static str)> {
+    let (target, ext, digest) = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("macos", "aarch64") => (
+            "aarch64-apple-darwin",
+            "tar.gz",
+            "5bb0e5fe008a773c3dbcb97ff79cd89e1241464fe9d2f986d52ad8f1b037bd62",
+        ),
+        ("macos", "x86_64") => (
+            "x86_64-apple-darwin",
+            "tar.gz",
+            "b3b2137477cf96c9686ebfb71524614cec780c673fd73e59bce099aef02e70e8",
+        ),
+        ("windows", "x86_64") => (
+            "x86_64-pc-windows-msvc",
+            "zip",
+            "4c4d49d8738847d9b71ba319e49a5688c93eac0fe6204b1df24e98528dddf39a",
+        ),
+        _ => return None,
+    };
+    Some((format!("uv-{target}.{ext}"), digest))
+}
+
+pub fn sha256_of(path: &Path) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let bytes = std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    Ok(format!("{:x}", Sha256::digest(&bytes)))
+}
+
+/// Where uv lives once fetched: beside the interpreter it installs into.
+fn uv_path(runtime: &Path) -> PathBuf {
+    runtime.join(if cfg!(windows) { "uv.exe" } else { "uv" })
+}
+
+/// The uv to use, fetching it if this machine has none.
+///
+/// An explicit override first, then a copy already fetched, then whatever is on
+/// PATH — which is what lets a development checkout run without downloading
+/// anything. Only then does it reach for the network.
+fn ensure_uv(runtime: &Path, report: &mut dyn FnMut(Progress)) -> Result<PathBuf, String> {
     if let Ok(explicit) = std::env::var("YARNGO_UV") {
-        return PathBuf::from(explicit);
+        return Ok(PathBuf::from(explicit));
     }
-    paths::resource("uv").unwrap_or_else(|| PathBuf::from("uv"))
+    let fetched = uv_path(runtime);
+    if fetched.exists() {
+        return Ok(fetched);
+    }
+    if Command::new("uv").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+    {
+        return Ok(PathBuf::from("uv"));
+    }
+
+    let (asset, expected) = uv_asset().ok_or_else(|| {
+        format!("no uv build for {} {}", std::env::consts::OS, std::env::consts::ARCH)
+    })?;
+    report(Progress::Step("Fetching the installer…".into()));
+
+    std::fs::create_dir_all(runtime).map_err(|e| format!("cannot create {}: {e}", runtime.display()))?;
+    let archive = runtime.join(&asset);
+    let url =
+        format!("https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/{asset}");
+    let mut curl = Command::new("curl");
+    curl.args(["-fL", "--retry", "3", "-o"]).arg(&archive).arg(&url);
+    run_streaming(curl, &mut |_| {}).map_err(|e| format!("downloading uv failed: {e}"))?;
+
+    let actual = sha256_of(&archive)?;
+    if actual != expected {
+        let _ = std::fs::remove_file(&archive);
+        return Err(format!(
+            "the uv download does not match the digest this build expects \
+             (wanted {expected}, got {actual})"
+        ));
+    }
+
+    let unpacked = runtime.join("uv-unpack");
+    let _ = std::fs::remove_dir_all(&unpacked);
+    std::fs::create_dir_all(&unpacked).map_err(|e| e.to_string())?;
+    // tar reads both, and ships with Windows 10 1803 and later.
+    let mut extract = Command::new("tar");
+    extract
+        .arg(if asset.ends_with(".zip") { "-xf" } else { "-xzf" })
+        .arg(&archive)
+        .arg("-C")
+        .arg(&unpacked);
+    run_streaming(extract, &mut |_| {}).map_err(|e| format!("unpacking uv failed: {e}"))?;
+
+    // The archive holds a directory named after the target; the binary is
+    // inside it. Find it rather than reconstructing the name twice.
+    let binary = find_uv(&unpacked).ok_or("no uv binary in the archive")?;
+    let destination = uv_path(runtime);
+    std::fs::rename(&binary, &destination)
+        .or_else(|_| std::fs::copy(&binary, &destination).map(|_| ()))
+        .map_err(|e| format!("cannot place uv: {e}"))?;
+    let _ = std::fs::remove_dir_all(&unpacked);
+    let _ = std::fs::remove_file(&archive);
+    Ok(destination)
+}
+
+fn find_uv(dir: &Path) -> Option<PathBuf> {
+    let wanted = if cfg!(windows) { "uv.exe" } else { "uv" };
+    for entry in std::fs::read_dir(dir).ok()?.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_uv(&path) {
+                return Some(found);
+            }
+        } else if path.file_name().and_then(|n| n.to_str()) == Some(wanted) {
+            return Some(path);
+        }
+    }
+    None
 }
 
 /// A developer's interpreter, named explicitly. Nothing else.
@@ -458,7 +575,15 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
         return;
     }
 
-    let mut sync = Command::new(uv_binary());
+    let uv = match ensure_uv(&runtime, &mut report) {
+        Ok(path) => path,
+        Err(err) => {
+            report(Progress::Failed(err));
+            return;
+        }
+    };
+
+    let mut sync = Command::new(uv);
     sync.arg("sync")
         // The lock is the whole point: without --frozen, uv re-locks before
         // syncing, and what shipped stops being what was tested.

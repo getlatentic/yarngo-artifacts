@@ -48,7 +48,6 @@ resources = [
   { src = "../../packaging/catalog.json", target = "catalog.json" },
   { src = "../../packaging/packs/mlx/*", target = "packs/mlx" },
   { src = "../../packaging/packs/torch/*", target = "packs/torch" },
-  { src = "../../packaging/uv", target = "uv" },
 ]
 # Cut from the brand mark by scripts/make-app-icon.py. Without this the app
 # ships with the generic binary icon.

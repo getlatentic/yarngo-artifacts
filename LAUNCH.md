@@ -73,9 +73,18 @@ would be running different versions of the engine and its whole dependency
 tree, which is the thing the committed lock exists to prevent — and it risked
 Apple's command-line-tools dialog appearing over our own setup screen, since a
 bare `/usr/bin/python3` is a stub on a Mac without them. `YARNGO_PYTHON` remains
-as a developer override. So, in order: ~350 MB of CPython, then `uv sync
---frozen --no-dev` builds the speech environment from the pack's committed
-lock, then a 3.4 GB model. The offline path covers only the first of those —
+as a developer override. So, in order: a 42 MB `uv`, pinned and checked against
+a digest compiled into the binary; ~350 MB of CPython; `uv sync --frozen
+--no-dev` building the speech environment from the pack's committed lock; then
+a 3.4 GB model.
+
+uv is fetched here rather than bundled. Inside the application it was 42 MB of
+a 37.5 MB download — larger than the application itself — for a tool used once,
+by someone already committed to downloading 350 MB. Fetching it took the disk
+image from **37.5 MB to 16.7 MB**. It lands in the runtime directory it serves,
+so it leaves with the runtime, and its digest is compiled in rather than read
+from the `.sha256` published beside the archive: that file proves the download
+survived the wire, not that it is the build this app was tested against. The offline path covers only the first of those —
 "Install from a file" takes the interpreter archive and the card says plainly
 that the packages still come from the network.
 

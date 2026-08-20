@@ -34,7 +34,7 @@ const CREDITS: [Credit; 7] = [
     Credit { what: "CPython, via python-build-standalone", terms: "PSF Licence" },
     Credit { what: "MLX", terms: "MIT" },
     Credit { what: "Symphonia", terms: "MPL-2.0" },
-    Credit { what: "uv", terms: "Apache-2.0 or MIT" },
+    Credit { what: "uv, fetched at setup", terms: "Apache-2.0 or MIT" },
 ];
 
 impl VoiceStudio {
