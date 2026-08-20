@@ -499,20 +499,32 @@ pub struct Manifest {
     pub runtimes: std::collections::HashMap<String, Recipe>,
 }
 
-/// `1.2.3` against `1.10.0` without pulling in a version crate: compare the
-/// numbers, not the strings, or 1.10 sorts below 1.9.
-fn version_at_least(have: &str, need: &str) -> bool {
-    let parts = |v: &str| -> Vec<u32> {
-        v.split('.').map(|p| p.trim().parse().unwrap_or(0)).collect()
-    };
-    let (have, need) = (parts(have), parts(need));
-    for i in 0..have.len().max(need.len()) {
-        let (h, n) = (have.get(i).copied().unwrap_or(0), need.get(i).copied().unwrap_or(0));
+/// `1.2.3` against `1.10.0`, without pulling in a version crate.
+///
+/// Two rules that a string comparison gets wrong. Numbers compare as numbers,
+/// or `1.10` sorts below `1.9`. And a pre-release is *older* than the release
+/// it precedes — `0.1.0-alpha` comes before `0.1.0` — which matters the moment
+/// an alpha is published, because the naive reading has it the other way round
+/// and would hand alpha users recipes meant for the finished version.
+pub fn version_at_least(have: &str, need: &str) -> bool {
+    fn split(v: &str) -> (Vec<u32>, bool) {
+        let (numbers, pre) = match v.split_once('-') {
+            Some((n, _)) => (n, true),
+            None => (v, false),
+        };
+        (numbers.split('.').map(|p| p.trim().parse().unwrap_or(0)).collect(), pre)
+    }
+    let (have_n, have_pre) = split(have);
+    let (need_n, need_pre) = split(need);
+    for i in 0..have_n.len().max(need_n.len()) {
+        let (h, n) = (have_n.get(i).copied().unwrap_or(0), need_n.get(i).copied().unwrap_or(0));
         if h != n {
             return h > n;
         }
     }
-    true
+    // Same numbers: a pre-release satisfies a pre-release floor, but not a
+    // finished one.
+    !have_pre || need_pre
 }
 
 /// Whether this build may act on a published manifest.

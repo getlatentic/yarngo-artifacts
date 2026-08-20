@@ -358,6 +358,19 @@ fn a_recipe_whose_digest_does_not_match_is_refused() {
 }
 
 #[test]
+fn a_pre_release_is_older_than_the_release_it_precedes() {
+    // Publishing an alpha makes this load-bearing: read the other way round,
+    // an alpha would qualify for recipes meant for the finished version.
+    assert!(!runtime::version_at_least("0.1.0-alpha.1", "0.1.0"));
+    assert!(runtime::version_at_least("0.1.0", "0.1.0-alpha.1"));
+    assert!(runtime::version_at_least("0.1.0-alpha.2", "0.1.0-alpha.1"));
+    assert!(runtime::version_at_least("0.1.0-alpha.1", "0.0.0"));
+    // And numbers still compare as numbers.
+    assert!(runtime::version_at_least("1.10.0", "1.9.0"));
+    assert!(!runtime::version_at_least("1.9.0", "1.10.0"));
+}
+
+#[test]
 fn versions_compare_by_number_not_by_text() {
     // "1.10.0" sorts below "1.9.0" as a string, which would let an old app
     // install a recipe meant for a newer one.

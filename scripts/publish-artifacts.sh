@@ -29,7 +29,11 @@ PUBLISH="${1:-}"
 # The oldest application this publication is safe for. Raise it when an entry
 # starts using a field older sidecars cannot honour; older apps then keep their
 # bundled catalogue instead of misreading this one.
-MIN_APP_VERSION="0.1.0"
+# While the application is pre-release, the floor has to be a pre-release too:
+# SemVer puts 0.1.0-alpha.1 *below* 0.1.0, so a floor of 0.1.0 would refuse
+# every alpha build the runtime updates are meant to serve. Raise this when
+# there is a published recipe an older build genuinely cannot drive.
+MIN_APP_VERSION="0.0.0"
 
 STAGE="$(mktemp -d)"
 trap 'rm -rf "$STAGE"' EXIT

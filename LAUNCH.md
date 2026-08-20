@@ -302,6 +302,34 @@ This is the part that is unusual for a desktop app and worth getting right.
 
 ---
 
+## Versioning
+
+**`0.1.0-alpha.1`**, and it moves forward from here — never backwards to
+`0.0.1`. Two reasons, both checked rather than assumed.
+
+A version below the published `min_app_version` is refused by the runtime
+updater, so an app calling itself `0.0.1` would silently keep its bundled
+recipe forever. And SemVer puts a pre-release *below* its release, so the floor
+in `publish-artifacts.sh` is `0.0.0` while the app is pre-release; raise it only
+when a published recipe genuinely cannot be driven by an older build.
+
+The scheme from here:
+
+| Stage | Version | Release |
+| --- | --- | --- |
+| now | `0.1.0-alpha.N` | GitHub pre-release |
+| feature-complete, unproven | `0.1.0-beta.N` | pre-release |
+| first real release | `0.1.0` | release |
+
+macOS is served correctly by this: `CFBundleShortVersionString` carries
+`0.1.0-alpha.1` for people to read, and cargo-packager generates
+`CFBundleVersion` as a timestamp — `20260820.193559` — which is what has to
+increase monotonically for the system, and does so regardless of what the human
+version says.
+
+The disk image names itself `yarngo studio_0.1.0-alpha.1_aarch64.dmg`, so what
+someone downloads says what it is without being opened.
+
 ## Where this stands
 
 Done: tests, iteration 4, the Storage and About panes, the icon, the signing
