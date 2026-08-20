@@ -1,4 +1,5 @@
-# The Windows and Linux speech pack. Unproven — nothing selects it yet.
+# The Windows and Linux speech pack. The packages are proven on macOS CPU as
+# well — that is how parity with the MLX pack is tested without CUDA hardware.
 #
 # It carries the same checkpoints as the MLX pack, which is the point: the
 # product promises dots.tts MF and SOAR on every platform.
@@ -7,7 +8,7 @@ name = "yarngo-speech-torch"
 version = "0"
 # Upstream dots.tts declares >=3.10,<3.13.
 requires-python = ">=3.12,<3.13"
-dependencies = ["dots.tts", "torch", "torchaudio"]
+dependencies = ["dots.tts", "torch==2.8.0", "torchaudio==2.8.0"]
 
 [tool.uv]
 # dots.tts lists WeTextProcessing as a hard dependency, which pulls pynini —
@@ -20,7 +21,32 @@ dependencies = ["dots.tts", "torch", "torchaudio"]
 # WeTextProcessing, it still gets it.
 #
 # Dropping the package is not sufficient on its own — dots_tts/utils/text.py
-# imports tn.* at module scope, so those imports have to be made lazy too.
+# imports tn.* at module scope. The sidecar registers a stub `tn` module before
+# importing dots_tts; with normalisation off, nothing ever calls into it.
 exclude-dependencies = [
   { package = { name = "dots-tts" }, dependencies = ["WeTextProcessing"] },
 ]
+
+# Buzz's shipped configuration, verbatim in mechanism: macOS resolves torch
+# from PyPI (CPU/MPS wheels — the parity-test path), everything else from the
+# CUDA index. The CUDA wheels carry their own cuDNN/cuBLAS, so no NVIDIA index
+# is needed on top.
+[tool.uv.sources]
+torch = [
+  { index = "PyPI", marker = "sys_platform == 'darwin'" },
+  { index = "pytorch-cu129", marker = "sys_platform != 'darwin'" },
+]
+torchaudio = [
+  { index = "PyPI", marker = "sys_platform == 'darwin'" },
+  { index = "pytorch-cu129", marker = "sys_platform != 'darwin'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
+explicit = true
+
+[[tool.uv.index]]
+name = "PyPI"
+url = "https://pypi.org/simple/"
+default = true

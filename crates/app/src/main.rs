@@ -18,6 +18,7 @@ mod player;
 mod recorder;
 mod theme;
 mod workspace;
+mod reveal;
 
 use std::path::PathBuf;
 use std::sync::Arc;

@@ -222,6 +222,33 @@ def _save_voices_to_disk() -> None:
     tmp.replace(_manifest_path())
 
 
+def _backend() -> str:
+    """Which inference stack this interpreter carries.
+
+    Decided by what is importable rather than by platform: the MLX pack has
+    mlx_speech, the torch pack has dots_tts, and the same engine.py serves
+    both. find_spec keeps startup cheap — neither stack is imported until a
+    model loads. A machine with neither answers "mlx" so the existing failure
+    message at first load names what is missing.
+    """
+    from importlib.util import find_spec
+
+    if find_spec("mlx_speech") is not None:
+        return "mlx"
+    if find_spec("dots_tts") is not None:
+        return "torch"
+    return "mlx"
+
+
+BACKEND = _backend()
+if BACKEND == "torch":
+    import dots_torch
+
+    # Same ids, same labels; upstream artifacts at the revisions the MLX
+    # conversions came from. The catalogue swap is the whole port.
+    MODELS = dots_torch.MODELS
+
+
 def _default_model() -> str:
     return next(k for k, v in MODELS.items() if v["default"])
 
@@ -232,10 +259,15 @@ def _load(model_id: str):
     if model_id not in _models and not _is_installed(MODELS[model_id]):
         raise ValueError(f"model {model_id!r} is not installed")
     if model_id not in _models:
-        from mlx_speech import tts
-
         started = time.perf_counter()
-        _models[model_id] = tts.load(MODELS[model_id]["alias"])
+        if BACKEND == "torch":
+            import dots_torch
+
+            _models[model_id] = dots_torch.load(MODELS[model_id])
+        else:
+            from mlx_speech import tts
+
+            _models[model_id] = tts.load(MODELS[model_id]["alias"])
         elapsed = time.perf_counter() - started
         _remember_load_time(model_id, elapsed)
         _log(f"loaded {model_id} in {elapsed:.1f}s")
@@ -278,7 +310,7 @@ def m_list_models(params: dict) -> dict:
         # What the download will cost, distinct from what is already on disk.
         entry["download_bytes"] = sizes.get(key, 0)
         sub = spec.get("subfolder") or ""
-        entry["precision"] = (
+        entry["precision"] = spec.get("precision") or (
             "int8 quantised" if "int8" in sub else "full precision" if "base" in sub else "8-bit"
         )
         entry["measured_rtf"] = _measured_rtf(key)
@@ -577,6 +609,7 @@ def _cached_size(spec: dict) -> int:
         path = Path(
             snapshot_download(
                 spec["repo"],
+                revision=spec.get("revision"),
                 allow_patterns=_model_patterns(spec),
                 local_files_only=True,
             )
@@ -595,7 +628,9 @@ def _remote_size(spec: dict) -> int:
 
     try:
         with _online():
-            info = HfApi().model_info(spec["repo"], files_metadata=True)
+            info = HfApi().model_info(
+                spec["repo"], revision=spec.get("revision"), files_metadata=True
+            )
     except Exception:
         return 0
     sub = spec.get("subfolder")
@@ -737,7 +772,11 @@ def _download(model_id: str) -> None:
     watcher.start()
     try:
         with _online():
-            snapshot_download(spec["repo"], allow_patterns=_model_patterns(spec))
+            snapshot_download(
+                spec["repo"],
+                revision=spec.get("revision"),
+                allow_patterns=_model_patterns(spec),
+            )
         with _installs_lock:
             _installs[model_id].update(state="installed", downloaded_bytes=_cached_size(spec))
         _log(f"installed {model_id}")
@@ -786,6 +825,7 @@ def m_delete_model(params: dict) -> dict:
         root = Path(
             snapshot_download(
                 spec["repo"],
+                revision=spec.get("revision"),
                 allow_patterns=_model_patterns(spec),
                 local_files_only=True,
             )

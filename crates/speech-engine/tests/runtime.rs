@@ -117,6 +117,30 @@ fn the_torch_lock_keeps_pynini_out() {
 }
 
 #[test]
+fn the_torch_lock_actually_covers_windows() {
+    // The default resolution took torch 2.13.0, whose cu129 build publishes no
+    // Windows wheel — the lock looked complete and a Windows sync would have
+    // failed at install. The pack pins the newest torch/torchaudio pair that
+    // ships win_amd64 on the CUDA index.
+    let lock = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/packs/torch/uv.lock"),
+    )
+    .unwrap();
+    assert!(
+        lock.contains("cu129-cp312-cp312-win_amd64.whl"),
+        "the CUDA torch in the lock must have a Windows wheel"
+    );
+    assert!(
+        lock.contains("download.pytorch.org/whl/cu129"),
+        "non-darwin torch must come from the CUDA index, not PyPI"
+    );
+    assert!(
+        lock.contains("macosx_11_0_arm64") || lock.contains("macosx_14_0_arm64"),
+        "darwin torch is the parity-test path and must stay resolvable"
+    );
+}
+
+#[test]
 fn production_never_borrows_the_machines_python() {
     // The PATH probe is gone deliberately. Using whatever `python3` resolved to
     // meant two people ran different versions of the engine and its whole

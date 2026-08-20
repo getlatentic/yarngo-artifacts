@@ -161,13 +161,10 @@ impl VoiceStudio {
                                             ))
                                             .id("reveal-consent")
                                             .on_click(|_, _, _| {
-                                                let _ = std::process::Command::new("open")
-                                                    .arg("-R")
-                                                    .arg(
-                                                        speech_engine::paths::data_dir()
-                                                            .join("consent.log"),
-                                                    )
-                                                    .spawn();
+                                                crate::reveal::reveal(
+                                                    &speech_engine::paths::data_dir()
+                                                        .join("consent.log"),
+                                                );
                                             }),
                                     ),
                             ),

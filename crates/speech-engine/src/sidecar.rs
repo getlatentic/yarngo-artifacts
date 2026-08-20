@@ -28,9 +28,18 @@ impl MlxSidecar {
     /// Spawn the sidecar. `python` is the interpreter of the environment holding
     /// the model stack; `script` is `sidecar/engine.py`.
     pub fn spawn(python: &Path, script: &Path, working_dir: &Path) -> Result<Self> {
-        let mut child = Command::new(python)
-            .arg(script)
-            .current_dir(working_dir)
+        let mut command = Command::new(python);
+        command.arg(script).current_dir(working_dir);
+        // A GUI process spawning python.exe flashes a console window on
+        // Windows unless told not to. Written from the documented flag,
+        // compiled here, not yet run there.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt as _;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+        let mut child = command
             // Told, not inferred. Both sides used to derive the data directory
             // from their own environment under different variable names, so
             // overriding one moved the app without moving its storage.

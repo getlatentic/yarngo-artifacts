@@ -215,22 +215,55 @@ Upstream's trove classifiers list POSIX::Linux and MacOS and omit Windows, which
 means untested rather than impossible — but combined with pynini it is enough
 that "torch on Windows" stays a hypothesis until a machine says otherwise.
 
+#### The parity half of the spike is already done, on this Mac
+
+Upstream selects `cuda` else `cpu`, and CPU torch runs on Apple silicon — so
+"do the upstream checkpoints generate under torch, and is it the same voice"
+never needed NVIDIA. It ran here on 20 Aug 2026, through the real sidecar over
+the real protocol (`scripts/parity_probe.py`), against the torch pack's own
+interpreter and committed lock:
+
+- **Install**: `uv sync --frozen` on the pack, 5.17 GB upstream MF checkpoint
+  (`dots-studio/dots.tts-mf@25c53fb…` — the very revision the MLX artifact was
+  converted from), model loaded in 58 s on CPU.
+- **Output**: the full target sentence, word for word, at 48 kHz. Speaker
+  similarity through the eval's own embedder: **torch-vs-MLX 0.994**,
+  torch-vs-reference 0.963, MLX-vs-reference 0.955. The two runtimes are the
+  same voice to the speaker encoder.
+- **Speed**: CPU RTF ≈ 55–77. CUDA is not an optimisation, it is the product;
+  a CPU-only torch runtime is confirmed unshippable, which the capability map
+  already said.
+- **One live finding**: upstream is far stricter than MLX about the reference
+  transcript matching the reference audio. With the eval's slightly-wrong
+  `REF_TEXT`, torch dropped the opening words and spoke the prompt's tail; with
+  an accurate transcript it is word-perfect. Recorded enrolment is safe by
+  construction — the script is fixed. The **import path** is where this bites,
+  and its warning copy already says nothing checks the words; for the torch
+  backend that warning is a promise.
+
+What is left for the Windows machine is now only what a Mac cannot answer:
+`uv sync` of this lock on Windows, CUDA initialisation, generation speed on
+real hardware, and the installer. The model question is closed.
+
 #### The spike, and nothing larger
 
 One Windows 11 machine with an NVIDIA GPU:
 
-1. CPython 3.12.14 — already the `TORCH` pack's pin.
-2. Install PyTorch CUDA.
-3. Install dots.tts **without** `WeTextProcessing`, with the two `tn.*` imports
-   in `utils/text.py` made lazy.
-4. Run with `normalize_text = False`, which is the default anyway.
-5. Load dots.tts MF, clone the Nigerian reference already used for validation,
-   generate one clip.
-6. Same again with SOAR.
+1. CPython 3.12.14 — the `TORCH` pack's pin; the installer already fetches it
+   for `x86_64-pc-windows-msvc`.
+2. `uv sync --frozen` on the torch pack. The lock resolves `torch==2.8.0+cu129`
+   for `win_amd64` — pinned deliberately: newer torch (2.13) publishes **no
+   Windows wheel** on the CUDA index, so an unpinned resolve produces a lock
+   that looks complete and fails only on a Windows machine. A test now holds
+   the pin.
+3. `python scripts/parity_probe.py` with the same reference and an accurate
+   transcript — the identical harness that already passed on macOS CPU. The
+   `tn` stub ships in the sidecar (`dots_torch.py`), so no upstream patching.
+4. Confirm CUDA is actually in use (upstream logs its device) and record the
+   RTF. Then SOAR, same steps.
 
-Pass is two valid clips. That is the whole test, and it decides the shape of the
-port. If it fails, diagnose the failing operation — do not reopen the runtime
-comparison.
+Pass is two valid clips at a usable speed. If it fails, diagnose the failing
+operation — do not reopen the runtime comparison.
 
 If it passes: macOS on MLX, Windows and Linux NVIDIA on PyTorch CUDA, and ggml
 as the portable fallback where it is supported — which today means SOAR only.

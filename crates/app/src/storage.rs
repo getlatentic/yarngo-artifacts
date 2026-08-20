@@ -253,9 +253,9 @@ impl VoiceStudio {
                                     ))
                                     .id("reveal-storage")
                                     .on_click(|_, _, _| {
-                                        let _ = std::process::Command::new("open")
-                                            .arg(speech_engine::paths::data_dir())
-                                            .spawn();
+                                        crate::reveal::open_folder(
+                                            &speech_engine::paths::data_dir(),
+                                        );
                                     }),
                             ),
                     )
