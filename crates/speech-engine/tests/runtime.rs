@@ -141,6 +141,52 @@ fn the_torch_lock_actually_covers_windows() {
 }
 
 #[test]
+fn a_runtime_from_the_old_layout_is_cleared_out() {
+    // Anyone who installed before packs existed has ~350 MB at <runtime>/python
+    // that the pack layout can never reach. Left alone it is counted by the
+    // Storage pane and used by nothing.
+    let scratch = Scratch::new();
+    let legacy_bin = scratch.path().join("python").join("bin");
+    std::fs::create_dir_all(&legacy_bin).unwrap();
+    std::fs::write(legacy_bin.join("python3"), "#!/bin/sh\nexit 0\n").unwrap();
+    Command::new("chmod").arg("+x").arg(legacy_bin.join("python3")).status().unwrap();
+    std::fs::create_dir_all(scratch.path().join("python").join("lib")).unwrap();
+
+    // An unsupported host refuses before this runs, so only assert the removal
+    // where the installer actually gets that far.
+    let source = tempfile::tempdir().unwrap();
+    let archive = fake_archive(source.path(), true);
+    runtime::install_from(Some(archive), |_| {});
+
+    if runtime::host_supported().is_ok() {
+        assert!(
+            !scratch.path().join("python").exists(),
+            "the pre-pack runtime should have been removed"
+        );
+    }
+}
+
+#[test]
+fn a_pack_runtime_is_left_alone() {
+    // The guard is two-part so it can only match the old layout. With the pack
+    // layout present, nothing is touched.
+    let scratch = Scratch::new();
+    let legacy_bin = scratch.path().join("python").join("bin");
+    std::fs::create_dir_all(&legacy_bin).unwrap();
+    std::fs::write(legacy_bin.join("python3"), "#!/bin/sh\nexit 0\n").unwrap();
+    std::fs::create_dir_all(scratch.path().join("interpreter")).unwrap();
+
+    let source = tempfile::tempdir().unwrap();
+    let archive = fake_archive(source.path(), true);
+    runtime::install_from(Some(archive), |_| {});
+
+    assert!(
+        scratch.path().join("python").exists(),
+        "a directory beside a pack layout is not ours to delete"
+    );
+}
+
+#[test]
 fn production_never_borrows_the_machines_python() {
     // The PATH probe is gone deliberately. Using whatever `python3` resolved to
     // meant two people ran different versions of the engine and its whole

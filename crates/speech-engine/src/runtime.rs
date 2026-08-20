@@ -315,6 +315,35 @@ fn run_streaming(
     })
 }
 
+/// Remove a runtime left by the layout that predates packs.
+///
+/// Before packs, the interpreter was unpacked to `<runtime>/python` and the
+/// speech package was installed straight into it. The pack layout puts the
+/// interpreter under `<runtime>/interpreter` and builds a virtual environment
+/// beside its lock, so the old directory is unreachable: `is_installed` says
+/// no, setup runs again, and roughly 350 MB sits there for good — counted by
+/// the Storage pane, usable by nothing.
+///
+/// Deleted rather than migrated. The old interpreter carries packages resolved
+/// by pip rather than the lock, which is exactly the reproducibility the packs
+/// exist to fix, and uv's cache makes the reinstall cheap.
+fn remove_pre_pack_runtime(runtime: &Path) {
+    let legacy = runtime.join("python");
+    let legacy_interpreter = if cfg!(windows) {
+        legacy.join("python.exe")
+    } else {
+        legacy.join("bin").join("python3")
+    };
+    // Both conditions, so this can only ever match the layout it describes.
+    if !legacy_interpreter.exists() || runtime.join("interpreter").exists() {
+        return;
+    }
+    match std::fs::remove_dir_all(&legacy) {
+        Ok(()) => eprintln!("removed the pre-pack runtime at {}", legacy.display()),
+        Err(err) => eprintln!("could not remove {}: {err}", legacy.display()),
+    }
+}
+
 /// Put this pack's manifest and lock where `uv sync` can build beside them.
 ///
 /// Both files, always: a `pyproject.toml` without its lock would make uv
@@ -348,6 +377,7 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
     }
 
     let runtime = paths::runtime_dir();
+    remove_pre_pack_runtime(&runtime);
     let base = runtime.join("interpreter");
 
     if let Err(err) = std::fs::create_dir_all(&runtime) {
