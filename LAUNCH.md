@@ -80,47 +80,94 @@ own project.
 **`mlx-speech` is live on PyPI and the model repos resolve on Hugging Face** —
 both checked. The dependency is real, not aspirational.
 
-### 5. Windows — same models, different runtime
+### 5. Windows — same models, and three layers that must not be conflated
 
 **The requirement is that Windows offers the same recommended models, not an
 equivalent list.** "Fast" is dots.tts MF on both, "Best quality" is dots.tts
-SOAR on both. A user moving between machines hears the same voice, and a clip
-made on one opens on the other naming a model that is really there.
+SOAR on both. Substituting f5-tts or qwen3-tts under a label called "Fast"
+would throw away the checkpoint that was validated on Nigerian speakers, which
+is the whole reason the eval was run.
 
-That rules out CrispASR as the Windows engine. It was the settled choice — ggml,
-MIT, one native binary, no CPython download at all — but its TTS families are
-vibevoice, chatterbox, f5-tts, TADA, irodori, kokoro, qwen3-tts, cosyvoice3-tts,
-omnivoice, piper, melotts and fastpitch. **dots.tts is not among them**, so
-choosing it means changing the model, which is the one thing that must not
-change.
+Three separate layers, and every earlier confusion here came from merging two
+of them:
 
-**The route that keeps the models is PyTorch.** dots.tts is upstream a PyTorch
-model — `rednote-hilab/dots.tts-mf` and `dots.tts-soar`, revision-pinned — and
-`mlx-speech` is a port of it, not its origin. The same checkpoints run under
-torch on Windows, CPU or CUDA. So the shape of the app does not change at all:
-the Python sidecar stays, the protocol stays, the catalogue stays. What changes
-is the package installed into the runtime — `mlx-speech` becomes the torch
-path — and the runtime installer already knows how to fetch CPython for
-`x86_64-pc-windows-msvc`.
+| Layer | Values |
+| --- | --- |
+| Product label | Fast, Best quality |
+| Model identity | dots.tts MF, dots.tts SOAR |
+| Runtime | MLX, PyTorch, ggml/CrispASR |
 
-What this costs, and none of it is hidden:
+The catalogue already splits the first two — `ModelSpec.label` against
+`ModelSpec.name`. The third is not represented yet and should be: a model row
+saying "dots.tts MF · Runtime: CUDA" is the honest version of the same product
+on two machines.
 
-- **A much larger runtime.** MLX is small; torch is not. CPU-only is a few
-  hundred megabytes, a CUDA build is gigabytes. The first-run wait that is
-  already the weakest part of macOS gets worse on Windows.
-- **Speed has to be measured, not assumed.** MLX on Apple silicon is not a
-  guide to torch on a Windows CPU. A machine without CUDA may be too slow to
-  ship, in which case the honest answer is a hardware requirement, not a
-  quieter model.
-- **Numerical parity is a real question.** The same checkpoint under a different
-  runtime is not automatically the same audio. This is a cheaper test than the
-  original bake-off, though, and a more decisive one: run the Nigerian
-  references through torch dots.tts and compare against the MLX output that was
-  already validated. It either matches or it does not.
+#### CrispASR supports dots.tts SOAR — an earlier note here said otherwise
 
-CrispASR does not disappear — it stays the fallback if torch turns out to be
-unshippable on Windows, and its consent log, watermarking and C2PA signing are
-worth borrowing regardless. But it is no longer the plan.
+That note was wrong, and wrong through bad method: the TTS backends were read
+off `--help`, which lists flags rather than backends. The binary already in
+`voice-clone-bench/crispasr/` contains a `DotsTtsBackend`, a `dots-tts` backend
+id, and hard-coded download URLs to `cstr/dots-tts-soar-GGUF`.
+
+What it does **not** contain is MF. Every dots GGUF filename compiled into it is
+`dots-tts-soar-*` — core, speaker encoder, vocoder — and there is no MF artifact
+or MF URL. The `CRISPASR_DOTS_FM_*` environment variables are flow matching,
+which is SOAR's DiT head; the one `meanflow` string in the binary belongs to
+`s3gen`, a Chatterbox vocoder. So there is no latent MF support waiting to be
+switched on.
+
+That makes ggml a real portable path for **Best quality** — CPU, CUDA, Vulkan or
+Metal, no Python at all, ~2.2 GB at mixed Q4_K — and no path for **Fast**.
+
+#### PyTorch keeps both checkpoints, but Windows is unproven — two concrete blockers
+
+An earlier note here claimed "the same checkpoints run under torch on Windows".
+That was an inference stated as a fact. Checking upstream
+(`studio-dots-ai/dots.tts`) turns up two specific problems:
+
+1. **A dependency with no Windows wheels.** dots.tts requires
+   `WeTextProcessing`, which requires `pynini>=2.1.6`. Pynini 2.1.7 publishes
+   manylinux wheels only — no `win_amd64`, no `win32` — and its own guidance
+   sends Windows users to conda-forge or WSL. Our runtime installs with pip into
+   a python-build-standalone interpreter, which is neither. Nothing else in the
+   dependency list is Linux-bound: no triton, flash-attn, deepspeed, vllm or
+   xformers, and no manylinux pins. So pynini is the blocker, and it is the
+   first thing the spike should hit.
+2. **Our Python pin is already incompatible, on every platform.** The runtime
+   installs CPython **3.13.15**; upstream declares
+   `requires-python = ">=3.10,<3.13"`. The current pin cannot install upstream
+   dots.tts at all. This is not a Windows problem — it needs deciding before any
+   torch route is attempted anywhere.
+
+Upstream's trove classifiers list POSIX::Linux and MacOS and omit Windows, which
+means untested rather than impossible — but combined with pynini it is enough
+that "torch on Windows" stays a hypothesis until a machine says otherwise.
+
+#### The spike, and nothing larger
+
+One Windows 11 machine with an NVIDIA GPU. Resolve the Python version, install
+torch CUDA, install upstream dots.tts — **expect to fight pynini here, and stop
+if it cannot be resolved without conda** — load MF, clone the same Nigerian
+reference, generate; then the same with SOAR. Pass is two valid clips. That is
+the whole test, and it decides the shape of the port.
+
+If it passes: macOS on MLX, Windows and Linux on PyTorch CUDA, and ggml as the
+portable and low-memory fallback wherever it is supported — which today means
+SOAR only.
+
+ONNX is not a route yet. There is no maintained ONNX build of the dots pipeline,
+and exporting it means exporting the whole iterative stack — semantic encoder,
+Qwen backbone, AR patch generation, flow-matching DiT, vocoder, speaker
+conditioning — not one graph. Worth revisiting only if both routes above fail.
+
+#### Not every machine offers every model
+
+Step-Audio-EditX asks for roughly 12 GB of VRAM and tests only on Linux, and
+LongCat-AudioDiT 3.5B is about 15 GB unquantized. Neither should be promised to
+a low-spec Windows machine. The Models pane already separates what is on this
+machine from what is not; it needs a third state — offered, but not runnable
+here, with the reason — so a model the hardware cannot run is visibly
+unavailable rather than a download that disappoints.
 
 ### 6. Apple silicon only — **now said, before anything is downloaded**
 
@@ -229,6 +276,6 @@ Left, in order:
    protects the record; terms protect the position.
 3. **Decide updates** before the first build goes out, not after.
 4. The first-run story, if it is changing from "state the wait honestly".
-5. **If Windows is in scope**, prove torch dots.tts first: same checkpoints,
-   same references, compared against the validated MLX output. Everything else
-   about the port is wiring; that comparison is the part that can fail.
+5. **If Windows is in scope**, run the one spike in section 5 — and settle the
+   CPython pin regardless, because 3.13.15 cannot install upstream dots.tts on
+   any platform.
