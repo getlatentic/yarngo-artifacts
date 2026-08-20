@@ -725,20 +725,23 @@ setup:
     en: Playing clips you already made
     sk: Prehrávanie už vytvorených nahrávok
   no_connection:
-    en: No connection on this machine?
-    sk: Tento počítač nie je pripojený?
+    en: Slow or metered connection?
+    sk: Pomalé alebo obmedzené pripojenie?
   no_connection_detail:
-    en: "Download the interpreter somewhere else and point yarngo at the file. It is %{size} — the rest of the %{total} is speech packages, and those still come from the network."
-    sk: "Stiahnite interpret inde a ukážte naň yarngo. Má %{size} — zvyšok z %{total} tvoria rečové balíky, ktoré sa aj tak stiahnu zo siete."
+    en: "Download the interpreter elsewhere — a %{size} .tar.gz — and point yarngo at it. That is the largest single file, but not the whole %{total}: the speech packages and the installer still come from the network, so setup cannot finish without a connection."
+    sk: "Stiahnite interpret inde — .tar.gz s veľkosťou %{size} — a ukážte naň yarngo. Je to najväčší jednotlivý súbor, no nie celých %{total}: rečové balíky a inštalátor sa aj tak sťahujú zo siete, takže bez pripojenia sa inštalácia nedokončí."
   install_from_file:
     en: Install from a file
     sk: Inštalovať zo súboru
   direct_link:
     en: Direct link
     sk: Priamy odkaz
+  open_link:
+    en: Open
+    sk: Otvoriť
   copy_link:
-    en: Copy link
-    sk: Kopírovať odkaz
+    en: Copy
+    sk: Kopírovať
   picked_up_next_time:
     en: yarngo picks up an interrupted download next time it opens.
     sk: yarngo pokračuje v prerušenom sťahovaní pri ďalšom spustení.

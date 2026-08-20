@@ -308,7 +308,7 @@ fn ensure_uv(runtime: &Path, report: &mut dyn FnMut(Progress)) -> Result<PathBuf
     let url =
         format!("https://github.com/astral-sh/uv/releases/download/{UV_VERSION}/{asset}");
     let mut curl = Command::new("curl");
-    curl.args(["-fL", "--retry", "3", "-o"]).arg(&archive).arg(&url);
+    curl.args(["-fL", "-sS", "--retry", "3", "-o"]).arg(&archive).arg(&url);
     run_streaming(curl, &mut |_| {}).map_err(|e| format!("downloading uv failed: {e}"))?;
 
     let actual = sha256_of(&archive)?;
@@ -551,7 +551,7 @@ pub fn manifest_usable(manifest: &Manifest) -> Result<(), String> {
 fn fetch_text(url: &str) -> Result<Vec<u8>, String> {
     let into = std::env::temp_dir().join(format!("yarngo-fetch-{}", std::process::id()));
     let mut curl = Command::new("curl");
-    curl.args(["-fL", "--retry", "2", "--max-time", "30", "-o"]).arg(&into).arg(url);
+    curl.args(["-fL", "-sS", "--retry", "2", "--max-time", "30", "-o"]).arg(&into).arg(url);
     run_streaming(curl, &mut |_| {})?;
     let bytes = std::fs::read(&into).map_err(|e| e.to_string())?;
     let _ = std::fs::remove_file(&into);
@@ -684,7 +684,7 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
                 let _ = std::fs::create_dir_all(&base);
                 let into = base.join("python.tar.gz");
                 let mut curl = Command::new("curl");
-                curl.args(["-fL", "--retry", "3", "-o"]).arg(&into).arg(&url);
+                curl.args(["-fL", "-sS", "--retry", "3", "-o"]).arg(&into).arg(&url);
                 if let Err(err) = run_streaming(curl, &mut |_| {}) {
                     report(Progress::Failed(format!("downloading Python failed: {err}")));
                     return;

@@ -37,5 +37,28 @@ pub fn open_folder(path: &Path) {
     let _ = Command::new("xdg-open").arg(path).spawn();
 }
 
+/// Open a URL in the default browser.
+///
+/// Only ever called with a URL this binary constructed, never one that arrived
+/// from outside it — handing an arbitrary string to the shell's opener is how a
+/// link becomes a command.
+pub fn open_url(url: &str) {
+    debug_assert!(url.starts_with("https://"), "only https URLs are opened: {url}");
+    if !url.starts_with("https://") {
+        return;
+    }
+
+    #[cfg(target_os = "macos")]
+    let _ = Command::new("open").arg(url).spawn();
+
+    #[cfg(target_os = "windows")]
+    // `start` is a shell builtin, so it needs a shell — and the empty string is
+    // the window title `start` would otherwise take the URL for.
+    let _ = Command::new("cmd").args(["/C", "start", "", url]).spawn();
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let _ = Command::new("xdg-open").arg(url).spawn();
+}
+
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt as _;

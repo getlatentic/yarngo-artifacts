@@ -2049,17 +2049,46 @@ impl VoiceStudio {
                                         .child(ui::mono(url.clone(), 11.5, theme::hex(0x5F594F)))
                                         .child(div().flex_1())
                                         .child(
-                                            ui::secondary_button(
-                                                Some((icon::name::CONTENT_COPY, 0x5F594F)),
-                                                t!("setup.copy_link").to_string(),
-                                            )
-                                            .flex_none()
-                                            .id("copy-link")
-                                            .on_click(cx.listener(move |_, _, _, cx| {
-                                                cx.write_to_clipboard(ClipboardItem::new_string(
-                                                    url.clone(),
-                                                ));
-                                            })),
+                                            div()
+                                                .h_flex()
+                                                .flex_none()
+                                                .gap(px(8.0))
+                                                // Opening it is the obvious
+                                                // thing to want, and reading a
+                                                // 130-character URL off the
+                                                // screen to type elsewhere is
+                                                // not a task to leave someone.
+                                                .child(
+                                                    ui::secondary_button(
+                                                        Some((
+                                                            icon::name::OPEN_IN_NEW,
+                                                            0x5F594F,
+                                                        )),
+                                                        t!("setup.open_link").to_string(),
+                                                    )
+                                                    .id("open-link")
+                                                    .on_click({
+                                                        let url = url.clone();
+                                                        move |_, _, _| {
+                                                            crate::reveal::open_url(&url)
+                                                        }
+                                                    }),
+                                                )
+                                                .child(
+                                                    ui::secondary_button(
+                                                        Some((
+                                                            icon::name::CONTENT_COPY,
+                                                            0x5F594F,
+                                                        )),
+                                                        t!("setup.copy_link").to_string(),
+                                                    )
+                                                    .id("copy-link")
+                                                    .on_click(cx.listener(move |_, _, _, cx| {
+                                                        cx.write_to_clipboard(
+                                                            ClipboardItem::new_string(url.clone()),
+                                                        );
+                                                    })),
+                                                ),
                                         ),
                                 ),
                         )
