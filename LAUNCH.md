@@ -233,13 +233,27 @@ interpreter and committed lock:
 - **Speed**: CPU RTF ≈ 55–77. CUDA is not an optimisation, it is the product;
   a CPU-only torch runtime is confirmed unshippable, which the capability map
   already said.
-- **One live finding**: upstream is far stricter than MLX about the reference
-  transcript matching the reference audio. With the eval's slightly-wrong
-  `REF_TEXT`, torch dropped the opening words and spoke the prompt's tail; with
-  an accurate transcript it is word-perfect. Recorded enrolment is safe by
-  construction — the script is fixed. The **import path** is where this bites,
-  and its warning copy already says nothing checks the words; for the torch
-  backend that warning is a promise.
+- **Two live findings, both about the reference, chased to ground:**
+
+  *A hesitant reference clones its hesitation.* Both backends, identically:
+  the bench reference ends in "…first um" plus a pause, and every clip made
+  from it opened with a filler and a multi-second hold. With a cleanly-ending
+  reference the artifact vanishes on both. The app's fixed enrolment script
+  ends firmly, so recorded voices are protected; imported references are not,
+  which the import warning already covers.
+
+  *Upstream's transcript-conditioned prefill drops leading words.* With a
+  clean reference and its exact transcript, torch deterministically lost the
+  first clause of the target (two seeds, same result) while MLX, same inputs,
+  kept every word. Isolated by ablation: remove the transcript (speaker-only
+  conditioning) and every word arrives. Candidate mechanism found by reading
+  both implementations: upstream prefills `ceil(samples/patch)` prompt spans;
+  the validated MLX port uses `ceil − 1`, deliberately keeping the final
+  partial patch out of the prompt. The torch backend therefore ships with
+  **speaker-only conditioning by default** (`transcript_prefill` re-enables
+  it): likeness 0.965 against 0.985 with prefill, and wrong words are the
+  worse failure. Revisit on CUDA where a run takes seconds, and upstream,
+  where the fix belongs.
 
 What is left for the Windows machine is now only what a Mac cannot answer:
 `uv sync` of this lock on Windows, CUDA initialisation, generation speed on

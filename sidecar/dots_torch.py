@@ -38,7 +38,12 @@ MODELS = {
         "default": True,
         "notes": "Validated default. Upstream checkpoint under PyTorch.",
         "supports_cloning": True,
-        "gen": {},
+        # The settings DOTS_GEN validated across 8 Nigerian speakers, in
+        # upstream's vocabulary. Left at upstream defaults, this checkpoint
+        # dropped the leading clause of a sentence in live runs — the same
+        # behaviour the evaluation tuned away. max_audio_patches (500) and
+        # eos_threshold (0.8) are already upstream's constructor defaults.
+        "gen": {"guidance_scale": 1.2, "speaker_scale": 1.5, "template_name": "tts"},
     },
     "dots-tts-soar": {
         "label": "Best quality",
@@ -52,7 +57,7 @@ MODELS = {
         "default": False,
         "notes": "Higher-fidelity checkpoint, markedly slower off-GPU.",
         "supports_cloning": True,
-        "gen": {},
+        "gen": {"guidance_scale": 1.2, "speaker_scale": 1.5, "template_name": "tts"},
     },
 }
 
@@ -67,6 +72,9 @@ _GENERATE_OPTIONS = {
     "num_steps",
     "guidance_scale",
 }
+
+# Handled here, never forwarded.
+_BACKEND_OPTIONS = {"transcript_prefill"}
 
 
 def _stub_tn() -> None:
@@ -127,9 +135,26 @@ class _Model:
         reference_text: str | None = None,
         **options,
     ):
-        unknown = set(options) - _GENERATE_OPTIONS
+        unknown = set(options) - _GENERATE_OPTIONS - _BACKEND_OPTIONS
         if unknown:
             raise TypeError(f"options this backend does not take: {sorted(unknown)}")
+
+        # Transcript-conditioned prompt prefill is OFF here, deliberately, and
+        # the reference transcript is not sent unless it is switched back on.
+        #
+        # Measured on 20 Aug 2026 (macOS CPU, MF, two seeds): with the
+        # transcript supplied, upstream deterministically dropped the leading
+        # clause of the target sentence; without it, every word arrived. The
+        # candidate mechanism is one span of prompt accounting — upstream ceils
+        # the reference into whole patches and prefills all of them, while the
+        # validated MLX port deliberately keeps the final partial patch out
+        # (`ceil - 1` in its `_estimate_prompt_patch_count`). Speaker-only
+        # conditioning costs a little likeness (0.965 vs 0.985 against the
+        # same reference) and buys back the words, and wrong words are the
+        # worse failure. Revisit on CUDA hardware where a run takes seconds,
+        # and with upstream, where the fix belongs.
+        if not options.pop("transcript_prefill", False):
+            reference_text = None
 
         # Upstream has no seed parameter; determinism is the caller's to set
         # up. Global rather than a local generator because upstream calls
