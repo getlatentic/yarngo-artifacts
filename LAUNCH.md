@@ -93,7 +93,7 @@ SOAR on both. Substituting f5-tts or qwen3-tts under a label called "Fast"
 would throw away the checkpoint that was validated on Nigerian speakers, which
 is the whole reason the eval was run.
 
-Three separate layers, and every earlier confusion here came from merging two
+Four separate layers, and every earlier confusion here came from merging two
 of them:
 
 | Layer | Values |
@@ -101,11 +101,19 @@ of them:
 | Product label | Fast, Best quality |
 | Model identity | dots.tts MF, dots.tts SOAR |
 | Runtime | MLX, PyTorch, ggml/CrispASR |
+| Hardware backend | Metal, CUDA, Vulkan, CPU |
 
 The catalogue already splits the first two — `ModelSpec.label` against
-`ModelSpec.name`. The third is not represented yet and should be: a model row
-saying "dots.tts MF · Runtime: CUDA" is the honest version of the same product
-on two machines.
+`ModelSpec.name`. The third and fourth are not represented yet, and the fourth
+is why **the OS alone cannot be the selection key**: two Windows machines need
+different runtimes (NVIDIA → torch CUDA; AMD → ggml Vulkan; no GPU → ggml CPU),
+so choosing one means detecting the accelerator, not reading `target_os`.
+
+When the second runtime actually lands, which model runs on which runtime on
+which hardware becomes a small table resolved at startup — data, not an
+if-chain. It is deliberately not built today: with one shipped runtime the
+table has one row, and an abstraction over one case is how the last two
+architecture mistakes here started.
 
 #### CrispASR supports dots.tts SOAR — an earlier note here said otherwise
 
@@ -208,14 +216,27 @@ Pass is two valid clips. That is the whole test, and it decides the shape of the
 port. If it fails, diagnose the failing operation — do not reopen the runtime
 comparison.
 
-If it passes: macOS on MLX, Windows and Linux on PyTorch CUDA, and ggml as the
-portable and low-memory fallback wherever it is supported — which today means
-SOAR only.
+If it passes: macOS on MLX, Windows and Linux NVIDIA on PyTorch CUDA, and ggml
+as the portable and low-memory fallback wherever it is supported — which today
+means SOAR only.
 
-ONNX is not a route yet. There is no maintained ONNX build of the dots pipeline,
-and exporting it means exporting the whole iterative stack — semantic encoder,
-Qwen backbone, AR patch generation, flow-matching DiT, vocoder, speaker
-conditioning — not one graph. Worth revisiting only if both routes above fail.
+**Torch is the transitional Windows runtime, not a candidate for the Mac.**
+Upstream's device selection is `cuda` if available, else `cpu` — verified in
+`runtime.py`, with no `mps` path and no device parameter to override it. On
+Apple silicon the reference implementation runs on CPU. So "torch everywhere
+for consistency" is not an option that exists; MLX on the Mac is settled twice
+over.
+
+ExecuTorch and ONNX are the same category: a better eventual endpoint — a
+native runtime with no CPython in the product — behind the same unbuilt port.
+Both need the whole iterative stack exported: semantic encoder, autoregressive
+Qwen backbone with its KV cache, patch generation loop, 16-step flow-matching
+DiT, vocoder, speaker conditioning. `torch.export` is weakest exactly at
+dynamic control flow, which is most of that list. Parked, not planned: the day
+it matters, the first probe is whether `torch.export` survives the Qwen
+backbone — an afternoon that decides whether the rest is worth anyone's month.
+The `SpeechEngine` trait is what keeps torch replaceable by one of these
+without the app noticing.
 
 #### Runtimes are infrastructure; models are the choice
 
