@@ -30,101 +30,6 @@ import threading
 import numpy as np
 import soundfile as sf
 
-# Generation settings for the dots family, validated across 8 Nigerian speakers:
-# 24/24 identity separation, median 0.0% WER. Do not change without re-running
-# the sanity harness in voice-clone-bench.
-DOTS_GEN = {
-    "guidance_scale": 1.2,
-    "speaker_scale": 1.5,
-    "max_audio_patches": 500,
-    "eos_threshold": 0.8,
-    "template": "tts",
-}
-
-# Every entry is pinned to an immutable revision. Without one the hub resolves
-# `main` at download time, so two people installing a fortnight apart could get
-# different weights under the same model id — and the installed-check, which
-# compares cached bytes, would never notice the repo had moved. Same rule the
-# committed uv.lock enforces for packages; weights are not exempt.
-#
-# Catalogue of models the app may offer. `label` is what this app calls it;
-# `name` is what it actually is, which is the one that means anything to
-# someone checking a licence. Every entry must be commercially
-# licensed — models under non-commercial terms are deliberately absent, which
-# is why Fish S2 Pro (research-only) and F5-TTS (CC-BY-NC weights) are missing
-# despite the runtime being able to load them.
-#
-# `gen` carries per-model settings rather than one shared dict: the adapter
-# layer silently drops kwargs a backend does not use, and silence is a poor
-# place to discover that a setting never applied.
-MODELS = {
-    "dots-tts-mf": {
-        "label": "Fast",
-        "name": "dots.tts MF",
-        "alias": "dots-tts-mf",
-        "repo": "appautomaton/dots-tts-mlx",
-        "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3",
-        "subfolder": "mf/mlx-int8",
-        "licence": "Apache-2.0",
-        "default": True,
-        "notes": "Validated default. Best measured accent retention, ~3.5x faster than SOAR.",
-        "supports_cloning": True,
-        "gen": DOTS_GEN,
-    },
-    "dots-tts-mf-base": {
-        "label": "Fast, full precision",
-        "name": "dots.tts MF",
-        "alias": "dots-tts-mf-base",
-        "repo": "appautomaton/dots-tts-mlx",
-        "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3",
-        "subfolder": "mf/mlx-base",
-        "licence": "Apache-2.0",
-        "default": False,
-        "notes": "Same checkpoint without quantisation. Larger download, more memory.",
-        "supports_cloning": True,
-        "gen": DOTS_GEN,
-    },
-    "dots-tts-soar": {
-        "label": "Best quality",
-        "name": "dots.tts SOAR",
-        "alias": "dots-tts-soar",
-        "repo": "appautomaton/dots-tts-mlx",
-        "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3",
-        "subfolder": "soar/mlx-int8",
-        "licence": "Apache-2.0",
-        "default": False,
-        "notes": "Higher-fidelity checkpoint, roughly 3.5x slower.",
-        "supports_cloning": True,
-        "gen": DOTS_GEN,
-    },
-    "step-audio": {
-        "label": "Step Audio",
-        "name": "Step-Audio-EditX",
-        "alias": "step-audio",
-        "repo": "appautomaton/step-audio-editx-8bit-mlx",
-        "revision": "3b4a7dac975d8cd779fb90e3b86bced59f6df567",
-        "subfolder": None,
-        "licence": "Apache-2.0",
-        "default": False,
-        "notes": "Alternative engine. Cleanest install of the six evaluated; also edits audio.",
-        "supports_cloning": True,
-        "gen": {},
-    },
-    "longcat": {
-        "label": "LongCat",
-        "name": "LongCat-AudioDiT 3.5B",
-        "alias": "longcat",
-        "repo": "appautomaton/longcat-audiodit-3.5b-8bit-mlx",
-        "revision": "1df8412b787e773a460bb5f67b173f750edf6175",
-        "subfolder": None,
-        "licence": "MIT",
-        "default": False,
-        "notes": "Alternative engine. Dropped a leading word during evaluation.",
-        "supports_cloning": True,
-        "gen": {},
-    },
-}
-
 # Voices live on disk so they survive a restart. Preparing a voice costs about
 # 40 seconds, and asking the user to repeat that every launch is not an option.
 # The app passes YARNGO_DATA when it spawns this process, so both sides agree
@@ -142,6 +47,78 @@ VOICE_DIR = Path(
 
 # Generated clips are kept until deleted, so the workspace can list them.
 CLIP_DIR = VOICE_DIR.parent / "clips"
+
+def _log(message: str) -> None:
+    print(message, file=sys.stderr, flush=True)
+
+
+# The catalogue is data, in `catalog.json`, so a model can be added or a
+# revision corrected without shipping a new application. Order of preference:
+# a fetched copy in the data directory, then the one bundled beside this file.
+# The bundled copy is the floor — a fetched catalogue that fails any check
+# below is ignored, loudly, and the app carries on with what it shipped with.
+#
+# `gen` values in that file were validated across 8 Nigerian speakers: 24/24
+# identity separation, median 0.0% WER. Do not change them without re-running
+# the sanity harness in voice-clone-bench.
+CATALOG_API = 1
+
+# Fields without which an entry cannot be used, so a truncated or hand-edited
+# catalogue fails here rather than at the first generation.
+REQUIRED_FIELDS = ("label", "name", "repo", "revision", "licence")
+
+
+def _catalog_paths() -> list[Path]:
+    here = Path(__file__).resolve().parent
+    return [
+        VOICE_DIR.parent / "catalog.json",       # fetched, if one has arrived
+        here / "catalog.json",                   # bundled beside the sidecar
+        here.parent / "catalog.json",            # bundled in Resources/
+        here.parent / "packaging" / "catalog.json",  # a development checkout
+    ]
+
+
+def _read_catalog(path: Path, backend: str) -> dict | None:
+    """Validate a catalogue file, or explain why it was refused."""
+    try:
+        payload = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as exc:
+        _log(f"catalogue {path} unreadable: {exc}")
+        return None
+    if payload.get("schema") != 1:
+        _log(f"catalogue {path} has schema {payload.get('schema')!r}, expected 1")
+        return None
+    # A catalogue written for a newer sidecar may describe entries this one
+    # cannot honour, so it is refused rather than half-understood.
+    if int(payload.get("sidecar_api", 0)) > CATALOG_API:
+        _log(f"catalogue {path} needs sidecar api {payload.get('sidecar_api')}, have {CATALOG_API}")
+        return None
+    models = (payload.get("backends") or {}).get(backend)
+    if not isinstance(models, dict) or not models:
+        _log(f"catalogue {path} has nothing for the {backend} backend")
+        return None
+    for model_id, entry in models.items():
+        missing = [f for f in REQUIRED_FIELDS if not entry.get(f)]
+        if missing:
+            _log(f"catalogue {path}: {model_id} is missing {missing}")
+            return None
+    if not any(entry.get("default") for entry in models.values()):
+        _log(f"catalogue {path} names no default model for {backend}")
+        return None
+    return models
+
+
+def _load_catalog(backend: str) -> dict:
+    for path in _catalog_paths():
+        if not path.exists():
+            continue
+        models = _read_catalog(path, backend)
+        if models is not None:
+            _log(f"catalogue: {len(models)} {backend} model(s) from {path}")
+            return models
+    raise RuntimeError("no usable catalogue found; the bundled copy is missing")
+
+
 
 _models: dict[str, object] = {}
 _voices: dict[str, dict] = {}
@@ -252,12 +229,7 @@ def _backend() -> str:
 
 
 BACKEND = _backend()
-if BACKEND == "torch":
-    import dots_torch
-
-    # Same ids, same labels; upstream artifacts at the revisions the MLX
-    # conversions came from. The catalogue swap is the whole port.
-    MODELS = dots_torch.MODELS
+MODELS = _load_catalog(BACKEND)
 
 
 def _default_model() -> str:
@@ -303,8 +275,6 @@ def _remember_load_time(model_id: str, seconds: float) -> None:
         _log(f"could not record load time: {exc}")
 
 
-def _log(message: str) -> None:
-    print(message, file=sys.stderr, flush=True)
 
 
 # ----------------------------------------------------------------- methods

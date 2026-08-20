@@ -21,45 +21,11 @@ import sys
 import types
 from types import SimpleNamespace
 
-# Same ids as the MLX catalogue, deliberately. "dots-tts-mf" means dots.tts MF
-# everywhere; which artifact serves it is this file's business.
-MODELS = {
-    "dots-tts-mf": {
-        "label": "Fast",
-        "name": "dots.tts MF",
-        "alias": "dots-tts-mf",
-        "repo": "dots-studio/dots.tts-mf",
-        # The revision the MLX int8 artifact was converted from, so the two
-        # backends are the same logical model by construction, not by claim.
-        "revision": "25c53fb462e57087e52237daa5ea30df1c5cc328",
-        "subfolder": None,
-        "licence": "Apache-2.0",
-        "precision": "bf16",
-        "default": True,
-        "notes": "Validated default. Upstream checkpoint under PyTorch.",
-        "supports_cloning": True,
-        # The settings DOTS_GEN validated across 8 Nigerian speakers, in
-        # upstream's vocabulary. Left at upstream defaults, this checkpoint
-        # dropped the leading clause of a sentence in live runs — the same
-        # behaviour the evaluation tuned away. max_audio_patches (500) and
-        # eos_threshold (0.8) are already upstream's constructor defaults.
-        "gen": {"guidance_scale": 1.2, "speaker_scale": 1.5, "template_name": "tts"},
-    },
-    "dots-tts-soar": {
-        "label": "Best quality",
-        "name": "dots.tts SOAR",
-        "alias": "dots-tts-soar",
-        "repo": "dots-studio/dots.tts-soar",
-        "revision": "e3520f75254d0020a0406db31c51a79d00d22d55",
-        "subfolder": None,
-        "licence": "Apache-2.0",
-        "precision": "bf16",
-        "default": False,
-        "notes": "Higher-fidelity checkpoint, markedly slower off-GPU.",
-        "supports_cloning": True,
-        "gen": {"guidance_scale": 1.2, "speaker_scale": 1.5, "template_name": "tts"},
-    },
-}
+# The catalogue lives in catalog.json, which carries both backends: same model
+# ids and labels on each, pointing at different artifacts. This backend's
+# entries name upstream's own checkpoints at the revisions the MLX conversions
+# were made from, so the two are the same logical model by construction rather
+# than by claim, and both carry the generation settings the evaluation fixed.
 
 # The keyword arguments generate() forwards to upstream. An explicit list
 # rather than **: a setting that silently went nowhere is how "it ignored my

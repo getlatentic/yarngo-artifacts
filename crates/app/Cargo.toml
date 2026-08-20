@@ -43,6 +43,7 @@ resources = [
   "../../sidecar/**/*",
   "locales/**/*",
   "../../packaging/packs/**/*",
+  "../../packaging/catalog.json",
   "../../packaging/uv",
 ]
 # Cut from the brand mark by scripts/make-app-icon.py. Without this the app

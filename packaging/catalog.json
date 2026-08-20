@@ -1,0 +1,129 @@
+{
+  "schema": 1,
+  "sidecar_api": 1,
+  "backends": {
+    "mlx": {
+      "dots-tts-mf": {
+        "label": "Fast",
+        "name": "dots.tts MF",
+        "alias": "dots-tts-mf",
+        "repo": "appautomaton/dots-tts-mlx",
+        "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3",
+        "subfolder": "mf/mlx-int8",
+        "licence": "Apache-2.0",
+        "default": true,
+        "notes": "Validated default. Best measured accent retention, ~3.5x faster than SOAR.",
+        "supports_cloning": true,
+        "gen": {
+          "guidance_scale": 1.2,
+          "speaker_scale": 1.5,
+          "max_audio_patches": 500,
+          "eos_threshold": 0.8,
+          "template": "tts"
+        }
+      },
+      "dots-tts-mf-base": {
+        "label": "Fast, full precision",
+        "name": "dots.tts MF",
+        "alias": "dots-tts-mf-base",
+        "repo": "appautomaton/dots-tts-mlx",
+        "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3",
+        "subfolder": "mf/mlx-base",
+        "licence": "Apache-2.0",
+        "default": false,
+        "notes": "Same checkpoint without quantisation. Larger download, more memory.",
+        "supports_cloning": true,
+        "gen": {
+          "guidance_scale": 1.2,
+          "speaker_scale": 1.5,
+          "max_audio_patches": 500,
+          "eos_threshold": 0.8,
+          "template": "tts"
+        }
+      },
+      "dots-tts-soar": {
+        "label": "Best quality",
+        "name": "dots.tts SOAR",
+        "alias": "dots-tts-soar",
+        "repo": "appautomaton/dots-tts-mlx",
+        "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3",
+        "subfolder": "soar/mlx-int8",
+        "licence": "Apache-2.0",
+        "default": false,
+        "notes": "Higher-fidelity checkpoint, roughly 3.5x slower.",
+        "supports_cloning": true,
+        "gen": {
+          "guidance_scale": 1.2,
+          "speaker_scale": 1.5,
+          "max_audio_patches": 500,
+          "eos_threshold": 0.8,
+          "template": "tts"
+        }
+      },
+      "step-audio": {
+        "label": "Step Audio",
+        "name": "Step-Audio-EditX",
+        "alias": "step-audio",
+        "repo": "appautomaton/step-audio-editx-8bit-mlx",
+        "revision": "3b4a7dac975d8cd779fb90e3b86bced59f6df567",
+        "subfolder": null,
+        "licence": "Apache-2.0",
+        "default": false,
+        "notes": "Alternative engine. Cleanest install of the six evaluated; also edits audio.",
+        "supports_cloning": true,
+        "gen": {}
+      },
+      "longcat": {
+        "label": "LongCat",
+        "name": "LongCat-AudioDiT 3.5B",
+        "alias": "longcat",
+        "repo": "appautomaton/longcat-audiodit-3.5b-8bit-mlx",
+        "revision": "1df8412b787e773a460bb5f67b173f750edf6175",
+        "subfolder": null,
+        "licence": "MIT",
+        "default": false,
+        "notes": "Alternative engine. Dropped a leading word during evaluation.",
+        "supports_cloning": true,
+        "gen": {}
+      }
+    },
+    "torch": {
+      "dots-tts-mf": {
+        "label": "Fast",
+        "name": "dots.tts MF",
+        "alias": "dots-tts-mf",
+        "repo": "dots-studio/dots.tts-mf",
+        "revision": "25c53fb462e57087e52237daa5ea30df1c5cc328",
+        "subfolder": null,
+        "licence": "Apache-2.0",
+        "precision": "bf16",
+        "default": true,
+        "notes": "Validated default. Upstream checkpoint under PyTorch.",
+        "supports_cloning": true,
+        "gen": {
+          "guidance_scale": 1.2,
+          "speaker_scale": 1.5,
+          "template_name": "tts"
+        }
+      },
+      "dots-tts-soar": {
+        "label": "Best quality",
+        "name": "dots.tts SOAR",
+        "alias": "dots-tts-soar",
+        "repo": "dots-studio/dots.tts-soar",
+        "revision": "e3520f75254d0020a0406db31c51a79d00d22d55",
+        "subfolder": null,
+        "licence": "Apache-2.0",
+        "precision": "bf16",
+        "default": false,
+        "notes": "Higher-fidelity checkpoint, markedly slower off-GPU.",
+        "supports_cloning": true,
+        "gen": {
+          "guidance_scale": 1.2,
+          "speaker_scale": 1.5,
+          "template_name": "tts"
+        }
+      }
+    }
+  }
+}
