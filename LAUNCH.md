@@ -216,6 +216,33 @@ and names the one folder it all lives in. About states the privacy position,
 explains the consent record and links to its log, and lists the licences of the
 models actually installed.
 
+### Runtime updates — **built**
+
+The runtime no longer rides with the application. On install the bundled recipe
+is staged first and unconditionally — it is the floor, and it is what a machine
+with no network installs from — and then the published one is fetched from
+`getlatentic/yarngo-artifacts` and used if it is newer.
+
+Three gates decide whether a published recipe may be applied, and each is held
+by a test:
+
+- **Digest.** The lock and pyproject are checked against the SHA-256 the
+  manifest names *before anything is written*, so a truncated or swapped
+  download leaves the staged recipe untouched rather than half-replaced.
+- **Sidecar API.** `engine.py` and the packages move together, so a recipe
+  declaring an API higher than this build implements is refused. This is what
+  makes remote runtime updates safe rather than a way to brick installs.
+- **Minimum app version**, compared numerically — `1.10` sorts below `1.9` as
+  text, which would let an old app install a recipe meant for a newer one.
+
+Any failure is reported and stepped over: an unreachable manifest must not stop
+an install the bundled recipe can finish alone. `runtime_update()` answers
+whether a newer runtime exists without changing anything, so the app can offer
+rather than act.
+
+What still rides with the application is the **model catalogue**, which is
+bundled and read through the same validating loader, and the sidecar itself.
+
 ### No way to ship a fix
 
 No auto-update, no version check, no crash reporting. For option 1 that is fine.

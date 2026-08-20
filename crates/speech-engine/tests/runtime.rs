@@ -6,7 +6,7 @@
 //! `is_installed` accepts, and that a supplied archive is used where it lies
 //! rather than fetched.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use speech_engine::runtime::{self, Progress};
@@ -217,6 +217,155 @@ fn a_tampered_uv_download_is_refused() {
     let (_, expected) = runtime::uv_asset().unwrap();
     assert_ne!(checked, expected, "a planted file must not match the pinned digest");
     assert_eq!(checked.len(), 64);
+}
+
+/// A manifest on disk, served to the installer over `file://`, so the update
+/// path can be exercised without publishing anything.
+fn local_manifest(dir: &Path, lock: &Path, pyproject: &Path, api: u32, min_app: &str) -> PathBuf {
+    let digest = |p: &Path| runtime::sha256_of(p).unwrap();
+    let manifest = dir.join("manifest.json");
+    std::fs::write(
+        &manifest,
+        format!(
+            r#"{{"schema":1,"min_app_version":"{min_app}","sidecar_api":{api},
+                "tag":"test-tag","catalog":{{"url":"","sha256":""}},
+                "runtimes":{{"{pack}":{{
+                  "lock_url":"file://{lock}","lock_sha256":"{lock_sha}",
+                  "pyproject_url":"file://{py}","pyproject_sha256":"{py_sha}"}}}}}}"#,
+            pack = runtime::MLX.id,
+            lock = lock.display(),
+            lock_sha = digest(lock),
+            py = pyproject.display(),
+            py_sha = digest(pyproject),
+        ),
+    )
+    .unwrap();
+    manifest
+}
+
+fn bundled(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/packs/mlx").join(name)
+}
+
+#[test]
+fn a_published_runtime_replaces_the_staged_one() {
+    let scratch = Scratch::new();
+    let project = scratch.path().join(runtime::MLX.manifest);
+    std::fs::create_dir_all(&project).unwrap();
+    // Something is already staged, and it is not what the manifest publishes.
+    std::fs::write(project.join("uv.lock"), b"an older lock").unwrap();
+
+    let manifest = local_manifest(
+        scratch.path(),
+        &bundled("uv.lock"),
+        &bundled("pyproject.toml"),
+        runtime::SIDECAR_API,
+        "0.0.1",
+    );
+    unsafe { std::env::set_var("YARNGO_MANIFEST_URL", format!("file://{}", manifest.display())) };
+
+    let applied = runtime::refresh_recipe(&project).expect("the published recipe should apply");
+    assert_eq!(applied.as_deref(), Some("test-tag"));
+    assert_eq!(
+        std::fs::read(project.join("uv.lock")).unwrap(),
+        std::fs::read(bundled("uv.lock")).unwrap(),
+        "the staged lock should now be the published one"
+    );
+    // Running again is a no-op: the installed lock already matches.
+    assert_eq!(runtime::refresh_recipe(&project).unwrap(), None);
+
+    unsafe { std::env::remove_var("YARNGO_MANIFEST_URL") };
+}
+
+#[test]
+fn a_recipe_needing_a_newer_sidecar_is_refused() {
+    // The gate that makes updating the runtime without updating the app safe:
+    // a lock describing an environment this engine.py cannot drive must never
+    // be installed, or a remote publication bricks working installs.
+    let scratch = Scratch::new();
+    let project = scratch.path().join(runtime::MLX.manifest);
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::write(project.join("uv.lock"), b"the lock we shipped with").unwrap();
+
+    let manifest = local_manifest(
+        scratch.path(),
+        &bundled("uv.lock"),
+        &bundled("pyproject.toml"),
+        runtime::SIDECAR_API + 1,
+        "0.0.1",
+    );
+    unsafe { std::env::set_var("YARNGO_MANIFEST_URL", format!("file://{}", manifest.display())) };
+
+    let refused = runtime::refresh_recipe(&project).expect_err("must refuse a newer api");
+    assert!(refused.contains("sidecar api"), "{refused}");
+    assert_eq!(
+        std::fs::read(project.join("uv.lock")).unwrap(),
+        b"the lock we shipped with",
+        "a refused manifest must leave the staged recipe alone"
+    );
+
+    unsafe { std::env::remove_var("YARNGO_MANIFEST_URL") };
+}
+
+#[test]
+fn a_recipe_for_a_newer_app_is_refused() {
+    let scratch = Scratch::new();
+    let project = scratch.path().join(runtime::MLX.manifest);
+    std::fs::create_dir_all(&project).unwrap();
+
+    let manifest = local_manifest(
+        scratch.path(),
+        &bundled("uv.lock"),
+        &bundled("pyproject.toml"),
+        runtime::SIDECAR_API,
+        "99.0.0",
+    );
+    unsafe { std::env::set_var("YARNGO_MANIFEST_URL", format!("file://{}", manifest.display())) };
+    let refused = runtime::refresh_recipe(&project).expect_err("must refuse a newer app floor");
+    assert!(refused.contains("99.0.0"), "{refused}");
+    unsafe { std::env::remove_var("YARNGO_MANIFEST_URL") };
+}
+
+#[test]
+fn a_recipe_whose_digest_does_not_match_is_refused() {
+    let scratch = Scratch::new();
+    let project = scratch.path().join(runtime::MLX.manifest);
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::write(project.join("uv.lock"), b"untouched").unwrap();
+
+    // Build the manifest against the real lock, then swap the file underneath
+    // it — which is what a tampered or truncated download looks like.
+    let lock = scratch.path().join("uv.lock");
+    std::fs::copy(bundled("uv.lock"), &lock).unwrap();
+    let manifest = local_manifest(
+        scratch.path(),
+        &lock,
+        &bundled("pyproject.toml"),
+        runtime::SIDECAR_API,
+        "0.0.1",
+    );
+    std::fs::write(&lock, b"something else entirely").unwrap();
+
+    unsafe { std::env::set_var("YARNGO_MANIFEST_URL", format!("file://{}", manifest.display())) };
+    let refused = runtime::refresh_recipe(&project).expect_err("must refuse a bad digest");
+    assert!(refused.contains("digest"), "{refused}");
+    assert_eq!(
+        std::fs::read(project.join("uv.lock")).unwrap(),
+        b"untouched",
+        "nothing may be written before the digest is checked"
+    );
+    unsafe { std::env::remove_var("YARNGO_MANIFEST_URL") };
+}
+
+#[test]
+fn versions_compare_by_number_not_by_text() {
+    // "1.10.0" sorts below "1.9.0" as a string, which would let an old app
+    // install a recipe meant for a newer one.
+    let m: runtime::Manifest = serde_json::from_str(
+        r#"{"schema":1,"min_app_version":"1.9.0","sidecar_api":1,"tag":"t","runtimes":{}}"#,
+    )
+    .unwrap();
+    assert!(runtime::manifest_usable(&m).is_err(), "0.1.0 is older than 1.9.0");
 }
 
 #[test]

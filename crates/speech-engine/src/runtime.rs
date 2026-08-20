@@ -469,6 +469,146 @@ fn remove_pre_pack_runtime(runtime: &Path) {
     }
 }
 
+/// Where the published recipes live. The only URL this app knows; everything it
+/// names is pinned to an immutable tag and carries a digest.
+const MANIFEST_URL: &str = concat!(
+    "https://github.com/getlatentic/yarngo-artifacts",
+    "/releases/download/latest/manifest.json"
+);
+
+/// What this build can honour. A published recipe declaring a higher number
+/// describes an environment this sidecar does not know how to drive, so it is
+/// refused rather than half-understood — that refusal is what makes updating
+/// the runtime without updating the app safe.
+pub const SIDECAR_API: u32 = 1;
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct Recipe {
+    pub lock_url: String,
+    pub lock_sha256: String,
+    pub pyproject_url: String,
+    pub pyproject_sha256: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct Manifest {
+    pub schema: u32,
+    pub min_app_version: String,
+    pub sidecar_api: u32,
+    pub tag: String,
+    pub runtimes: std::collections::HashMap<String, Recipe>,
+}
+
+/// `1.2.3` against `1.10.0` without pulling in a version crate: compare the
+/// numbers, not the strings, or 1.10 sorts below 1.9.
+fn version_at_least(have: &str, need: &str) -> bool {
+    let parts = |v: &str| -> Vec<u32> {
+        v.split('.').map(|p| p.trim().parse().unwrap_or(0)).collect()
+    };
+    let (have, need) = (parts(have), parts(need));
+    for i in 0..have.len().max(need.len()) {
+        let (h, n) = (have.get(i).copied().unwrap_or(0), need.get(i).copied().unwrap_or(0));
+        if h != n {
+            return h > n;
+        }
+    }
+    true
+}
+
+/// Whether this build may act on a published manifest.
+pub fn manifest_usable(manifest: &Manifest) -> Result<(), String> {
+    if manifest.schema != 1 {
+        return Err(format!("manifest schema {} is not one this build reads", manifest.schema));
+    }
+    if manifest.sidecar_api > SIDECAR_API {
+        return Err(format!(
+            "the published runtime needs sidecar api {}, this build implements {SIDECAR_API}",
+            manifest.sidecar_api
+        ));
+    }
+    let ours = env!("CARGO_PKG_VERSION");
+    if !version_at_least(ours, &manifest.min_app_version) {
+        return Err(format!(
+            "the published runtime needs yarngo {} or newer; this is {ours}",
+            manifest.min_app_version
+        ));
+    }
+    Ok(())
+}
+
+fn fetch_text(url: &str) -> Result<Vec<u8>, String> {
+    let into = std::env::temp_dir().join(format!("yarngo-fetch-{}", std::process::id()));
+    let mut curl = Command::new("curl");
+    curl.args(["-fL", "--retry", "2", "--max-time", "30", "-o"]).arg(&into).arg(url);
+    run_streaming(curl, &mut |_| {})?;
+    let bytes = std::fs::read(&into).map_err(|e| e.to_string())?;
+    let _ = std::fs::remove_file(&into);
+    Ok(bytes)
+}
+
+/// The published manifest, or why it cannot be used. Never fatal: every caller
+/// carries on with what it shipped with.
+pub fn fetch_manifest() -> Result<Manifest, String> {
+    let url = std::env::var("YARNGO_MANIFEST_URL").unwrap_or_else(|_| MANIFEST_URL.into());
+    let bytes = fetch_text(&url).map_err(|e| format!("could not reach the manifest: {e}"))?;
+    let manifest: Manifest =
+        serde_json::from_slice(&bytes).map_err(|e| format!("manifest is not readable: {e}"))?;
+    manifest_usable(&manifest)?;
+    Ok(manifest)
+}
+
+/// Replace this pack's staged recipe with the published one, if there is a
+/// usable newer one. Returns the tag when something changed.
+///
+/// The digest is checked before anything is written, so a truncated or swapped
+/// download leaves the staged recipe untouched rather than half-replaced.
+pub fn refresh_recipe(project: &Path) -> Result<Option<String>, String> {
+    let manifest = fetch_manifest()?;
+    let recipe = manifest
+        .runtimes
+        .get(pack().id)
+        .ok_or_else(|| format!("the manifest has no runtime for the {} pack", pack().id))?;
+
+    let lock = fetch_text(&recipe.lock_url)?;
+    let pyproject = fetch_text(&recipe.pyproject_url)?;
+    for (what, bytes, expected) in [
+        ("uv.lock", &lock, &recipe.lock_sha256),
+        ("pyproject.toml", &pyproject, &recipe.pyproject_sha256),
+    ] {
+        use sha2::{Digest, Sha256};
+        let actual = format!("{:x}", Sha256::digest(bytes));
+        if &actual != expected {
+            return Err(format!("{what} does not match its digest (wanted {expected}, got {actual})"));
+        }
+    }
+
+    // Nothing to do if the published recipe is the one already installed.
+    let staged = project.join("uv.lock");
+    if staged.exists() && sha256_of(&staged)? == recipe.lock_sha256 {
+        return Ok(None);
+    }
+
+    std::fs::create_dir_all(project).map_err(|e| e.to_string())?;
+    std::fs::write(project.join("uv.lock"), &lock).map_err(|e| e.to_string())?;
+    std::fs::write(project.join("pyproject.toml"), &pyproject).map_err(|e| e.to_string())?;
+    Ok(Some(manifest.tag))
+}
+
+/// Whether a published runtime differs from the one installed. Answers without
+/// changing anything, so the app can offer rather than act.
+pub fn runtime_update() -> Result<Option<String>, String> {
+    let manifest = fetch_manifest()?;
+    let recipe = manifest
+        .runtimes
+        .get(pack().id)
+        .ok_or_else(|| format!("the manifest has no runtime for the {} pack", pack().id))?;
+    let staged = paths::runtime_dir().join(pack().manifest).join("uv.lock");
+    if !staged.exists() {
+        return Ok(None);
+    }
+    Ok((sha256_of(&staged)? != recipe.lock_sha256).then_some(manifest.tag))
+}
+
 /// Put this pack's manifest and lock where `uv sync` can build beside them.
 ///
 /// Both files, always: a `pyproject.toml` without its lock would make uv
@@ -570,9 +710,20 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
     // `uv sync` writes a `.venv` beside it, and writing inside a signed bundle
     // would break its signature.
     let project = runtime.join(pack().manifest);
+    // The bundled recipe is staged first and unconditionally: it is the floor,
+    // and it is what a machine with no network installs from.
     if let Err(err) = stage_manifest(&project) {
         report(Progress::Failed(err));
         return;
+    }
+    // Then the published one, if it is reachable, digest-matching, and does not
+    // need a newer sidecar than this build implements. Any failure here is
+    // reported and stepped over — an unreachable manifest must not stop an
+    // install that the bundled recipe can complete on its own.
+    match refresh_recipe(&project) {
+        Ok(Some(tag)) => report(Progress::Step(format!("Using the published runtime {tag}…"))),
+        Ok(None) => {}
+        Err(err) => eprintln!("keeping the bundled runtime recipe: {err}"),
     }
 
     let uv = match ensure_uv(&runtime, &mut report) {
