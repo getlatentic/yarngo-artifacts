@@ -152,7 +152,7 @@ impl VoiceStudio {
     fn check_row(&self, check: &Check, cx: &Context<Self>) -> AnyElement {
         let (glyph, colour, text) = match check {
             Check::Pass(t) => (icon::name::CHECK, cx.theme().success, t.clone()),
-            Check::Warn(t) => (icon::name::ERROR_OUTLINE, cx.theme().warning, t.clone()),
+            Check::Warn(t) => (icon::name::WARNING, cx.theme().warning, t.clone()),
             Check::Pending(t) => (icon::name::GRAPHIC_EQ, theme::hex(0x857D72), t.clone()),
         };
         div()

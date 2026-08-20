@@ -45,7 +45,7 @@ impl Pane {
             Pane::Audio => icon::name::HEADPHONES,
             Pane::Storage => icon::name::HARD_DRIVE,
             Pane::Runtime => icon::name::MEMORY,
-            Pane::About => icon::name::ERROR_OUTLINE,
+            Pane::About => icon::name::INFO,
         }
     }
 

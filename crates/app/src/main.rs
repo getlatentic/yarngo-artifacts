@@ -2175,6 +2175,16 @@ fn load_brand_fonts(cx: &App) {
         // Not fatal: the app is legible in a fallback face, just off-brand.
         eprintln!("could not load brand fonts: {err}");
     }
+    if std::env::var("YARNGO_FONT_DEBUG").is_ok() {
+        let names = cx.text_system().all_font_names();
+        eprintln!("font-debug: {} families known", names.len());
+        for n in names.iter().filter(|n| {
+            let l = n.to_lowercase();
+            l.contains("material") || l.contains("sora") || l.contains("noto") || l.contains("yarngo")
+        }) {
+            eprintln!("font-debug:   {n}");
+        }
+    }
 }
 
 fn main() {
