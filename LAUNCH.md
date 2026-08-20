@@ -472,7 +472,36 @@ machine from what is not; it needs a third state — offered, but not runnable
 here, with the reason — so a model the hardware cannot run is visibly
 unavailable rather than a download that disappoints.
 
-### 6. Apple silicon only — **now said, before anything is downloaded**
+### 6. Apple silicon only — and Intel Macs are closed permanently, not just today
+
+Checked properly on 20 Aug 2026, because "Apple silicon only" had been recorded
+as an MLX consequence and it is broader than that. The **application** is not
+the problem: `cargo check --target x86_64-apple-darwin` passes clean, GPUI and
+all, so the shell is portable. The **runtime** has three doors and every one is
+shut:
+
+- **MLX** is Apple-silicon only by construction.
+- **PyTorch**: macOS x86_64 wheels stop at **torch 2.2.2**; upstream dots.tts
+  requires **torch>=2.8.0**. A hard dependency wall, not a slowness problem.
+  Buzz independently confirms the ceiling — its pyproject pins `torch==2.2.2`
+  for `darwin`/`x86_64` and 2.8.0 for arm64.
+- **ggml/CrispASR**: its macOS release is a single `Mach-O 64-bit executable
+  arm64`, not universal — five Linux x86_64 flavours and a Windows x86_64
+  build, no Intel Mac one. It could be built, but it does not exist.
+
+And the wall costs nothing worth having. Even if torch installed, an Intel Mac
+is CPU-only inference — the same tier measured here at RTF 55–77, minutes of
+wall clock for seconds of speech. The dependency ceiling is not denying us a
+viable tier; it is saving us from shipping a bad one.
+
+The current behaviour is already right and needs no change: the build is
+**arm64-only** (`…_aarch64.dmg`), so an Intel Mac refuses it at launch with the
+system's own message rather than after a download, and `host_supported()`
+refuses anyway for anyone running from source. The only edit worth making is to
+that refusal's wording, which blames MLX alone when the torch route is equally
+closed.
+
+### 7. Apple silicon only — **now said, before anything is downloaded**
 
 MLX is Apple-silicon only, so the runtime installer being generic was a trap:
 an Intel Mac would download several hundred megabytes, install them happily,
