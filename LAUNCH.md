@@ -64,9 +64,14 @@ carries `YarngoStudio.icns` and names it in its plist.
 
 ### 4. First run needs the network, and asks for a lot of it
 
-A machine that already has MLX and `mlx-speech` skips the first two entirely —
-the app looks for an interpreter that can import the package before offering to
-download one. For everyone else, in order: ~350 MB of CPython, then
+yarngo installs its own runtime and does not borrow the machine's. It used to:
+a `python3` on PATH that could import the speech package was used as-is,
+skipping the download. That saved a download and cost determinism — two people
+would be running different versions of the engine and its whole dependency
+tree, which is the thing the committed lock exists to prevent — and it risked
+Apple's command-line-tools dialog appearing over our own setup screen, since a
+bare `/usr/bin/python3` is a stub on a Mac without them. `YARNGO_PYTHON` remains
+as a developer override. So, in order: ~350 MB of CPython, then
 `pip install mlx-speech` and its dependency tree, then a 3.4 GB model. The offline path covers only the first of those —
 "Install from a file" takes the interpreter archive and the card says plainly
 that the packages still come from the network.
@@ -155,13 +160,19 @@ That was an inference stated as a fact. Checking upstream
    Two things this buys beyond consistency. **Installs became reproducible**:
    `pip install --upgrade` resolved fresh on every machine, so two people
    installing a week apart got different dependency trees; the lock pins all 26
-   with hashes. And **the pynini exclusion became declarative** —
-   `[tool.uv] override-dependencies` in the torch pack's manifest, committed and
-   reviewable, rather than `--no-deps` plus a hand-maintained copy of upstream's
-   17 dependencies. Verified: without it the resolution pulls `pynini==2.1.7`
-   and `wetextprocessing==1.2.0`; with it both are gated behind
-   `sys_platform == 'never'` and `dots-tts==0.3.1` still resolves alongside
-   torch 2.13.0.
+   with hashes, and the shipped command is `uv sync --frozen --no-dev` so uv
+   cannot quietly re-lock on the way in. And **the pynini exclusion became
+   declarative**: `[tool.uv] exclude-dependencies`, scoped to `dots-tts`, so the
+   manifest says "yarngo packages dots.tts without its normaliser" rather than
+   forbidding the package to everything. The lock records the exclusion and
+   resolves 109 packages instead of 112 — pynini and WeTextProcessing are absent
+   rather than present-and-gated, and `dots-tts==0.3.1` still resolves alongside
+   torch 2.13.0. The scoping was checked by pointing it at the wrong package,
+   which brings them straight back.
+
+   uv itself is pinned at 0.12.5 and its published SHA-256 is verified before it
+   is unpacked — an unverified executable that then gets signed with our own
+   identity would undo both the signature's meaning and the locks'.
 
    `uv add` is the dev-time way to edit a pack manifest, not part of the install
    path. `uv tool` is for CLI tools in isolated environments; the sidecar is

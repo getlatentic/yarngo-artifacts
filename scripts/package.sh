@@ -53,18 +53,35 @@ pack app "$@"
 # Re-sign explicitly, with a real identity when one is configured.
 # uv installs the speech packages from the committed locks. Fetched here rather
 # than committed: it is a 40 MB binary, and it must match the machine being
-# packaged for. Pinned, because it decides what a reproducible install means.
-UV_VERSION="0.9.8"
+# packaged for.
+#
+# Pinned and digest-checked. Downloading an unverified executable at build time
+# and then signing it with our identity would hand our signature to whatever
+# arrived, and would undo the reproducibility the locks exist for.
+UV_VERSION="0.12.5"
 if [[ ! -x packaging/uv ]]; then
-  UV_TARGET="$(uname -m)-apple-darwin"
-  echo "fetching uv $UV_VERSION ($UV_TARGET)"
-  curl -fL --retry 3 -o /tmp/uv.tar.gz \
-    "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-$UV_TARGET.tar.gz"
-  tar -xzf /tmp/uv.tar.gz -C /tmp
-  mv "/tmp/uv-$UV_TARGET/uv" packaging/uv
+  # Apple reports arm64; the release assets say aarch64.
+  case "$(uname -m)" in
+    arm64|aarch64) UV_ARCH="aarch64" ;;
+    x86_64) UV_ARCH="x86_64" ;;
+    *) echo "no uv build for $(uname -m)" >&2; exit 1 ;;
+  esac
+  UV_ASSET="uv-$UV_ARCH-apple-darwin.tar.gz"
+  BASE="https://github.com/astral-sh/uv/releases/download/$UV_VERSION"
+  echo "fetching uv $UV_VERSION ($UV_ARCH)"
+  WORK="$(mktemp -d)"
+  curl -fL --retry 3 -o "$WORK/$UV_ASSET" "$BASE/$UV_ASSET"
+  curl -fL --retry 3 -o "$WORK/$UV_ASSET.sha256" "$BASE/$UV_ASSET.sha256"
+  ( cd "$WORK" && shasum -a 256 -c "$UV_ASSET.sha256" ) || {
+    echo "uv digest does not match what the release publishes" >&2
+    rm -rf "$WORK"; exit 1
+  }
+  tar -xzf "$WORK/$UV_ASSET" -C "$WORK"
+  mv "$WORK/uv-$UV_ARCH-apple-darwin/uv" packaging/uv
   chmod +x packaging/uv
-  rm -rf /tmp/uv.tar.gz "/tmp/uv-$UV_TARGET"
+  rm -rf "$WORK"
 fi
+packaging/uv --version
 
 IDENTITY="${APPLE_SIGNING_IDENTITY:--}"
 sign() {

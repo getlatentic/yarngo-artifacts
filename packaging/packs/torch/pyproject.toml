@@ -10,13 +10,17 @@ requires-python = ">=3.12,<3.13"
 dependencies = ["dots.tts", "torch", "torchaudio"]
 
 [tool.uv]
-# WeTextProcessing pulls pynini, which publishes manylinux wheels only and
-# sends Windows users to conda — for text normalisation, which the upstream
-# runtime defaults to off (`normalize_text: bool = False`).
+# dots.tts lists WeTextProcessing as a hard dependency, which pulls pynini —
+# manylinux wheels only, and its own guidance sends Windows users to conda. It
+# buys text normalisation, which the upstream runtime defaults to off
+# (`normalize_text: bool = False`).
 #
-# An unsatisfiable marker rather than a removal: the dependency stays visible in
-# the lock, gated, so the next person can see the decision instead of wondering
-# where it went. Note that dropping the package is not sufficient on its own —
-# dots_tts/utils/text.py imports tn.* at module scope, so those imports have to
-# be made lazy too.
-override-dependencies = ["WeTextProcessing ; sys_platform == 'never'"]
+# Scoped to dots-tts rather than excluded globally, so this says what is meant:
+# yarngo packages dots.tts without its normaliser. If anything else ever needs
+# WeTextProcessing, it still gets it.
+#
+# Dropping the package is not sufficient on its own — dots_tts/utils/text.py
+# imports tn.* at module scope, so those imports have to be made lazy too.
+exclude-dependencies = [
+  { package = { name = "dots-tts" }, dependencies = ["WeTextProcessing"] },
+]

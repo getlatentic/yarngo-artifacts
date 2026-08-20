@@ -96,16 +96,39 @@ fn every_pack_ships_a_manifest_and_a_lock() {
 
 #[test]
 fn the_torch_lock_keeps_pynini_out() {
-    // The dependency stays in the lock, gated behind a marker no platform
-    // satisfies, so the decision is visible rather than vanished.
     let lock = std::fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/packs/torch/uv.lock"),
     )
     .unwrap();
-    assert!(lock.contains("pynini"), "expected it recorded, not removed");
+    // The exclusion is recorded, so the decision is legible to whoever reads
+    // the lock next...
     assert!(
-        lock.contains("sys_platform == 'never'"),
-        "pynini must be gated: it has no Windows wheels and would drag in conda"
+        lock.contains("excludes = ") && lock.contains("wetextprocessing"),
+        "the exclusion should be stated in the lock, not just implied by absence"
+    );
+    // ...and scoped to dots-tts, so it says "yarngo packages dots.tts without
+    // its normaliser" rather than "nothing may ever use this".
+    assert!(lock.contains(r#"name = "dots-tts""#), "the exclusion should name what it applies to");
+    // But pynini itself resolves nowhere: no package entry, on any platform.
+    assert!(
+        !lock.contains(r#"name = "pynini""#),
+        "pynini has no Windows wheels and would drag conda into the runtime"
+    );
+}
+
+#[test]
+fn production_never_borrows_the_machines_python() {
+    // The PATH probe is gone deliberately. Using whatever `python3` resolved to
+    // meant two people ran different versions of the engine and its whole
+    // dependency tree — which is what the committed lock exists to prevent.
+    // It also risked Apple's command-line-tools dialog appearing over our own
+    // setup screen, since a bare /usr/bin/python3 is a stub on a Mac without
+    // them.
+    let _scratch = Scratch::new();
+    unsafe { std::env::remove_var("YARNGO_PYTHON") };
+    assert!(
+        runtime::existing_interpreter().is_none(),
+        "with no explicit interpreter named, nothing on this machine counts"
     );
 }
 

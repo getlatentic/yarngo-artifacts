@@ -21,7 +21,14 @@ use std::process::{Command, Stdio};
 
 use crate::paths;
 
-/// An interpreter and the packages that make it able to speak.
+/// A Python speech runtime: an interpreter and the packages that make it able
+/// to speak.
+///
+/// This is one *kind* of runtime, not the shape of all of them. A native
+/// backend — CrispASR over GGUF, or ONNX Runtime — has no interpreter and no
+/// lock, and would not be described by this struct. Nothing here should be
+/// mistaken for a general runtime abstraction; there is no need for one until
+/// a second kind actually exists.
 ///
 /// There are two because the two inference backends disagree about Python, and
 /// the disagreement is total: `mlx-speech` declares `>=3.13`, upstream
@@ -227,20 +234,25 @@ fn uv_binary() -> PathBuf {
     paths::resource("uv").unwrap_or_else(|| PathBuf::from("uv"))
 }
 
-/// An interpreter already on this machine that can run the speech stack.
+/// A developer's interpreter, named explicitly. Nothing else.
 ///
-/// Asked before offering to download 350 MB, because a machine that already
-/// has MLX and `mlx-speech` — a developer's, or someone who installed it for
-/// something else — does not need a second copy. `YARNGO_PYTHON` names one
-/// explicitly; otherwise whatever `python3` resolves to is tried.
+/// This used to fall back to whatever `python3` resolved to on PATH, and use it
+/// if it happened to import the speech package. That saved a download and cost
+/// determinism: two people would be running different versions of the engine
+/// and its whole dependency tree, and the lock committed alongside this file
+/// exists precisely to stop that. Supporting it means debugging other people's
+/// Python installations.
+///
+/// It also removed a hazard. On a Mac without the Xcode command line tools,
+/// `/usr/bin/python3` is a stub that opens Apple's installer dialog when run —
+/// which would have appeared over our own setup screen, during first launch,
+/// looking like something yarngo was asking for.
+///
+/// yarngo owns its runtime. `YARNGO_PYTHON` stays because a checkout has to be
+/// able to run against a working environment without installing one.
 pub fn existing_interpreter() -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(explicit) = std::env::var("YARNGO_PYTHON") {
-        candidates.push(PathBuf::from(explicit));
-    }
-    candidates.push(PathBuf::from("python3"));
-
-    candidates.into_iter().find(|python| can_speak(python))
+    let explicit = PathBuf::from(std::env::var("YARNGO_PYTHON").ok()?);
+    can_speak(&explicit).then_some(explicit)
 }
 
 /// Whether this interpreter has the speech package this host's pack needs.
@@ -410,8 +422,12 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
 
     let mut sync = Command::new(uv_binary());
     sync.arg("sync")
-        // The lock is the whole point — resolving again here would defeat it.
+        // The lock is the whole point: without --frozen, uv re-locks before
+        // syncing, and what shipped stops being what was tested.
         .arg("--frozen")
+        // A runtime has no development dependencies. Nothing declares any
+        // today; this keeps that true when someone adds one.
+        .arg("--no-dev")
         .arg("--project")
         .arg(&project)
         .arg("--python")
