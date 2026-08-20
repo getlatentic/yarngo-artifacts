@@ -242,18 +242,22 @@ interpreter and committed lock:
   ends firmly, so recorded voices are protected; imported references are not,
   which the import warning already covers.
 
-  *Upstream's transcript-conditioned prefill drops leading words.* With a
-  clean reference and its exact transcript, torch deterministically lost the
-  first clause of the target (two seeds, same result) while MLX, same inputs,
-  kept every word. Isolated by ablation: remove the transcript (speaker-only
-  conditioning) and every word arrives. Candidate mechanism found by reading
-  both implementations: upstream prefills `ceil(samples/patch)` prompt spans;
-  the validated MLX port uses `ceil − 1`, deliberately keeping the final
-  partial patch out of the prompt. The torch backend therefore ships with
-  **speaker-only conditioning by default** (`transcript_prefill` re-enables
-  it): likeness 0.965 against 0.985 with prefill, and wrong words are the
-  worse failure. Revisit on CUDA where a run takes seconds, and upstream,
-  where the fix belongs.
+  *Upstream drops leading words — a genuine dots-tts 0.3.1 bug, found and
+  patched.* With a clean reference and its exact transcript, torch
+  deterministically lost the first clause of the target (two seeds, same
+  result) while MLX, same inputs, kept every word. Root cause, from reading
+  both implementations: **upstream disagrees with itself by one span.** Its
+  model drops the final partial patch of prompt latents (the tail is padding,
+  not speech), but its runtime schedule ceils — reserving one more prompt span
+  than the model prefills, and the orphan span lands exactly where the
+  target's first words belong. The sidecar aligns the runtime with upstream's
+  own model (version-guarded to the pinned 0.3.1, mirroring the validated MLX
+  port's `ceil − 1`). Measured on the user's enrolled voice: every word
+  intact, likeness 0.974 against the reference and **0.993 against MLX** —
+  where speaker-only conditioning, the interim workaround, had scored an
+  audibly-worse 0.944. On an unrecognised upstream version the backend falls
+  back to speaker-only rather than reintroduce the bug. Worth filing upstream
+  with exactly this diagnosis.
 
 What is left for the Windows machine is now only what a Mac cannot answer:
 `uv sync` of this lock on Windows, CUDA initialisation, generation speed on

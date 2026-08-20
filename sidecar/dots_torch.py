@@ -106,6 +106,39 @@ def _stub_tn() -> None:
     sys.modules["tn.english.normalizer"].Normalizer = _Refuse
 
 
+def _align_prompt_accounting(runtime_cls) -> bool:
+    """Make the runtime's schedule agree with its own model about the prompt.
+
+    dots-tts 0.3.1 disagrees with itself by one span: the model drops the final
+    partial patch of prompt latents (`prompt_latents_sampled[:, :-patch_size]`
+    in `_prepare_prompt_conditioning` — its tail is padding, not speech), but
+    the runtime's `_estimate_prompt_audio_patch_count` ceils, so the generation
+    schedule reserves one more prompt span than the model prefills. The orphan
+    span sits exactly where the target's first words belong, and in live runs
+    they were dropped, deterministically across seeds. The validated MLX port
+    uses `ceil - 1` on both sides.
+
+    Version-guarded so an upstream fix is noticed rather than double-patched;
+    on any other version the backend stays speaker-only instead.
+    """
+    from importlib.metadata import version
+
+    if version("dots-tts") != "0.3.1":
+        return False
+    if getattr(runtime_cls, "_yarngo_aligned", False):
+        return True
+
+    ceiling = runtime_cls._estimate_prompt_audio_patch_count
+
+    def aligned(self, **kwargs) -> int:
+        count = ceiling(self, **kwargs)
+        return max(count - 1, 0)
+
+    runtime_cls._estimate_prompt_audio_patch_count = aligned
+    runtime_cls._yarngo_aligned = True
+    return True
+
+
 class _Model:
     """One loaded checkpoint, presenting the surface the engine generates
     against: `generate(text, …) -> (waveform, sample_rate)`."""
@@ -115,6 +148,7 @@ class _Model:
         import torch
         from dots_tts.runtime import DotsTtsRuntime
 
+        self._aligned = _align_prompt_accounting(DotsTtsRuntime)
         self._torch = torch
         # Upstream picks cuda-else-cpu internally and warns that a silent CPU
         # fall-back under bf16 causes dtype mismatches — so choose the
@@ -139,21 +173,14 @@ class _Model:
         if unknown:
             raise TypeError(f"options this backend does not take: {sorted(unknown)}")
 
-        # Transcript-conditioned prompt prefill is OFF here, deliberately, and
-        # the reference transcript is not sent unless it is switched back on.
-        #
-        # Measured on 20 Aug 2026 (macOS CPU, MF, two seeds): with the
-        # transcript supplied, upstream deterministically dropped the leading
-        # clause of the target sentence; without it, every word arrived. The
-        # candidate mechanism is one span of prompt accounting — upstream ceils
-        # the reference into whole patches and prefills all of them, while the
-        # validated MLX port deliberately keeps the final partial patch out
-        # (`ceil - 1` in its `_estimate_prompt_patch_count`). Speaker-only
-        # conditioning costs a little likeness (0.965 vs 0.985 against the
-        # same reference) and buys back the words, and wrong words are the
-        # worse failure. Revisit on CUDA hardware where a run takes seconds,
-        # and with upstream, where the fix belongs.
-        if not options.pop("transcript_prefill", False):
+        # Transcript-conditioned prefill is what likeness comes from — the
+        # speaker-only path measured audibly worse (0.944 against 0.980) — so
+        # it is on whenever the accounting patch above applied. On an
+        # unrecognised upstream version the patch does not apply, and this
+        # falls back to speaker-only rather than reintroduce the dropped-words
+        # bug the patch exists to fix. `transcript_prefill: false` forces the
+        # fallback explicitly.
+        if not options.pop("transcript_prefill", self._aligned):
             reference_text = None
 
         # Upstream has no seed parameter; determinism is the caller's to set
