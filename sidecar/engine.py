@@ -372,6 +372,45 @@ def _record_consent(voice_id: str, params: dict) -> None:
         _log(f"could not write consent record: {exc}")
 
 
+def _trim_silence(path: Path) -> tuple[float, float]:
+    """Cut leading and trailing silence off a reference recording, in place.
+
+    A recording keeps whatever surrounded the words — the pause after pressing
+    record, the wait before stop. The model conditions on the reference as a
+    continuation, so a clone inherits that dead air as its opening; and the
+    speaker embedding reads only the first ten seconds, so a long lead-in
+    spends identity on room tone.
+
+    Two gates, and whichever sits higher decides: 30 dB under the recording's
+    own peak (upstream's prompt-trim figure), or an absolute -38 dBFS. The
+    absolute gate is what makes this work on quiet takes — a real lead-in
+    measured here sat 22 dB under a -25 dBFS peak, invisible to any relative
+    gate, while nothing the recorder accepts as speech sits below -38 dBFS.
+    150 ms of padding stays on either side, and a file the trim would erase is
+    left untouched.
+    """
+    wav, sr = sf.read(path, always_2d=True)
+    window = max(1, int(0.02 * sr))
+    frames = len(wav) // window
+    if frames == 0:
+        return 0.0, 0.0
+    mono = np.mean(np.abs(wav[: frames * window]), axis=1)
+    rms = np.sqrt(np.mean(mono.reshape(frames, window) ** 2, axis=1))
+    relative = float(rms.max()) * 10 ** (-30 / 20)
+    floor = 10 ** (-38 / 20)
+    loud = np.flatnonzero(rms > max(relative, floor))
+    if loud.size == 0:
+        return 0.0, 0.0
+    pad = int(0.15 * sr)
+    start = max(0, int(loud[0]) * window - pad)
+    end = min(len(wav), (int(loud[-1]) + 1) * window + pad)
+    lead, tail = start / sr, (len(wav) - end) / sr
+    if lead < 0.05 and tail < 0.05:
+        return 0.0, 0.0
+    sf.write(path, wav[start:end], sr)
+    return round(lead, 2), round(tail, 2)
+
+
 def m_register_voice(params: dict) -> dict:
     """Copy the recording into app storage, then prepare it for generation.
 
@@ -392,6 +431,12 @@ def m_register_voice(params: dict) -> dict:
     stored_audio = VOICE_DIR / f"{voice_id}.wav"
     if source.resolve() != stored_audio.resolve():
         shutil.copy2(source, stored_audio)
+
+    # Before the consent record, so the hash in the log matches the artifact
+    # the voice will actually be made from.
+    lead, tail = _trim_silence(stored_audio)
+    if lead or tail:
+        _log(f"trimmed {lead}s lead-in and {tail}s tail from {voice_id}")
 
     _record_consent(voice_id, params)
     try:
