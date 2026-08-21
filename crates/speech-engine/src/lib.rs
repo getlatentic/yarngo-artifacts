@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod handle;
 pub mod paths;
+pub mod protocol;
 pub mod runtime;
 pub mod sidecar;
 
