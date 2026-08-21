@@ -147,6 +147,11 @@ pub struct VoiceStudio {
     /// count. An estimate, and labelled as one — the exact length is not known
     /// until the model has finished.
     pub(crate) expected_s: f32,
+    /// The row a running generation belongs to — a draft id, or the id of the
+    /// clip that "Generate again" was pressed on. Needed because both are
+    /// possible and only one of them is a draft, so a draft flag alone cannot
+    /// answer "is the thing on screen the thing that is running".
+    pub(crate) generating_row: Option<String>,
     /// What the voice being enrolled will be called. A field rather than a
     /// generated name: with more than one voice, "My voice 3" tells you
     /// nothing, and the sharing case makes several the normal state.
@@ -250,6 +255,7 @@ impl VoiceStudio {
             track: std::rc::Rc::new(std::cell::Cell::new(Bounds::default())),
             progress: None,
             expected_s: 0.0,
+            generating_row: None,
             imported: None,
             queued: None,
             confirming_voice: None,
@@ -671,6 +677,11 @@ impl VoiceStudio {
             }
         };
 
+        self.generating_row = clip_id.clone().or_else(|| match &self.selected {
+            clips::Selected::Draft(id) => Some(id.clone()),
+            clips::Selected::Clip(id, _) => Some(id.clone()),
+        });
+
         // Nothing can speak yet. Keep the words and run them when it can.
         if !self.model_ready() {
             if !text.trim().is_empty() {
@@ -721,6 +732,7 @@ impl VoiceStudio {
                     Ok(s) => {
                         // The draft has become a clip: drop it from the list and
                         // point the workspace at what it produced.
+                        this.generating_row = None;
                         this.drafts.retain(|d| !d.generating);
                         if let Some(clip) = s.clip.as_ref() {
                             let take = clip
@@ -754,6 +766,7 @@ impl VoiceStudio {
                         for draft in this.drafts.iter_mut() {
                             draft.generating = false;
                         }
+                        this.generating_row = None;
                         Status::Failed(format!("{err}"))
                     }
                 };
@@ -1552,11 +1565,35 @@ impl VoiceStudio {
             .is_none_or(|m| m.installed)
     }
 
+    /// Whether anything is running — a model preparing, a generation, an
+    /// install. Right for disabling Generate; wrong for deciding what the
+    /// composer shows.
     pub(crate) fn busy(&self) -> bool {
         matches!(
             self.status,
             Status::Preparing(_) | Status::Generating | Status::Installing { .. }
         )
+    }
+
+    /// Whether the clip *on screen* is the one running.
+    ///
+    /// The composer used to key off `busy()`, which is global: selecting
+    /// another clip mid-generation changed the selection and the text
+    /// underneath, while the card carried on showing the running one's
+    /// progress and locked words. Two clips' states on one screen. A draft
+    /// carries its own `generating` flag, so the card can follow the
+    /// selection and the run stays visible in the sidebar where it belongs.
+    pub(crate) fn showing_generation(&self) -> bool {
+        // Installing or preparing is not attached to any row, so it shows
+        // wherever you are — there is nowhere else for it to go.
+        if self.busy() && !matches!(self.status, Status::Generating) {
+            return true;
+        }
+        let selected = match &self.selected {
+            crate::clips::Selected::Draft(id) => id,
+            crate::clips::Selected::Clip(id, _) => id,
+        };
+        self.generating_row.as_deref() == Some(selected.as_str())
     }
 
     fn status_line(&self, cx: &Context<Self>) -> AnyElement {

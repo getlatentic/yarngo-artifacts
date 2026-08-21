@@ -241,6 +241,9 @@ settings:
     sk: Zatiaľ nie je hotové. Panel je pomenovaný, aby bolo jasné, čo tu bude.
 
 clip:
+  cancel:
+    en: Cancel
+    sk: Zrušiť
   model_unavailable:
     en: Not available on this machine. The clip keeps the name of what made it.
     sk: Na tomto počítači nie je k dispozícii. Nahrávka si ponecháva názov toho, čo ju vytvorilo.

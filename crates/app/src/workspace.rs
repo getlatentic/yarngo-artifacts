@@ -920,7 +920,7 @@ impl VoiceStudio {
             .border_b_1()
             .border_color(theme::hex(0xF1EBE1));
 
-        if self.busy() {
+        if self.showing_generation() {
             return strip.v_flex().justify_center().gap(px(9.0)).child(self.generating_row(cx)).child(
                 div()
                     .w_full()
@@ -1123,7 +1123,7 @@ impl VoiceStudio {
             .py(px(16.0))
             .gap(px(11.0));
 
-        if self.busy() {
+        if self.showing_generation() {
             return body
                 .child(
                     div()
@@ -1209,6 +1209,8 @@ impl VoiceStudio {
         let text = self.text.read(cx).value().to_string();
         let words = text.split_whitespace().count();
         let spoken = words as f32 / WORDS_PER_SECOND;
+        // Whether *this* clip is the one running, not whether anything is.
+        let running_here = self.showing_generation();
 
         div()
             .h_flex()
@@ -1227,10 +1229,10 @@ impl VoiceStudio {
             .when(self.renaming.is_some(), |d| {
                 d.child(t!("clip.rename_note").to_string())
             })
-            .when(self.renaming.is_none() && self.clip().is_some() && !self.busy(), |d| {
+            .when(self.renaming.is_none() && self.clip().is_some() && !running_here, |d| {
                 d.child(t!("clip.editing_makes_take").to_string())
             })
-            .when(self.renaming.is_none() && (self.clip().is_none() || self.busy()), |d| {
+            .when(self.renaming.is_none() && (self.clip().is_none() || running_here), |d| {
                 d.child(t!("workspace.chars", chars = text.chars().count()).to_string())
                     .when(words > 0, |d| {
                         d.child(
@@ -1245,17 +1247,21 @@ impl VoiceStudio {
     fn card_actions(&self, cx: &mut Context<Self>) -> Div {
         let row = div().h_flex().h(px(38.0)).flex_none().w_full().items_center().gap(px(14.0));
 
-        let row = if self.busy() {
+        let row = if self.showing_generation() {
+            // Stopping is the action that belongs to a running clip. Starting
+            // another was offered here as the primary control, which reads as
+            // the thing to press and is not — the run is already listed in the
+            // sidebar, and you can leave it by clicking any other row.
             row.child(
                 crate::ui::secondary_button(
-                    Some((crate::icon::name::ADD, 0x5F594F)),
-                    t!("clip.start_another").to_string(),
+                    Some((crate::icon::name::CLOSE, 0x5F594F)),
+                    t!("clip.cancel").to_string(),
                 )
                 .h(px(38.0))
                 .px(px(16.0))
                 .text_size(px(13.0))
-                .id("start-another")
-                .on_click(cx.listener(|this, _, window, cx| this.new_draft(window, cx))),
+                .id("cancel-generation")
+                .on_click(cx.listener(|this, _, _, cx| this.cancel_generation(cx))),
             )
             .child(
                 div()
