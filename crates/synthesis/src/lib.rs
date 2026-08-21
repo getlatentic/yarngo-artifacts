@@ -18,7 +18,9 @@
 //! happened, so a restart can carry on from there.
 
 pub mod audio;
+pub mod engine;
 pub mod layout;
+pub mod library;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

@@ -13,6 +13,7 @@ use crate::Result;
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_initial.sql"),
     include_str!("../migrations/0002_execution_outputs.sql"),
+    include_str!("../migrations/0003_voice_duration.sql"),
 ];
 
 pub fn apply(connection: &mut Connection) -> Result<()> {

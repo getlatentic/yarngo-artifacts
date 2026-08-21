@@ -39,6 +39,37 @@ use speech_engine::{
     SynthesisRequest, SystemInfo, Voice,
 };
 
+/// Which engine the application runs on, chosen at start.
+///
+/// The legacy sidecar keeps the clips and voices in JSON files of its own; the
+/// durable one keeps them in this application's database and uses the sidecar
+/// only to make audio. The second is where this is going and the first is what
+/// has been running, so the switch stays until the new path has been lived with
+/// and the old one can be deleted rather than kept as an option.
+///
+///     YARNGO_ENGINE_PROTOCOL=jsonrpc cargo run
+fn start_engine(paths: &EnginePaths) -> Result<EngineHandle, speech_engine::EngineError> {
+    let durable = std::env::var("YARNGO_ENGINE_PROTOCOL")
+        .map(|value| value.eq_ignore_ascii_case("jsonrpc"))
+        .unwrap_or(false);
+    if !durable {
+        return EngineHandle::spawn(&paths.python, &paths.script, &paths.work_dir);
+    }
+    let data_dir = speech_engine::paths::data_dir();
+    let spawn = yarngo_synthesis::engine::Spawn {
+        python: paths.python.clone(),
+        script: paths.script.clone(),
+        work_dir: paths.work_dir.clone(),
+        data_dir: data_dir.clone(),
+    };
+    let database = data_dir.join("yarngo.db");
+    EngineHandle::spawn_backend(move || {
+        Ok(Box::new(yarngo_synthesis::engine::DurableEngine::open(
+            &database, &data_dir, spawn,
+        )?))
+    })
+}
+
 rust_i18n::i18n!("locales", fallback = "en");
 
 actions!(voicestudio, [Speak, CommitRename, CancelRename]);
@@ -319,7 +350,7 @@ impl VoiceStudio {
         cx.spawn(async move |this, cx| {
             let started = cx
                 .background_spawn(async move {
-                    let handle = EngineHandle::spawn(&paths.python, &paths.script, &paths.work_dir)?;
+                    let handle = start_engine(&paths)?;
                     let models = handle.models()?;
                     // Voices outlive the process — the sidecar keeps them on
                     // disk precisely so a 40 second preparation is paid once.

@@ -278,6 +278,17 @@ impl Connection {
         self.malformed.load(Ordering::SeqCst)
     }
 
+    /// End the process, now.
+    ///
+    /// Not a request. Where this is used the question is whether the process
+    /// can still do something it has been told to stop doing, and one that has
+    /// been asked and has not answered is one that still can. Waits, so that a
+    /// caller told the engine is gone is not told it before it is.
+    pub fn kill(&mut self) -> std::io::Result<()> {
+        self.child.kill()?;
+        self.child.wait().map(|_| ())
+    }
+
     pub fn has_ended(&self) -> bool {
         self.ended.load(Ordering::SeqCst)
     }

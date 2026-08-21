@@ -1028,6 +1028,9 @@ def m_system_info(_params: dict) -> dict:
         "chip": chip or platform.machine(),
         "memory_bytes": memory_bytes,
         "free_bytes": usage.free,
+        # The whole disk as well as what is left, so one answer about this
+        # machine covers what the application needs to know about it.
+        "total_bytes": usage.total,
         "data_dir": str(VOICE_DIR.parent),
     }
 

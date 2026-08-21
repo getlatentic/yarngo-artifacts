@@ -290,6 +290,7 @@ impl Store {
                 &[
                     ("voice_id", text(voice_id)),
                     ("source_asset_id", text(&recording)),
+                    ("duration_seconds", real(voice.seconds)),
                     ("created_at", text(&voice.created)),
                 ],
                 &mut report,

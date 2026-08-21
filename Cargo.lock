@@ -7869,6 +7869,7 @@ dependencies = [
  "serde_json",
  "speech-engine",
  "symphonia",
+ "yarngo-synthesis",
 ]
 
 [[package]]
@@ -9150,6 +9151,7 @@ dependencies = [
 name = "yarngo-synthesis"
 version = "0.1.0-alpha.1"
 dependencies = [
+ "chrono",
  "rusqlite",
  "serde_json",
  "speech-engine",

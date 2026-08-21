@@ -276,3 +276,61 @@ fn a_voice_deleted_during_real_inference_refuses_the_take() {
         .expect("count");
     assert_eq!(takes, 0, "a take was committed for a voice being deleted");
 }
+
+/// The application's own engine, opened the way the application opens it.
+///
+/// Everything except inference: adopting the existing store, listing what the
+/// person has from the database, and asking the sidecar only about models and
+/// the machine. The database is temporary; the store it reads is the real one
+/// and is only read.
+#[test]
+fn the_durable_engine_answers_for_the_library_and_the_machine() {
+    if !wanted() {
+        return;
+    }
+    use speech_engine::SpeechEngine;
+    use yarngo_synthesis::engine::{DurableEngine, Spawn};
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let mut engine = DurableEngine::open(
+        &dir.path().join("app.db"),
+        &data_dir(),
+        Spawn {
+            python: python(),
+            script: repo().join("sidecar/engine.py"),
+            work_dir: repo(),
+            data_dir: data_dir(),
+        },
+    )
+    .expect("open");
+
+    // From the database, which had nothing in it until it adopted the store.
+    let clips = engine.clips().expect("clips");
+    let voices = engine.voices().expect("voices");
+    assert!(!clips.is_empty(), "no clips came across");
+    assert!(!voices.is_empty(), "no voices came across");
+    assert!(
+        clips.iter().all(|c| !c.takes.is_empty()),
+        "a clip with no audio is listed"
+    );
+    assert!(
+        clips.iter().flat_map(|c| &c.takes).all(|t| t.path.exists()),
+        "a take points at audio that is not there"
+    );
+    assert!(
+        voices.iter().all(|v| v.reference_audio.exists() && !v.label.is_empty()),
+        "a voice has no recording or no name"
+    );
+    assert!(
+        voices.iter().any(|v| v.seconds > 0.0),
+        "no voice knows how long its recording is"
+    );
+
+    // From the sidecar, which is asked only what it is for.
+    let models = engine.models(false).expect("models");
+    assert!(!models.is_empty());
+    let machine = engine.system_info().expect("system info");
+    assert!(machine.memory_bytes > 0 && !machine.chip.is_empty());
+    let disk = engine.disk_space().expect("disk");
+    assert!(disk.total_bytes > disk.free_bytes);
+}
