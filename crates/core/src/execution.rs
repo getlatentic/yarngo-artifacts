@@ -8,12 +8,14 @@
 //! again. Applying the second one is how a job that was cancelled becomes
 //! completed.
 //!
-//! A ghost. A job may be attempted more than once — after the engine died, or
-//! after a retry — and the abandoned attempt can still be talking. Its messages
-//! name a job that exists and a state that is plausible. What makes them wrong
-//! is only which attempt they came from, so that is what is checked first.
+//! A ghost. A job is attempted again after its engine dies, and the abandoned
+//! attempt can still be talking. Its messages name a job that exists and a
+//! state that is plausible. What makes them wrong is only which attempt they
+//! came from, so that is what is checked first — before the transition, because
+//! a stale message usually carries a move that would be legal if it were
+//! current.
 
-use crate::job::{DurableJobKind, JobStatus};
+use crate::job::{DurableJobKind, ExecutionStatus, JobStatus};
 
 /// What the engine has reported about an attempt.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -21,17 +23,22 @@ pub enum Observation {
     Completed,
     Failed,
     Cancelled,
-    /// The engine stopped while this was running. Not a failure of the work.
-    Interrupted,
 }
 
 impl Observation {
-    fn target(&self) -> JobStatus {
+    fn job_target(&self) -> JobStatus {
         match self {
             Self::Completed => JobStatus::Completed,
             Self::Failed => JobStatus::Failed,
             Self::Cancelled => JobStatus::Cancelled,
-            Self::Interrupted => JobStatus::Interrupted,
+        }
+    }
+
+    fn execution_target(&self) -> ExecutionStatus {
+        match self {
+            Self::Completed => ExecutionStatus::Completed,
+            Self::Failed => ExecutionStatus::Failed,
+            Self::Cancelled => ExecutionStatus::Cancelled,
         }
     }
 }
@@ -51,11 +58,58 @@ pub enum Applied {
     NotPermitted { from: JobStatus, to: JobStatus },
 }
 
-/// One durable job, and the attempt currently speaking for it.
+/// One engine's attempt at a job.
+#[derive(Clone, Debug)]
+pub struct Execution {
+    pub id: String,
+    pub job_id: String,
+    /// Which engine ran it. After a restart, an attempt still marked running by
+    /// a session that has ended was interrupted — no inference required.
+    pub session_id: String,
+    state: ExecutionStatus,
+}
+
+impl Execution {
+    pub fn started(
+        id: impl Into<String>,
+        job_id: impl Into<String>,
+        session_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            job_id: job_id.into(),
+            session_id: session_id.into(),
+            state: ExecutionStatus::Running,
+        }
+    }
+
+    pub fn state(&self) -> ExecutionStatus {
+        self.state
+    }
+
+    fn settle(&mut self, to: ExecutionStatus) -> bool {
+        if !self.state.can_move_to(to) {
+            return false;
+        }
+        self.state = to;
+        true
+    }
+
+    /// The engine running this stopped. Terminal for the attempt, and a claim
+    /// about nothing else.
+    pub fn interrupt(&mut self) -> bool {
+        self.settle(ExecutionStatus::Interrupted)
+    }
+}
+
+/// What the person asked for, and the attempt currently speaking for it.
 #[derive(Clone, Debug)]
 pub struct Job {
     pub id: String,
     pub kind: DurableJobKind,
+    /// Set when this job exists because an earlier one ended badly and the
+    /// person asked again. The original keeps its outcome.
+    pub retry_of: Option<String>,
     state: JobStatus,
     current_execution: Option<String>,
 }
@@ -65,6 +119,20 @@ impl Job {
         Self {
             id: id.into(),
             kind,
+            retry_of: None,
+            state: JobStatus::Queued,
+            current_execution: None,
+        }
+    }
+
+    /// A fresh job standing in for one that ended badly. The failure was an
+    /// outcome and keeps it; this is the person asking a second time, which is
+    /// a different thing from an engine trying again.
+    pub fn retrying(id: impl Into<String>, previous: &Job) -> Self {
+        Self {
+            id: id.into(),
+            kind: previous.kind,
+            retry_of: Some(previous.id.clone()),
             state: JobStatus::Queued,
             current_execution: None,
         }
@@ -118,8 +186,6 @@ impl Job {
 
     /// Take what the engine said, if it is still the engine we are listening to.
     pub fn observe(&mut self, execution_id: &str, observation: Observation) -> Applied {
-        // Attempt first. A stale message can carry a state that would otherwise
-        // be a legal move, and checking the move first would take it.
         if self.current_execution.as_deref() != Some(execution_id) {
             return Applied::Stale {
                 saw: execution_id.to_string(),
@@ -129,7 +195,7 @@ impl Job {
         if self.state.is_terminal() {
             return Applied::AlreadyFinished { state: self.state };
         }
-        let target = observation.target();
+        let target = observation.job_target();
         if !self.state.can_move_to(target) {
             return Applied::NotPermitted {
                 from: self.state,
@@ -140,61 +206,86 @@ impl Job {
         Applied::Moved { to: target }
     }
 
-    /// The engine is gone, so whatever it was running is not running.
-    pub fn engine_lost(&mut self) -> Applied {
+    /// The engine carrying this job is gone.
+    ///
+    /// The attempt is over; the job usually is not. It returns to waiting for
+    /// an engine that can take it — unless stopping had already been asked for,
+    /// in which case resuming would restart work the person cancelled, and the
+    /// engine going is how that cancellation finally took effect.
+    pub fn engine_lost(&mut self, execution: &mut Execution) -> Applied {
         if self.state.is_terminal() {
             return Applied::AlreadyFinished { state: self.state };
         }
+        execution.interrupt();
         self.current_execution = None;
-        if !self.state.can_move_to(JobStatus::Interrupted) {
-            // Never dispatched: it is still waiting, and a new engine can take
-            // it. Not interrupted, because nothing interrupted it.
+        let target = match self.state {
+            JobStatus::CancelRequested => JobStatus::Cancelled,
+            _ => JobStatus::Queued,
+        };
+        if self.state == target {
+            // Never dispatched. Nothing interrupted it, and it is already where
+            // a later engine will find it.
+            return Applied::Moved { to: target };
+        }
+        if !self.state.can_move_to(target) {
             return Applied::NotPermitted {
                 from: self.state,
-                to: JobStatus::Interrupted,
+                to: target,
             };
         }
-        self.state = JobStatus::Interrupted;
-        Applied::Moved {
-            to: JobStatus::Interrupted,
+        self.state = target;
+        Applied::Moved { to: target }
+    }
+
+    /// Apply the observation to both records at once, which is how they are
+    /// always written: an attempt and its job settle together or not at all.
+    pub fn settle(
+        &mut self,
+        execution: &mut Execution,
+        observation: Observation,
+    ) -> Applied {
+        let outcome = self.observe(&execution.id.clone(), observation.clone());
+        if matches!(outcome, Applied::Moved { .. }) {
+            execution.settle(observation.execution_target());
         }
+        outcome
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Applied, Job, Observation};
-    use crate::job::{DurableJobKind, JobStatus};
+    use super::{Applied, Execution, Job, Observation};
+    use crate::job::{DurableJobKind, ExecutionStatus, JobStatus};
 
-    fn running() -> Job {
+    fn dispatched() -> (Job, Execution) {
         let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
         assert_eq!(job.dispatch("exec-1"), Applied::Moved { to: JobStatus::Running });
-        job
+        (job, Execution::started("exec-1", "job-1", "session-1"))
     }
 
     /// Terminal events are sent once by a process that did not crash halfway
     /// through saying so. The second one must change nothing.
     #[test]
     fn a_repeated_completion_changes_nothing() {
-        let mut job = running();
+        let (mut job, mut exec) = dispatched();
         assert_eq!(
-            job.observe("exec-1", Observation::Completed),
+            job.settle(&mut exec, Observation::Completed),
             Applied::Moved { to: JobStatus::Completed }
         );
         assert_eq!(
-            job.observe("exec-1", Observation::Completed),
+            job.settle(&mut exec, Observation::Completed),
             Applied::AlreadyFinished { state: JobStatus::Completed }
         );
         assert_eq!(job.state(), JobStatus::Completed);
+        assert_eq!(exec.state(), ExecutionStatus::Completed);
     }
 
-    /// And a different outcome arriving second does not overwrite the first.
     #[test]
     fn a_second_outcome_does_not_replace_the_first() {
-        let mut job = running();
-        job.observe("exec-1", Observation::Completed);
+        let (mut job, mut exec) = dispatched();
+        job.settle(&mut exec, Observation::Completed);
         assert_eq!(
-            job.observe("exec-1", Observation::Failed),
+            job.settle(&mut exec, Observation::Failed),
             Applied::AlreadyFinished { state: JobStatus::Completed }
         );
         assert_eq!(job.state(), JobStatus::Completed);
@@ -203,14 +294,12 @@ mod tests {
     /// The one that matters most: a completion cannot undo a cancellation.
     #[test]
     fn a_completion_cannot_undo_a_cancellation() {
-        let mut job = running();
+        let (mut job, mut exec) = dispatched();
         job.request_cancel();
+        job.settle(&mut exec, Observation::Cancelled);
+        assert_eq!(job.state(), JobStatus::Cancelled);
         assert_eq!(
-            job.observe("exec-1", Observation::Cancelled),
-            Applied::Moved { to: JobStatus::Cancelled }
-        );
-        assert_eq!(
-            job.observe("exec-1", Observation::Completed),
+            job.settle(&mut exec, Observation::Completed),
             Applied::AlreadyFinished { state: JobStatus::Cancelled }
         );
         assert_eq!(job.state(), JobStatus::Cancelled);
@@ -219,31 +308,43 @@ mod tests {
     /// But work that finished before it reached a checkpoint really finished.
     #[test]
     fn a_cancellation_that_arrived_too_late_still_completes() {
-        let mut job = running();
+        let (mut job, mut exec) = dispatched();
         job.request_cancel();
         assert_eq!(job.state(), JobStatus::CancelRequested);
         assert_eq!(
-            job.observe("exec-1", Observation::Completed),
+            job.settle(&mut exec, Observation::Completed),
             Applied::Moved { to: JobStatus::Completed }
         );
     }
 
-    /// An abandoned attempt can still be talking. What it says is about work
-    /// the application stopped believing in.
-    ///
-    /// Interrupted is an outcome, not a pause: retrying is a new job against
-    /// the same target rather than a second attempt at this one. That keeps
-    /// "terminal means terminal" without exception, and a job that could return
-    /// from a terminal state is exactly the door a late message walks through.
-    #[test]
-    fn an_event_from_an_abandoned_attempt_is_ignored() {
-        let mut job = running();
-        job.engine_lost();
-        assert_eq!(job.state(), JobStatus::Interrupted);
-        assert_eq!(job.current_execution(), None, "a lost engine still owns the job");
+    // The recovery sequence, one step per assertion.
 
-        // The retry is its own job, and a new attempt owns that one.
-        let mut job = Job::queued("job-2", DurableJobKind::Synthesis);
+    /// Losing the engine ends the attempt and returns the job to waiting.
+    #[test]
+    fn an_interrupted_execution_returns_its_job_to_the_queue() {
+        let (mut job, mut exec) = dispatched();
+        assert_eq!(job.engine_lost(&mut exec), Applied::Moved { to: JobStatus::Queued });
+        assert_eq!(exec.state(), ExecutionStatus::Interrupted);
+        assert_eq!(job.state(), JobStatus::Queued);
+        assert_eq!(job.current_execution(), None);
+    }
+
+    /// And a later engine can take it, as the same job.
+    #[test]
+    fn a_queued_job_is_dispatched_to_a_second_attempt() {
+        let (mut job, mut first) = dispatched();
+        job.engine_lost(&mut first);
+        assert_eq!(job.dispatch("exec-2"), Applied::Moved { to: JobStatus::Running });
+        assert_eq!(job.current_execution(), Some("exec-2"));
+        assert_eq!(job.id, "job-1", "recovery changed which job this is");
+    }
+
+    /// The abandoned attempt can still be talking, and what it says is about
+    /// work the application stopped believing in.
+    #[test]
+    fn a_late_completion_from_the_first_attempt_is_ignored() {
+        let (mut job, mut first) = dispatched();
+        job.engine_lost(&mut first);
         job.dispatch("exec-2");
         assert_eq!(
             job.observe("exec-1", Observation::Completed),
@@ -253,16 +354,66 @@ mod tests {
             }
         );
         assert_eq!(job.state(), JobStatus::Running, "a ghost moved the job");
-        assert_eq!(job.current_execution(), Some("exec-2"));
     }
 
-    /// Checked before the transition, because a stale message often carries a
-    /// state that would be a legal move if it were current.
+    /// And the attempt that is current settles it.
+    #[test]
+    fn the_second_attempt_completes_the_job() {
+        let (mut job, mut first) = dispatched();
+        job.engine_lost(&mut first);
+        job.dispatch("exec-2");
+        let mut second = Execution::started("exec-2", "job-1", "session-2");
+        assert_eq!(
+            job.settle(&mut second, Observation::Completed),
+            Applied::Moved { to: JobStatus::Completed }
+        );
+        assert_eq!(job.state(), JobStatus::Completed);
+        assert_eq!(first.state(), ExecutionStatus::Interrupted);
+        assert_eq!(second.state(), ExecutionStatus::Completed);
+    }
+
+    /// A job whose cancellation was already asked for does not come back when
+    /// the engine goes. Resuming would restart work the person stopped, and
+    /// killing the engine is how that cancellation took effect.
+    #[test]
+    fn losing_the_engine_mid_cancellation_finishes_the_cancellation() {
+        let (mut job, mut exec) = dispatched();
+        job.request_cancel();
+        assert_eq!(
+            job.engine_lost(&mut exec),
+            Applied::Moved { to: JobStatus::Cancelled }
+        );
+        assert_eq!(exec.state(), ExecutionStatus::Interrupted);
+    }
+
+    /// An attempt that ended is not revived by recovery; recovery makes another.
+    #[test]
+    fn an_interrupted_attempt_stays_interrupted() {
+        let (mut job, mut exec) = dispatched();
+        job.engine_lost(&mut exec);
+        assert!(!exec.interrupt(), "a finished attempt moved again");
+        assert_eq!(exec.state(), ExecutionStatus::Interrupted);
+    }
+
+    /// Retrying something that genuinely failed is the person asking again,
+    /// which is a new job. The failure keeps its outcome.
+    #[test]
+    fn retrying_a_failure_is_a_new_job_that_remembers_the_old_one() {
+        let (mut job, mut exec) = dispatched();
+        job.settle(&mut exec, Observation::Failed);
+        assert_eq!(job.state(), JobStatus::Failed);
+
+        let retry = Job::retrying("job-2", &job);
+        assert_eq!(retry.retry_of.as_deref(), Some("job-1"));
+        assert_eq!(retry.state(), JobStatus::Queued);
+        assert_eq!(retry.kind, job.kind);
+        assert_eq!(job.state(), JobStatus::Failed, "the retry rewrote history");
+    }
+
     #[test]
     fn staleness_is_decided_before_the_transition_is() {
         let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
         job.dispatch("exec-2");
-        // Completed is a legal move from Running. It is refused for whose it is.
         assert!(matches!(
             job.observe("exec-1", Observation::Completed),
             Applied::Stale { .. }
@@ -270,17 +421,6 @@ mod tests {
         assert_eq!(job.state(), JobStatus::Running);
     }
 
-    /// A job is one attempt-chain. Handing a running one to a second attempt
-    /// would leave two engines believing they own it, and the first one's
-    /// eventual message indistinguishable from the second's.
-    #[test]
-    fn a_running_job_cannot_be_handed_to_another_attempt() {
-        let mut job = running();
-        assert!(matches!(job.dispatch("exec-2"), Applied::NotPermitted { .. }));
-        assert_eq!(job.current_execution(), Some("exec-1"));
-    }
-
-    /// Nothing the engine says about a job it was never given can move it.
     #[test]
     fn an_event_for_an_undispatched_job_is_stale() {
         let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
@@ -294,27 +434,16 @@ mod tests {
         assert_eq!(job.state(), JobStatus::Queued);
     }
 
-    /// A job still waiting when the engine dies has not been interrupted —
-    /// nothing was doing it. It stays where a new engine can pick it up.
-    #[test]
-    fn losing_the_engine_leaves_a_queued_job_queued() {
-        let mut job = Job::queued("job-1", DurableJobKind::VoiceDelete);
-        assert!(matches!(job.engine_lost(), Applied::NotPermitted { .. }));
-        assert_eq!(job.state(), JobStatus::Queued);
-    }
-
-    /// Cancelling something never dispatched needs nothing from the engine.
     #[test]
     fn cancelling_a_queued_job_finishes_it_outright() {
         let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
         assert_eq!(job.request_cancel(), Applied::Moved { to: JobStatus::Cancelled });
-        assert_eq!(job.state(), JobStatus::Cancelled);
     }
 
     #[test]
     fn a_finished_job_cannot_be_dispatched_again() {
-        let mut job = running();
-        job.observe("exec-1", Observation::Completed);
+        let (mut job, mut exec) = dispatched();
+        job.settle(&mut exec, Observation::Completed);
         assert_eq!(
             job.dispatch("exec-2"),
             Applied::AlreadyFinished { state: JobStatus::Completed }

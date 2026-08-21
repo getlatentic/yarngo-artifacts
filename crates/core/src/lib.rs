@@ -17,8 +17,8 @@ pub mod execution;
 pub mod job;
 pub mod voice;
 
-pub use execution::{Applied, Job, Observation};
-pub use job::{DurableJobKind, JobStatus};
+pub use execution::{Applied, Execution, Job, Observation};
+pub use job::{DurableJobKind, ExecutionStatus, JobStatus};
 pub use voice::VoiceStatus;
 
 /// Work the engine performs whose result cannot outlive the engine.

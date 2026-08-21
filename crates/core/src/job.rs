@@ -1,4 +1,13 @@
 //! Work Rust must be able to account for after an interruption.
+//!
+//! Two lifecycles, because they answer different questions. A job is what the
+//! person asked for and it lasts until that is settled. An execution is one
+//! engine's attempt at it, and it lasts until that engine stops attempting.
+//!
+//! Losing the engine ends an execution and does not end a job: nobody is doing
+//! the work, but nobody decided it should not be done. The job goes back to
+//! waiting and a later attempt picks it up, which is why an interruption is
+//! terminal for an execution and absent from a job's states entirely.
 
 use serde::{Deserialize, Serialize};
 
@@ -15,6 +24,7 @@ pub enum DurableJobKind {
     VoiceDelete,
 }
 
+/// What became of what the person asked for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum JobStatus {
@@ -26,18 +36,12 @@ pub enum JobStatus {
     Completed,
     Failed,
     Cancelled,
-    /// The engine stopped while this was in flight. Distinct from `Failed`:
-    /// nothing about the work itself went wrong, and a retry is reasonable.
-    Interrupted,
 }
 
 impl JobStatus {
     /// Whether this is the last thing that will ever be said about the job.
     pub fn is_terminal(self) -> bool {
-        matches!(
-            self,
-            Self::Completed | Self::Failed | Self::Cancelled | Self::Interrupted
-        )
+        matches!(self, Self::Completed | Self::Failed | Self::Cancelled)
     }
 
     /// Every move the job registry will make. Anything absent is refused, so
@@ -54,39 +58,71 @@ impl JobStatus {
                 | (Running, CancelRequested)
                 | (Running, Completed)
                 | (Running, Failed)
-                | (Running, Interrupted)
+                // The engine went while this was running. Nobody is doing the
+                // work and nobody decided it should not be done, so it waits
+                // for an engine that can.
+                | (Running, Queued)
                 // The request lost the race. Finishing is the honest outcome,
                 // and the caller learns the cancel arrived too late.
                 | (CancelRequested, Completed)
                 | (CancelRequested, Cancelled)
                 | (CancelRequested, Failed)
-                | (CancelRequested, Interrupted)
+        )
+    }
+}
+
+/// One engine's attempt at a job.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ExecutionStatus {
+    Queued,
+    Running,
+    Completed,
+    Failed,
+    Cancelled,
+    /// The engine stopped while this was running. Terminal for the attempt and
+    /// says nothing about the job: no engine is doing it, which is a different
+    /// claim from the work being over.
+    Interrupted,
+}
+
+impl ExecutionStatus {
+    pub fn is_terminal(self) -> bool {
+        matches!(
+            self,
+            Self::Completed | Self::Failed | Self::Cancelled | Self::Interrupted
+        )
+    }
+
+    pub fn can_move_to(self, next: Self) -> bool {
+        use ExecutionStatus::*;
+        matches!(
+            (self, next),
+            (Queued, Running)
+                | (Queued, Cancelled)
+                | (Queued, Interrupted)
+                | (Running, Completed)
+                | (Running, Failed)
+                | (Running, Cancelled)
+                | (Running, Interrupted)
         )
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::ExecutionStatus as Exec;
     use super::JobStatus::{self, *};
 
     /// Every state, so the table below can be exhaustive. The match is what
     /// keeps it honest: a new variant stops this compiling until it is listed.
-    const ALL: [JobStatus; 7] = [
-        Queued,
-        Running,
-        CancelRequested,
-        Completed,
-        Failed,
-        Cancelled,
-        Interrupted,
-    ];
+    const ALL: [JobStatus; 6] = [Queued, Running, CancelRequested, Completed, Failed, Cancelled];
 
     #[test]
     fn every_state_appears_in_the_table() {
         for state in ALL {
             match state {
-                Queued | Running | CancelRequested | Completed | Failed | Cancelled
-                | Interrupted => {}
+                Queued | Running | CancelRequested | Completed | Failed | Cancelled => {}
             }
         }
     }
@@ -100,11 +136,10 @@ mod tests {
         (Running, CancelRequested),
         (Running, Completed),
         (Running, Failed),
-        (Running, Interrupted),
+        (Running, Queued),
         (CancelRequested, Completed),
         (CancelRequested, Cancelled),
         (CancelRequested, Failed),
-        (CancelRequested, Interrupted),
     ];
 
     #[test]
@@ -156,6 +191,24 @@ mod tests {
         assert!(!Queued.can_move_to(CancelRequested));
     }
 
+    /// Losing the engine returns the work to the queue rather than ending it.
+    /// An interruption is not an outcome, which is why a job has no such state.
+    #[test]
+    fn an_interrupted_job_goes_back_to_waiting() {
+        assert!(Running.can_move_to(Queued));
+        assert!(!Completed.can_move_to(Queued));
+        assert!(!Cancelled.can_move_to(Queued));
+    }
+
+    /// A job whose cancellation was already asked for does not return to the
+    /// queue when the engine goes: restarting it would resume work the person
+    /// asked to stop.
+    #[test]
+    fn a_job_being_cancelled_does_not_come_back() {
+        assert!(!CancelRequested.can_move_to(Queued));
+        assert!(CancelRequested.can_move_to(Cancelled));
+    }
+
     #[test]
     fn every_terminal_state_is_reachable() {
         for terminal in ALL.into_iter().filter(|s| s.is_terminal()) {
@@ -163,6 +216,58 @@ mod tests {
                 ALL.into_iter().any(|from| from.can_move_to(terminal)),
                 "{terminal:?} cannot be reached"
             );
+        }
+    }
+
+    const ALL_EXEC: [Exec; 6] = [
+        Exec::Queued,
+        Exec::Running,
+        Exec::Completed,
+        Exec::Failed,
+        Exec::Cancelled,
+        Exec::Interrupted,
+    ];
+
+    #[test]
+    fn every_execution_state_appears_in_the_table() {
+        for state in ALL_EXEC {
+            match state {
+                Exec::Queued
+                | Exec::Running
+                | Exec::Completed
+                | Exec::Failed
+                | Exec::Cancelled
+                | Exec::Interrupted => {}
+            }
+        }
+    }
+
+    #[test]
+    fn only_the_listed_execution_moves_are_allowed() {
+        let allowed = [
+            (Exec::Queued, Exec::Running),
+            (Exec::Queued, Exec::Cancelled),
+            (Exec::Queued, Exec::Interrupted),
+            (Exec::Running, Exec::Completed),
+            (Exec::Running, Exec::Failed),
+            (Exec::Running, Exec::Cancelled),
+            (Exec::Running, Exec::Interrupted),
+        ];
+        for from in ALL_EXEC {
+            for to in ALL_EXEC {
+                assert_eq!(from.can_move_to(to), allowed.contains(&(from, to)), "{from:?} -> {to:?}");
+            }
+        }
+    }
+
+    /// An attempt that ended stays ended. Recovery makes another attempt; it
+    /// does not revive this one.
+    #[test]
+    fn an_execution_never_leaves_a_terminal_state() {
+        for from in ALL_EXEC.into_iter().filter(|s| s.is_terminal()) {
+            for to in ALL_EXEC {
+                assert!(!from.can_move_to(to), "{from:?} moved to {to:?}");
+            }
         }
     }
 }
