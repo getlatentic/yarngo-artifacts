@@ -6,7 +6,7 @@
 //! that has ended was interrupted, and nothing about clocks or timeouts enters
 //! into it.
 
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Transaction};
 use yarngo_core::{DurableJobKind, Execution, ExecutionStatus, Job, JobStatus};
 
 use crate::{Result, Store, StoreError};
@@ -77,6 +77,60 @@ fn execution_state_text(state: ExecutionStatus) -> &'static str {
     }
 }
 
+fn execution_state(text: &str) -> Result<ExecutionStatus> {
+    Ok(match text {
+        "queued" => ExecutionStatus::Queued,
+        "running" => ExecutionStatus::Running,
+        "completed" => ExecutionStatus::Completed,
+        "failed" => ExecutionStatus::Failed,
+        "cancelled" => ExecutionStatus::Cancelled,
+        "interrupted" => ExecutionStatus::Interrupted,
+        other => return Err(StoreError::Invalid(format!("unknown execution state {other:?}"))),
+    })
+}
+
+/// Write what an attempt now says. Shared, so that anything settling a job as
+/// part of a larger change writes the same row the same way.
+pub(crate) fn write_execution(
+    transaction: &Transaction<'_>,
+    execution: &Execution,
+    at: &str,
+) -> Result<()> {
+    transaction.execute(
+        "INSERT INTO job_executions (id, job_id, session_id, state, started_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(id) DO UPDATE SET
+             state = excluded.state,
+             finished_at = CASE
+                 WHEN excluded.state IN ('completed','failed','cancelled','interrupted')
+                 THEN ?5 ELSE job_executions.finished_at END",
+        params![
+            execution.id,
+            execution.job_id,
+            execution.session_id,
+            execution_state_text(execution.state()),
+            at
+        ],
+    )?;
+    Ok(())
+}
+
+pub(crate) fn write_job(transaction: &Transaction<'_>, job: &Job, at: &str) -> Result<()> {
+    transaction.execute(
+        "UPDATE jobs SET state = ?2, current_execution_id = ?3, updated_at = ?4,
+                         completed_at = CASE WHEN ?2 IN ('completed','failed','cancelled')
+                                             THEN ?4 ELSE completed_at END
+         WHERE id = ?1",
+        params![
+            job.id,
+            job_state_text(job.state()),
+            job.current_execution(),
+            at
+        ],
+    )?;
+    Ok(())
+}
+
 impl Store {
     pub fn open_session(&self, id: &str, backend: &str, at: &str) -> Result<()> {
         self.raw().execute(
@@ -122,35 +176,9 @@ impl Store {
     ) -> Result<()> {
         let transaction = self.raw_mut().transaction()?;
         if let Some(execution) = execution {
-            transaction.execute(
-                "INSERT INTO job_executions (id, job_id, session_id, state, started_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)
-                 ON CONFLICT(id) DO UPDATE SET
-                     state = excluded.state,
-                     finished_at = CASE
-                         WHEN excluded.state IN ('completed','failed','cancelled','interrupted')
-                         THEN ?5 ELSE job_executions.finished_at END",
-                params![
-                    execution.id,
-                    execution.job_id,
-                    execution.session_id,
-                    execution_state_text(execution.state()),
-                    at
-                ],
-            )?;
+            write_execution(&transaction, execution, at)?;
         }
-        transaction.execute(
-            "UPDATE jobs SET state = ?2, current_execution_id = ?3, updated_at = ?4,
-                             completed_at = CASE WHEN ?2 IN ('completed','failed','cancelled')
-                                                 THEN ?4 ELSE completed_at END
-             WHERE id = ?1",
-            params![
-                job.id,
-                job_state_text(job.state()),
-                job.current_execution(),
-                at
-            ],
-        )?;
+        write_job(&transaction, job, at)?;
         transaction.commit()?;
         Ok(())
     }
@@ -180,6 +208,39 @@ impl Store {
             job_state(&state_text)?,
             current,
             retry_of,
+        )))
+    }
+
+    /// Which job an attempt was for.
+    pub fn execution_job(&self, id: &str) -> Result<Option<String>> {
+        Ok(self
+            .raw()
+            .query_row(
+                "SELECT job_id FROM job_executions WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
+    /// An attempt read back as it was left.
+    pub fn restore_execution(&self, id: &str) -> Result<Option<Execution>> {
+        let row: Option<(String, String, String)> = self
+            .raw()
+            .query_row(
+                "SELECT job_id, session_id, state FROM job_executions WHERE id = ?1",
+                params![id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .optional()?;
+        let Some((job_id, session_id, state)) = row else {
+            return Ok(None);
+        };
+        Ok(Some(Execution::restored(
+            id,
+            job_id,
+            session_id,
+            execution_state(&state)?,
         )))
     }
 

@@ -14,6 +14,7 @@ pub mod deletion;
 pub mod import;
 pub mod jobs;
 pub mod migrations;
+pub mod takes;
 pub mod voices;
 
 pub use connection::Store;

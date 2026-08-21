@@ -117,6 +117,43 @@ impl Execution {
         }
     }
 
+    /// An attempt that exists but has not been given to an engine.
+    ///
+    /// Written down before anything external is asked, so that whatever the
+    /// engine does afterwards is something a record already accounts for.
+    pub fn queued(
+        id: impl Into<String>,
+        job_id: impl Into<String>,
+        session_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            job_id: job_id.into(),
+            session_id: session_id.into(),
+            state: ExecutionStatus::Queued,
+        }
+    }
+
+    /// Handed to the engine.
+    pub fn dispatched(&mut self) -> bool {
+        self.settle(ExecutionStatus::Running)
+    }
+
+    /// An attempt read back from the database, at whatever it had reached.
+    pub fn restored(
+        id: impl Into<String>,
+        job_id: impl Into<String>,
+        session_id: impl Into<String>,
+        state: ExecutionStatus,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            job_id: job_id.into(),
+            session_id: session_id.into(),
+            state,
+        }
+    }
+
     pub fn state(&self) -> ExecutionStatus {
         self.state
     }

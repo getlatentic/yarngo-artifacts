@@ -9140,9 +9140,23 @@ name = "yarngo-store"
 version = "0.1.0-alpha.1"
 dependencies = [
  "rusqlite",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.20",
  "yarngo-core",
+]
+
+[[package]]
+name = "yarngo-synthesis"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "rusqlite",
+ "serde_json",
+ "speech-engine",
+ "tempfile",
+ "thiserror 2.0.20",
+ "yarngo-core",
+ "yarngo-store",
 ]
 
 [[package]]

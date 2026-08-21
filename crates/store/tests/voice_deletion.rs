@@ -10,6 +10,8 @@ use std::path::PathBuf;
 
 use yarngo_store::deletion::{Conditioning, Invalidation, Outcome};
 use yarngo_store::import::{Legacy, LegacyClip, LegacyConsent, LegacyTake, LegacyVoice};
+use yarngo_core::{DurableJobKind, Execution, Job};
+use yarngo_store::takes::Produced;
 use yarngo_store::{Store, VoiceProvenance};
 
 /// An engine that answers however a test needs, and counts what was asked.
@@ -387,34 +389,25 @@ fn work_that_finishes_after_the_barrier_is_not_committed() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, _, _) = seeded(&dir);
 
-    // Before the barrier, a take lands normally.
+    // Before the barrier, publication is permitted and a take lands.
+    assert!(store.publication_permitted("clip-alice").expect("permitted"));
     let early = dir.path().join("early.wav");
     std::fs::write(&early, b"RIFF").expect("write");
-    assert!(store
-        .commit_take(
-            "clip-alice",
-            "take-early",
-            "generated_clip:take-early",
-            &early.to_string_lossy(),
-            "t0"
-        )
-        .expect("commit"));
+    assert!(
+        publish(&mut store, "clip-alice", "exec-early", &early, "t0"),
+        "an ordinary take was refused"
+    );
 
     store.begin_voice_deletion("alice", "job-1", "t1").expect("begin");
 
     // The engine finishes anyway, and writes its output.
+    assert!(!store.publication_permitted("clip-alice").expect("permitted"));
     let late = dir.path().join("late.wav");
     std::fs::write(&late, b"RIFF").expect("write");
-    let committed = store
-        .commit_take(
-            "clip-alice",
-            "take-late",
-            "generated_clip:take-late",
-            &late.to_string_lossy(),
-            "t2"
-        )
-        .expect("commit");
-    assert!(!committed, "a take was committed for a voice being deleted");
+    assert!(
+        !publish(&mut store, "clip-alice", "exec-late", &late, "t2"),
+        "a take was committed for a voice being deleted"
+    );
 
     let takes: i64 = store
         .raw()
@@ -426,15 +419,41 @@ fn work_that_finishes_after_the_barrier_is_not_committed() {
         .expect("count");
     assert_eq!(takes, 2, "the late take was recorded");
     // A clip made with the model's own voice is unaffected by any of this.
-    assert!(store
-        .commit_take(
-            "clip-builtin",
-            "take-builtin-2",
-            "generated_clip:take-builtin-2",
-            &late.to_string_lossy(),
-            "t3"
-        )
-        .expect("commit"));
+    assert!(store.publication_permitted("clip-builtin").expect("permitted"));
+    assert!(publish(&mut store, "clip-builtin", "exec-builtin", &late, "t3"));
+}
+
+/// The whole publication, run for one attempt, so the barrier is exercised
+/// where the row would actually be written rather than only where it is asked
+/// about.
+fn publish(
+    store: &mut Store,
+    clip_id: &str,
+    execution_id: &str,
+    path: &std::path::Path,
+    at: &str,
+) -> bool {
+    let job_id = format!("job-{execution_id}");
+    let mut job = Job::queued(&job_id, DurableJobKind::Synthesis);
+    store.open_session(execution_id, "fake", at).expect("session");
+    store.insert_job(&job, Some(clip_id), at).expect("insert");
+    job.dispatch(execution_id);
+    let mut execution = Execution::started(execution_id, &job_id, execution_id);
+    store.save_progress(&job, Some(&execution), at).expect("dispatch");
+    store
+        .intend_output(execution_id, clip_id, &path.to_string_lossy())
+        .expect("intend");
+    job.execution_completed(&mut execution);
+    store
+        .record_output(&job, &execution, &Produced::default(), at)
+        .expect("record");
+
+    let output = store.output_of(execution_id).expect("output").expect("output");
+    let published = job.take_published(&execution);
+    assert!(matches!(published, yarngo_core::Applied::Moved { .. }), "{published:?}");
+    store
+        .publish_take(&output, &path.to_string_lossy(), &job, &execution, at)
+        .expect("publish")
 }
 
 /// Crashing part-way leaves the deletion findable and finishable. From the

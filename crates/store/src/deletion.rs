@@ -258,49 +258,4 @@ impl Store {
         let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
-
-    /// Record a finished take against a clip, unless the voice it was made with
-    /// has been taken away since it started.
-    ///
-    /// The generation may well have completed: cancellation is cooperative and
-    /// the engine can reach the end before it notices. What it cannot do is
-    /// become a clip the person can play in a voice they deleted.
-    pub fn commit_take(
-        &mut self,
-        clip_id: &str,
-        take_id: &str,
-        asset_id: &str,
-        path: &str,
-        at: &str,
-    ) -> Result<bool> {
-        let voice: Option<String> = self
-            .raw()
-            .query_row(
-                "SELECT r.voice_id FROM clips c
-                   JOIN voice_revisions r ON r.id = c.voice_revision_id
-                  WHERE c.id = ?1",
-                params![clip_id],
-                |row| row.get(0),
-            )
-            .optional()?;
-        if let Some(voice) = voice {
-            if !self.voice_usable(&voice)? {
-                return Ok(false);
-            }
-        }
-
-        let transaction = self.raw_mut().transaction()?;
-        transaction.execute(
-            "INSERT INTO assets (id, kind, path, state, created_at)
-             VALUES (?1, 'generated_clip', ?2, 'active', ?3)",
-            params![asset_id, path, at],
-        )?;
-        transaction.execute(
-            "INSERT INTO clip_takes (id, clip_id, audio_asset_id, created_at)
-             VALUES (?1, ?2, ?3, ?4)",
-            params![take_id, clip_id, asset_id, at],
-        )?;
-        transaction.commit()?;
-        Ok(true)
-    }
 }
