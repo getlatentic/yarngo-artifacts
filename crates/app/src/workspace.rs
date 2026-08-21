@@ -1183,22 +1183,51 @@ impl VoiceStudio {
                         ),
                 )
                 .child(
-                    // Bounded and scrollable. Unbounded, a long clip's words
-                    // ran past the card and painted over the line beneath it —
-                    // the composer had the same fault and this branch was
-                    // missed, because only the editable one was fixed.
+                    // Bounded and scrollable. Unbounded, a long clip's words ran
+                    // past the card and painted over the line beneath it — the
+                    // composer had the same fault and this branch was missed,
+                    // because only the editable one was fixed.
+                    //
+                    // A scroll viewport cuts wherever it happens to land, and a
+                    // line of text sliced through the middle reads as broken
+                    // rather than as "there is more". So the last few pixels
+                    // fade into the card instead: the cut stops being an edge
+                    // and becomes the usual signal that the text continues.
                     div()
+                        .relative()
                         .flex_1()
                         .min_h(px(0.0))
-                        .id("clip-text")
-                        .overflow_y_scroll()
-                        // Room at the end, so scrolling to the bottom finishes
-                        // on whitespace rather than through the last line.
-                        .pb(px(12.0))
-                        .text_size(px(15.0))
-                        .line_height(px(25.5))
-                        .text_color(theme::hex(0x171717))
-                        .child(clip.text.clone()),
+                        .child(
+                            div()
+                                .id("clip-text")
+                                .size_full()
+                                .overflow_y_scroll()
+                                // Room at the end, so scrolling to the bottom
+                                // finishes on whitespace, under the fade.
+                                .pb(px(20.0))
+                                .text_size(px(15.0))
+                                .line_height(px(25.5))
+                                .text_color(theme::hex(0x171717))
+                                .child(clip.text.clone()),
+                        )
+                        .child(
+                            // No id and no occlude, so it never takes the
+                            // scroll it is drawn over.
+                            div()
+                                .absolute()
+                                .bottom_0()
+                                .left_0()
+                                .right_0()
+                                .h(px(28.0))
+                                .bg(gpui::linear_gradient(
+                                    180.0,
+                                    gpui::linear_color_stop(
+                                        theme::surface(false).opacity(0.0),
+                                        0.0,
+                                    ),
+                                    gpui::linear_color_stop(theme::surface(false), 1.0),
+                                )),
+                        ),
                 ),
             None => body.child(
                 div()
