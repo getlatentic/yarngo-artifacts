@@ -168,7 +168,16 @@ fn a_generation_that_finishes_anyway_is_not_published() {
     assert_eq!(ask(&sandbox, "SELECT status FROM voice_profiles WHERE id = 'alice'"), "deletion_pending");
 
     let outcome = answer(&generating);
-    assert!(outcome.is_err(), "a take was published for a deleted voice: {outcome:?}");
+    // Refused, not failed. The generation did what it was told; what changed is
+    // that the person no longer wants the voice it was speaking in, and telling
+    // them their own deletion broke something would be a lie.
+    match outcome {
+        Err(EngineError::Refused(reason)) => assert!(
+            reason.contains("deleted"),
+            "the refusal does not say why: {reason:?}"
+        ),
+        other => panic!("a deleted voice's generation ended as {other:?}"),
+    }
 
     assert!(
         until(PATIENCE, || ask(&sandbox, "SELECT status FROM voice_profiles WHERE id = 'alice'") == "deleted"),

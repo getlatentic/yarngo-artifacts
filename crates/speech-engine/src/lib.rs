@@ -245,6 +245,15 @@ pub enum EngineError {
     Rejected(String),
     #[error("engine is not running")]
     NotRunning,
+    /// The work ran and the application would not keep what it produced.
+    ///
+    /// Not a fault of the engine, the transport, or the request. A generation
+    /// refused because the voice was deleted while it ran did exactly what it
+    /// was told to, and calling it a failure would tell the person their own
+    /// deletion broke something. The message is the reason, unadorned, because
+    /// it is a sentence for them and not a diagnostic.
+    #[error("{0}")]
+    Refused(String),
 }
 
 pub type Result<T> = std::result::Result<T, EngineError>;

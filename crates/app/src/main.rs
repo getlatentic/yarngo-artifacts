@@ -127,6 +127,9 @@ pub enum Status {
     Generating,
     Done { output: PathBuf, audio_s: f32, gen_s: f32 },
     Failed(String),
+    /// Nothing went wrong and it did not happen — the words are still there and
+    /// the person is not being told their own decision was a fault.
+    Refused(String),
 }
 
 /// A finished reference recording, held between stopping and saving: where it
@@ -815,7 +818,10 @@ impl VoiceStudio {
                             draft.generating = false;
                         }
                         this.generating_row = None;
-                        Status::Failed(format!("{err}"))
+                        match err {
+                            speech_engine::EngineError::Refused(reason) => Status::Refused(reason),
+                            other => Status::Failed(format!("{other}")),
+                        }
                     }
                 };
                 cx.notify();
@@ -1730,6 +1736,7 @@ impl VoiceStudio {
                 cx.theme().foreground,
             ),
             Status::Failed(err) => (t!("status.failed", reason = err).to_string(), cx.theme().danger),
+            Status::Refused(reason) => (reason.clone(), cx.theme().muted_foreground),
         };
         div().text_size(px(12.0)).text_color(colour).child(text).into_any_element()
     }

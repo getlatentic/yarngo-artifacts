@@ -433,3 +433,179 @@ fn the_engine_answers_through_the_handle_while_it_is_generating() {
     let outcome = generating.join().expect("the synthesis thread");
     assert!(outcome.is_err(), "a cancelled generation produced a take: {outcome:?}");
 }
+
+/// B. The person deletes the voice while a real model is speaking in it.
+///
+/// Its own copy of the store, not the one the other tests share: this one
+/// removes a recording, and a test that took somebody else's fixtures with it
+/// would be the same mistake as taking the real store's.
+#[test]
+fn deleting_a_voice_during_real_inference_stops_it_and_removes_the_recording() {
+    if !wanted() {
+        eprintln!("set YARNGO_TEST_ENGINE=1 to run against the real engine");
+        return;
+    }
+    use speech_engine::{EngineHandle, SpeechEngine, SynthesisRequest};
+    use std::sync::Arc;
+    use yarngo_synthesis::engine::{DurableEngine, Spawn};
+
+    let Some(sandbox) = Sandbox::copying(&speech_engine::paths::installed_data_dir()) else {
+        eprintln!("this machine has not run the application");
+        return;
+    };
+    let Some(legacy) = Legacy::read(sandbox.root()) else { return };
+    let Some((clip_id, reference)) = a_custom_clip(&legacy) else { return };
+    let voice_id = legacy
+        .clips
+        .iter()
+        .find(|c| c.id == clip_id)
+        .and_then(|c| c.voice_id.clone())
+        .expect("the clip's voice");
+    let recording = PathBuf::from(&reference.audio);
+    assert!(recording.exists(), "the copied recording is not there");
+
+    let database = sandbox.database();
+    let data = sandbox.root().to_path_buf();
+    {
+        let mut store = Store::open(&database).expect("open");
+        store.import_legacy(&legacy).expect("import");
+    }
+    let takes_before = takes_in(&database);
+    assert!(takes_before > 0, "no existing takes, so nothing to prove survives");
+
+    let spawn = Spawn {
+        python: python(),
+        script: repo().join("sidecar/engine.py"),
+        work_dir: repo(),
+        data_dir: data.clone(),
+    };
+    let opened = database.clone();
+    let handle = Arc::new(
+        EngineHandle::spawn_backend(move || {
+            Ok(Box::new(DurableEngine::open(&opened, &data, spawn)?))
+        })
+        .expect("engine"),
+    );
+
+    let (answered, answer) = std::sync::mpsc::channel();
+    {
+        let handle = handle.clone();
+        let clip_id = clip_id.clone();
+        std::thread::spawn(move || {
+            let _ = answered.send(handle.synthesize(SynthesisRequest {
+                text: two_chunks(),
+                output: PathBuf::new(),
+                model: None,
+                clip_id: Some(clip_id),
+                voice_id: None,
+                seed: Some(4242),
+                name: None,
+            }));
+        });
+    }
+
+    // The engine reporting it has finished part of the work, so the deletion
+    // lands during inference on a warm machine and a cold one alike.
+    let deadline = Instant::now() + PATIENCE;
+    let mut running = false;
+    while Instant::now() < deadline && !running {
+        running = handle.progress().is_some_and(|p| p.chunks_done >= 1);
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    assert!(running, "the engine never reported finishing a chunk");
+
+    let at = Instant::now();
+    handle.delete_voice(&voice_id).expect("delete");
+    let refused = at.elapsed();
+    assert!(
+        refused < Duration::from_secs(10),
+        "the deletion waited {refused:?} for the generation it was cancelling"
+    );
+    assert_eq!(
+        voice_status(&database, &voice_id),
+        "deletion_pending",
+        "the voice was not refused the moment the deletion returned"
+    );
+
+    // The cancellation reached the engine: the generation ended rather than
+    // running to completion.
+    let outcome = answer
+        .recv_timeout(PATIENCE)
+        .expect("the generation never ended");
+    assert!(outcome.is_err(), "a take was published for a deleted voice: {outcome:?}");
+
+    let deadline = Instant::now() + PATIENCE;
+    while Instant::now() < deadline && voice_status(&database, &voice_id) != "deleted" {
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    assert_eq!(voice_status(&database, &voice_id), "deleted", "the deletion never finished");
+
+    // Which way it stopped depends on where in a chunk the model was when the
+    // deletion landed, and both are correct: it stopped when asked, or it was
+    // ended for not stopping. Said out loud rather than assumed, because a test
+    // that claimed cooperative cancellation while forcing every time would be
+    // reporting something it never exercised.
+    let attempt = ended_attempt(&database);
+    assert!(
+        attempt == "cancelled" || attempt == "interrupted",
+        "the attempt ended as {attempt:?}, which is neither stopping nor being stopped"
+    );
+    eprintln!("the generation {}", match attempt.as_str() {
+        "cancelled" => "stopped when it was asked to",
+        _ => "did not stop and the engine was ended",
+    });
+    assert!(!recording.exists(), "the recording is still on the disk");
+    assert_eq!(
+        takes_in(&database),
+        takes_before,
+        "deleting a voice took the clips already made with it"
+    );
+    assert!(
+        std::fs::read_dir(sandbox.root().join("staging"))
+            .map(|entries| entries.flatten().count() == 0)
+            .unwrap_or(true),
+        "audio made from the deleted voice was left staged"
+    );
+
+    // The installed store is untouched, which is the point of the copy.
+    assert!(
+        speech_engine::paths::installed_data_dir()
+            .join("voices/voices.json")
+            .exists(),
+        "the real store was disturbed"
+    );
+}
+
+fn voice_status(database: &Path, voice_id: &str) -> String {
+    let store = Store::open(database).expect("read");
+    store
+        .raw()
+        .query_row(
+            "SELECT status FROM voice_profiles WHERE id = ?1",
+            [voice_id],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "<none>".into())
+}
+
+fn takes_in(database: &Path) -> i64 {
+    let store = Store::open(database).expect("read");
+    store
+        .raw()
+        .query_row("SELECT count(*) FROM clip_takes", [], |row| row.get(0))
+        .expect("count")
+}
+
+fn ended_attempt(database: &Path) -> String {
+    let store = Store::open(database).expect("read");
+    store
+        .raw()
+        .query_row(
+            "SELECT e.state FROM job_executions e
+               JOIN jobs j ON j.id = e.job_id
+              WHERE j.kind = 'synthesis' ORDER BY e.started_at DESC LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_else(|_| "<none>".into())
+}

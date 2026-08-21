@@ -721,13 +721,15 @@ impl SpeechEngine for DurableEngine {
         self.advance_deletions();
 
         let Outcome::Published { take_id, path } = outcome else {
-            return Err(EngineError::Transport(match outcome {
-                Outcome::Rejected { detail, .. } => detail,
-                Outcome::Failed { detail } => detail,
-                Outcome::Cancelled => "the generation was stopped".into(),
-                Outcome::Interrupted => "the engine stopped while generating".into(),
+            return Err(match outcome {
+                // Nothing went wrong: it was stopped, or what it made was not
+                // wanted. Both are answers, not faults.
+                Outcome::Rejected { detail, .. } => EngineError::Refused(detail),
+                Outcome::Cancelled => EngineError::Refused("the generation was stopped".into()),
+                Outcome::Failed { detail } => EngineError::Transport(detail),
+                Outcome::Interrupted => EngineError::NotRunning,
                 Outcome::Published { .. } => unreachable!(),
-            }));
+            });
         };
 
         // Read back rather than assembled from the reply: what the interface
