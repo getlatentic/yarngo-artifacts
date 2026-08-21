@@ -15,8 +15,10 @@ use yarngo_store::{Store, VoiceProvenance};
 /// An engine that answers however a test needs, and counts what was asked.
 struct FakeEngine {
     answers: Vec<std::result::Result<Invalidation, String>>,
+    terminate_fails: bool,
     restart_fails: bool,
     pub invalidated: usize,
+    pub terminations: usize,
     pub restarts: usize,
 }
 
@@ -24,8 +26,10 @@ impl FakeEngine {
     fn cleared() -> Self {
         Self {
             answers: vec![Ok(Invalidation::Cleared { entries_removed: 1 })],
+            terminate_fails: false,
             restart_fails: false,
             invalidated: 0,
+            terminations: 0,
             restarts: 0,
         }
     }
@@ -33,8 +37,10 @@ impl FakeEngine {
     fn answering(answers: Vec<std::result::Result<Invalidation, String>>) -> Self {
         Self {
             answers,
+            terminate_fails: false,
             restart_fails: false,
             invalidated: 0,
+            terminations: 0,
             restarts: 0,
         }
     }
@@ -47,6 +53,14 @@ impl Conditioning for FakeEngine {
             return Ok(Invalidation::AlreadyEmpty);
         }
         self.answers.remove(0)
+    }
+
+    fn terminate(&mut self) -> std::result::Result<(), String> {
+        self.terminations += 1;
+        if self.terminate_fails {
+            return Err("the process will not die".into());
+        }
+        Ok(())
     }
 
     fn restart(&mut self) -> std::result::Result<(), String> {
@@ -183,7 +197,11 @@ fn the_voice_goes_and_its_clips_stay() {
         .expect("finish");
     assert_eq!(
         outcome,
-        Outcome::Deleted { files_removed: 1, engine_restarted: false }
+        Outcome::Deleted {
+            files_removed: 1,
+            engine_terminated: false,
+            engine_unavailable: false
+        }
     );
 
     // Gone: the recording, and the conditioning derived from it.
@@ -255,9 +273,13 @@ fn an_empty_conditioning_cache_is_not_a_failure() {
         .expect("finish");
     assert_eq!(
         outcome,
-        Outcome::Deleted { files_removed: 1, engine_restarted: false }
+        Outcome::Deleted {
+            files_removed: 1,
+            engine_terminated: false,
+            engine_unavailable: false
+        }
     );
-    assert_eq!(engine.restarts, 0, "an empty cache caused a restart");
+    assert_eq!(engine.terminations, 0, "an empty cache killed the engine");
     assert!(!recording.exists());
     assert_eq!(status(&store, "alice"), "deleted");
 }
@@ -285,7 +307,7 @@ fn clearing_every_voices_conditioning_leaves_the_other_voices_alone() {
 /// An engine that cannot show the voice is unreachable is ended, because a
 /// deletion that cannot be proved is not one.
 #[test]
-fn an_engine_that_cannot_forget_is_restarted() {
+fn an_engine_that_cannot_forget_is_terminated() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, recording, _) = seeded(&dir);
     let mut engine = FakeEngine::answering(vec![Ok(Invalidation::UnsupportedLayout)]);
@@ -296,27 +318,61 @@ fn an_engine_that_cannot_forget_is_restarted() {
         .expect("finish");
     assert_eq!(
         outcome,
-        Outcome::Deleted { files_removed: 1, engine_restarted: true }
+        Outcome::Deleted {
+            files_removed: 1,
+            engine_terminated: true,
+            engine_unavailable: false
+        }
     );
-    assert_eq!(engine.restarts, 1);
+    assert_eq!(engine.terminations, 1);
     assert!(!recording.exists());
     assert_eq!(status(&store, "alice"), "deleted");
 }
 
-/// And if it cannot even be restarted, the deletion stops rather than claiming
-/// to have removed something it could not reach. The voice stays refused.
+/// Ending the old process is what makes the conditioning unreachable. Whether
+/// anything takes its place is a question about having an engine, and answering
+/// it badly must not turn into keeping a recording the person asked to delete.
 #[test]
-fn a_deletion_that_cannot_be_proved_stops_at_the_barrier() {
+fn a_replacement_that_will_not_start_does_not_keep_the_recording() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, recording, _) = seeded(&dir);
-    let mut engine = FakeEngine::answering(vec![Err("the engine is wedged".into())]);
+    let mut engine = FakeEngine::answering(vec![Ok(Invalidation::UnsupportedLayout)]);
     engine.restart_fails = true;
 
     store.begin_voice_deletion("alice", "job-1", "t0").expect("begin");
     let outcome = store
         .finish_voice_deletion("alice", "job-1", &mut engine, "t1")
         .expect("finish");
+    assert_eq!(
+        outcome,
+        Outcome::Deleted {
+            files_removed: 1,
+            engine_terminated: true,
+            // Said out loud, so the application can report an engine that is
+            // down rather than finding out at the next generation.
+            engine_unavailable: true
+        }
+    );
+    assert!(!recording.exists(), "a failed restart kept the recording");
+    assert_eq!(status(&store, "alice"), "deleted");
+}
+
+/// But a process that will not die is different: nothing here can show it has
+/// stopped being able to use the voice, so the deletion stops rather than
+/// claiming to have removed something still in reach.
+#[test]
+fn a_deletion_that_cannot_be_proved_stops_at_the_barrier() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (mut store, recording, _) = seeded(&dir);
+    let mut engine = FakeEngine::answering(vec![Err("the engine is wedged".into())]);
+    engine.terminate_fails = true;
+
+    store.begin_voice_deletion("alice", "job-1", "t0").expect("begin");
+    let outcome = store
+        .finish_voice_deletion("alice", "job-1", &mut engine, "t1")
+        .expect("finish");
     assert!(matches!(outcome, Outcome::Blocked { .. }), "{outcome:?}");
+    assert_eq!(engine.terminations, 1, "the engine was not asked to stop");
 
     assert_eq!(status(&store, "alice"), "deletion_pending");
     assert!(!store.voice_usable("alice").expect("usable"), "a blocked voice became usable");

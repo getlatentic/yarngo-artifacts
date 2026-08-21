@@ -38,18 +38,37 @@ pub enum Invalidation {
 /// against an engine that fails in each of its ways without one being present.
 pub trait Conditioning {
     fn invalidate(&mut self) -> std::result::Result<Invalidation, String>;
-    /// End the process holding the conditioning. A fresh one has none.
+    /// End the process holding the conditioning.
+    ///
+    /// This is the one that matters. The question deletion has to answer is
+    /// whether the old process can still speak in the voice, and a process that
+    /// is gone cannot. Whether anything takes its place is a different
+    /// question, asked separately.
+    fn terminate(&mut self) -> std::result::Result<(), String>;
+    /// Start a replacement. Its failure leaves the application without an
+    /// engine, which is a problem — but not one that justifies keeping a
+    /// recording the person asked to delete.
     fn restart(&mut self) -> std::result::Result<(), String>;
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
-    Deleted { files_removed: usize, engine_restarted: bool },
+    Deleted {
+        files_removed: usize,
+        /// The old process had to be ended to be sure it had forgotten.
+        engine_terminated: bool,
+        /// And nothing took its place. The deletion is complete regardless;
+        /// this is reported so the application can say the engine is down
+        /// rather than discovering it at the next generation.
+        engine_unavailable: bool,
+    },
     /// Already gone. Answered against the tombstone rather than failing, and
     /// without writing a second record of one deletion.
     AlreadyDeleted,
-    /// The engine could not be made to forget, and could not be restarted. The
-    /// voice stays `deletion_pending`: refused for new work, and finishable.
+    /// The engine could not be made to forget and could not be ended, so
+    /// nothing here can show the voice is unreachable. The recording stays and
+    /// the voice stays `deletion_pending`: refused for new work, and
+    /// finishable once the engine can be dealt with.
     Blocked { reason: String },
 }
 
@@ -162,16 +181,24 @@ impl Store {
         // The engine forgets first. Removing the recording while the derived
         // conditioning is still resident would leave the part of the voice that
         // can actually speak.
-        let mut restarted = false;
+        let mut terminated = false;
+        let mut unavailable = false;
         match engine.invalidate() {
             Ok(Invalidation::Cleared { .. }) | Ok(Invalidation::AlreadyEmpty) => {}
             Ok(Invalidation::UnsupportedLayout) | Err(_) => {
                 // It cannot show the voice is unreachable, so the process
-                // holding it ends. A fresh one has nothing derived from anyone.
-                if let Err(reason) = engine.restart() {
+                // holding it has to stop being. That, and only that, is what
+                // makes the conditioning unreachable — a process that no longer
+                // exists cannot speak in anybody's voice.
+                if let Err(reason) = engine.terminate() {
                     return Ok(Outcome::Blocked { reason });
                 }
-                restarted = true;
+                terminated = true;
+                // The replacement is a separate concern. Refusing to finish the
+                // deletion because no engine started would mean keeping a
+                // recording the person asked to remove, in exchange for
+                // nothing: the old one is already gone.
+                unavailable = engine.restart().is_err();
             }
         }
 
@@ -211,7 +238,8 @@ impl Store {
 
         Ok(Outcome::Deleted {
             files_removed: removed,
-            engine_restarted: restarted,
+            engine_terminated: terminated,
+            engine_unavailable: unavailable,
         })
     }
 

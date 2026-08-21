@@ -18,7 +18,7 @@
 use crate::job::{DurableJobKind, ExecutionStatus, JobStatus};
 
 /// What the engine has reported about an attempt.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Observation {
     Completed,
     Failed,
@@ -99,6 +99,17 @@ impl Execution {
     /// about nothing else.
     pub fn interrupt(&mut self) -> bool {
         self.settle(ExecutionStatus::Interrupted)
+    }
+
+    /// The engine finished the work.
+    ///
+    /// Settled alone, because finishing the computation and finishing the job
+    /// are different events with a decision in between. The engine produced a
+    /// file; whether that file becomes something the person has is for the
+    /// application to say, after it has looked at the file and at what has
+    /// happened since the work started.
+    pub fn finished(&mut self, observation: Observation) -> bool {
+        self.settle(observation.execution_target())
     }
 }
 
@@ -261,14 +272,19 @@ impl Job {
         Applied::Moved { to: target }
     }
 
-    /// Apply the observation to both records at once, which is how they are
-    /// always written: an attempt and its job settle together or not at all.
+    /// Apply the observation to both records at once.
+    ///
+    /// Right where the engine finishing is the whole job — forgetting a cache,
+    /// removing a file. Wrong where the application still has to decide, and
+    /// synthesis is the case: the engine produces audio, and the job is done
+    /// when that audio has been checked and committed, which may not happen.
+    /// Those use [`Execution::finished`] and settle the job separately.
     pub fn settle(
         &mut self,
         execution: &mut Execution,
         observation: Observation,
     ) -> Applied {
-        let outcome = self.observe(&execution.id.clone(), observation.clone());
+        let outcome = self.observe(&execution.id.clone(), observation);
         if matches!(outcome, Applied::Moved { .. }) {
             execution.settle(observation.execution_target());
         }
@@ -454,6 +470,42 @@ mod tests {
         assert_eq!(retry.state(), JobStatus::Queued);
         assert_eq!(retry.kind, job.kind);
         assert_eq!(job.state(), JobStatus::Failed, "the retry rewrote history");
+    }
+
+    /// The case that makes them two events: the engine finishes the audio, and
+    /// the application refuses to publish it. Both records are true, and they
+    /// disagree.
+    #[test]
+    fn work_can_finish_while_the_job_it_was_for_is_cancelled() {
+        let (mut job, mut exec) = dispatched();
+        // Something happened that means this must not be published — a voice
+        // being deleted — so stopping was asked for.
+        job.request_cancel();
+        // The engine got there first, which cooperative cancellation permits.
+        assert!(exec.finished(Observation::Completed));
+        assert_eq!(exec.state(), ExecutionStatus::Completed);
+        // The application looks at what it has and declines to keep it.
+        assert_eq!(
+            job.observe("exec-1", Observation::Cancelled),
+            Applied::Moved { to: JobStatus::Cancelled }
+        );
+
+        assert_eq!(exec.state(), ExecutionStatus::Completed, "the attempt was rewritten");
+        assert_eq!(job.state(), JobStatus::Cancelled);
+    }
+
+    /// And once the job is cancelled, the completion that produced the audio
+    /// cannot be applied to it afterwards.
+    #[test]
+    fn a_finished_attempt_cannot_complete_a_cancelled_job() {
+        let (mut job, mut exec) = dispatched();
+        job.request_cancel();
+        exec.finished(Observation::Completed);
+        job.observe("exec-1", Observation::Cancelled);
+        assert_eq!(
+            job.observe("exec-1", Observation::Completed),
+            Applied::AlreadyFinished { state: JobStatus::Cancelled }
+        );
     }
 
     #[test]
