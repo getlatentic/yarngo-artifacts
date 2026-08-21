@@ -320,3 +320,68 @@ fn a_duplicate_reply_is_ignored() {
     assert_eq!(engine.request("work", json!({}), PATIENCE).expect("first")["n"], 1);
     assert_eq!(engine.request("work", json!({}), PATIENCE).expect("second")["n"], 1);
 }
+
+/// A reply nobody is waiting for is reported and discarded. The pending map
+/// must not be disturbed by it — the next real reply still resolves.
+#[test]
+fn a_reply_to_an_unknown_request_leaves_the_pending_map_alone() {
+    let dir = dir();
+    let (engine, _events) = connect(
+        &dir,
+        "phantom",
+        r#"    send({"id": 9999, "result": {"from": "nowhere"}})
+    send({"id": req["id"], "result": {"real": True}})"#,
+    );
+    engine.initialize(PATIENCE).expect("initialize");
+    let reply = engine.request("work", json!({}), PATIENCE).expect("work");
+    assert_eq!(reply["real"], true, "the phantom reply answered the wrong caller");
+    let again = engine.request("work", json!({}), PATIENCE).expect("second");
+    assert_eq!(again["real"], true);
+}
+
+/// A reply that arrives after its caller gave up is discarded, and cannot be
+/// handed to whoever asks next.
+#[test]
+fn a_reply_after_the_timeout_is_discarded() {
+    let dir = dir();
+    let (engine, _events) = connect(
+        &dir,
+        "late",
+        r#"    if req["params"].get("slow"):
+        time.sleep(1.0)
+        send({"id": req["id"], "result": {"tag": "late"}})
+    else:
+        send({"id": req["id"], "result": {"tag": "prompt"}})"#,
+    );
+    engine.initialize(PATIENCE).expect("initialize");
+
+    let timed_out = engine.request("work", json!({ "slow": true }), Duration::from_millis(200));
+    assert!(matches!(timed_out, Err(EngineError::Transport(_))), "{timed_out:?}");
+
+    // Long enough for the abandoned reply to arrive and be discarded.
+    std::thread::sleep(Duration::from_millis(1200));
+    let next = engine.request("work", json!({}), PATIENCE).expect("next");
+    assert_eq!(next["tag"], "prompt", "a late reply answered the next caller");
+}
+
+/// A frame past the size limit is not parsed, and is counted rather than
+/// quietly skipped.
+#[test]
+fn an_oversized_frame_is_refused_and_counted() {
+    let dir = dir();
+    let (engine, _events) = connect(
+        &dir,
+        "enormous",
+        r#"    with lock:
+        sys.stdout.write('{"jsonrpc": "2.0", "id": 1, "result": {"x": "' + ("y" * 9000000) + '"}}\n')
+        sys.stdout.flush()
+    send({"id": req["id"], "result": {"survived": True}})"#,
+    );
+    engine.initialize(PATIENCE).expect("initialize");
+    let reply = engine.request("work", json!({}), PATIENCE).expect("work");
+    assert_eq!(reply["survived"], true);
+    assert!(
+        engine.malformed_lines() >= 1,
+        "the oversized frame was not counted"
+    );
+}

@@ -59,6 +59,10 @@ ACTOR_QUEUE_DEPTH = 64
 # rather than dropped — a lost reply strands a caller for ever.
 CONTROL_LANE_LIMIT = 512
 
+# How many finished executions to remember, so a cancellation arriving after the
+# work ended can say so rather than calling it unknown.
+FINISHED_MEMORY = 256
+
 # The longest line either side will accept, enforced while reading rather than
 # after. A peer sending more than this is not one of ours, and finding the end
 # of its line before objecting would mean allocating whatever it claimed.
@@ -237,19 +241,41 @@ class ModelActor:
         self._writer = writer
         self._cancellation = cancellation
         self._work: queue.Queue = queue.Queue(maxsize=ACTOR_QUEUE_DEPTH)
+        # What this engine was told to run, so a cancellation can be answered
+        # with what happened rather than with an acknowledgement either way.
+        # Knowing its own executions is not scheduling: the caller decides what
+        # to run and in what order.
+        self._lock = threading.Lock()
+        self._queued: set[str] = set()
+        self._running: str | None = None
+        self._finished: deque = deque(maxlen=FINISHED_MEMORY)
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
+
+    def state_of(self, execution_id: str) -> str:
+        with self._lock:
+            if execution_id == self._running:
+                return "running"
+            if execution_id in self._queued:
+                return "queued"
+            if execution_id in self._finished:
+                return "terminal"
+        return "unknown"
 
     def submit(
         self, request_id: Any, method: str, params: dict, is_notification: bool = False
     ) -> bool:
         """Queue an operation. False when the queue is full, so the caller can
         be refused rather than left waiting on a reply that will not come."""
+        execution_id = params.get("execution_id") if isinstance(params, dict) else None
         try:
             self._work.put_nowait((request_id, method, params, is_notification))
-            return True
         except queue.Full:
             return False
+        if execution_id:
+            with self._lock:
+                self._queued.add(execution_id)
+        return True
 
     def depth(self) -> int:
         return self._work.qsize()
@@ -260,6 +286,20 @@ class ModelActor:
             fields = params if isinstance(params, dict) else {}
             job_id = fields.get("job_id")
             execution_id = fields.get("execution_id")
+            with self._lock:
+                self._queued.discard(execution_id)
+                self._running = execution_id
+            # Checked before the handler is entered, not only inside it: an
+            # execution cancelled while it waited its turn should never start.
+            if execution_id and self._cancellation.is_requested(execution_id):
+                self._cancellation.forget(execution_id)
+                with self._lock:
+                    self._running = None
+                    if execution_id:
+                        self._finished.append(execution_id)
+                if not is_notification:
+                    self._writer.reply(request_id, {"state": "cancelled", "started": False})
+                continue
             context = Context(
                 emit_raw=self._writer.event,
                 cancellation=self._cancellation,
@@ -280,6 +320,10 @@ class ModelActor:
                         request_id, INTERNAL_ERROR, f"{type(exc).__name__}: {exc}"
                     )
             finally:
+                with self._lock:
+                    self._running = None
+                    if execution_id:
+                        self._finished.append(execution_id)
                 if execution_id:
                     self._cancellation.forget(execution_id)
 
@@ -402,9 +446,20 @@ def serve(
                         request_id, INVALID_PARAMS, "job.cancel needs an execution_id"
                     )
             else:
-                cancellation.request(execution_id)
+                # Answered with what is true of this execution. A blanket
+                # acknowledgement would tell a caller its cancellation landed
+                # when the work had already finished, or never existed.
+                state = actor.state_of(execution_id)
+                if state in ("queued", "running"):
+                    cancellation.request(execution_id)
+                outcome = {
+                    "queued": "cancel_requested",
+                    "running": "cancel_requested",
+                    "terminal": "already_terminal",
+                    "unknown": "unknown_execution",
+                }[state]
                 if not is_notification:
-                    writer.reply(request_id, {"state": "cancel_requested"})
+                    writer.reply(request_id, {"state": outcome, "execution_state": state})
             continue
 
         if method in broker:

@@ -14,6 +14,7 @@ from __future__ import annotations
 import io
 import json
 import sys
+import queue
 import threading
 import time
 from pathlib import Path
@@ -81,6 +82,55 @@ def exchange(
     while time.monotonic() < deadline and not done(out.messages()):
         time.sleep(0.01)
     return out.messages()
+
+
+class Paced:
+    """Stdin the test releases one line at a time.
+
+    A `StringIO` hands `serve` every line at once, so anything that depends on
+    one request having finished before the next is read is a race. This lets a
+    test wait for what it needs before releasing the next line.
+    """
+
+    def __init__(self) -> None:
+        self._lines: queue.Queue = queue.Queue()
+
+    def push(self, line: str) -> None:
+        self._lines.put(line + "\n")
+
+    def close(self) -> None:
+        self._lines.put("")
+
+    def readline(self, limit: int = -1) -> str:
+        return self._lines.get()
+
+
+def paced(broker=None, model=None):
+    """Start a session whose input the caller drives. Returns the input and the
+    collected output."""
+    source, out = Paced(), Collected()
+    threading.Thread(
+        target=protocol.serve,
+        kwargs={
+            "broker": broker or {},
+            "model": model or {},
+            "capabilities": {},
+            "stdin": source,
+            "stdout": out,
+            "on_fatal": lambda reason: None,
+        },
+        daemon=True,
+    ).start()
+    return source, out
+
+
+def wait_for(out: Collected, predicate, timeout: float = 5.0) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate(out.messages()):
+            return True
+        time.sleep(0.01)
+    return False
 
 
 def frame(**fields) -> str:
@@ -217,12 +267,12 @@ def main() -> int:
         failures,
     )
 
-    # Cancellation is keyed on the execution, so a stale one cannot reach the
-    # attempt that replaced it.
+    # Cancellation is keyed on the execution, so one aimed at an abandoned
+    # attempt cannot reach the attempt that replaced it.
     ran: list = []
 
     def watches(params, ctx):
-        for _ in range(20):
+        for _ in range(40):
             if ctx.cancelled():
                 ran.append(("stopped", ctx.execution_id))
                 return {}
@@ -232,34 +282,117 @@ def main() -> int:
 
     exchange(
         [
-            # Carries the job the next attempt also has: keyed on the job,
+            frame(id=1, method="watch", params={"job_id": "abc", "execution_id": "abc/2"}),
+            # Carries the job the running attempt also has: keyed on the job,
             # this cancellation would reach it.
-            frame(id=1, method="job.cancel", params={"job_id": "abc", "execution_id": "abc/1"}),
-            frame(id=2, method="watch", params={"job_id": "abc", "execution_id": "abc/2"}),
+            frame(id=2, method="job.cancel", params={"job_id": "abc", "execution_id": "abc/1"}),
         ],
         expect=2,
         model={"watch": watches},
+        settle=5.0,
+        until=lambda ms: len(ran) > 0,
     )
     check(
-        "a cancellation for one attempt does not stop another",
+        "a cancellation for another attempt does not stop this one",
         ran and ran[-1][0] == "finished",
         failures,
     )
 
+    # And one aimed at this attempt does.
     ran.clear()
-    exchange(
+    replies = exchange(
         [
-            frame(id=1, method="job.cancel", params={"job_id": "abc", "execution_id": "abc/2"}),
-            frame(id=2, method="watch", params={"job_id": "abc", "execution_id": "abc/2"}),
+            frame(id=1, method="watch", params={"job_id": "abc", "execution_id": "abc/2"}),
+            frame(id=2, method="job.cancel", params={"job_id": "abc", "execution_id": "abc/2"}),
         ],
         expect=2,
         model={"watch": watches},
+        settle=5.0,
+        until=lambda ms: len(ms) >= 2,
     )
+    cancel_reply = next(m for m in replies if m.get("id") == 2)
     check(
-        "a cancellation for this attempt does stop it",
-        ran and ran[-1][0] == "stopped",
+        "cancelling a live execution is acknowledged",
+        cancel_reply["result"]["state"] == "cancel_requested",
         failures,
     )
+
+    # An execution cancelled while it waited its turn never starts.
+    ran.clear()
+    replies = exchange(
+        [
+            frame(id=1, method="watch", params={"execution_id": "one"}),
+            frame(id=2, method="watch", params={"execution_id": "two"}),
+            frame(id=3, method="job.cancel", params={"execution_id": "two"}),
+        ],
+        expect=3,
+        model={"watch": watches},
+        settle=10.0,
+        until=lambda ms: len(ms) >= 3,
+    )
+    second = next(m for m in replies if m.get("id") == 2)
+    check(
+        "a queued execution is cancelled before it starts",
+        second["result"].get("started") is False,
+        failures,
+    )
+    check(
+        "and its handler never ran",
+        [e for e in ran if e[1] == "two"] == [],
+        failures,
+    )
+
+    # Cancelling something this engine has never seen says so.
+    replies = exchange([frame(id=1, method="job.cancel", params={"execution_id": "nope"})], expect=1)
+    check(
+        "cancelling an unknown execution says unknown",
+        replies[0]["result"]["state"] == "unknown_execution",
+        failures,
+    )
+
+    # Cancelling something already finished says that instead. Paced, because
+    # the point is that the work ended before the cancellation was read.
+    source, out = paced(model={"quick": lambda params, ctx: {}})
+    source.push(frame(id=1, method="quick", params={"execution_id": "done"}))
+    check(
+        "the quick execution finished",
+        wait_for(out, lambda ms: any(m.get("id") == 1 for m in ms)),
+        failures,
+    )
+    source.push(frame(id=2, method="job.cancel", params={"execution_id": "done"}))
+    check(
+        "a cancellation after the work says already terminal",
+        wait_for(
+            out,
+            lambda ms: any(
+                m.get("id") == 2 and m.get("result", {}).get("state") == "already_terminal"
+                for m in ms
+            ),
+        ),
+        failures,
+    )
+    source.close()
+
+    # Model work runs in the order it was queued.
+    order: list = []
+
+    def records(params, ctx):
+        order.append(params["tag"])
+        time.sleep(0.05)
+        return {}
+
+    exchange(
+        [
+            frame(id=1, method="rec", params={"tag": "a", "execution_id": "e1"}),
+            frame(id=2, method="rec", params={"tag": "b", "execution_id": "e2"}),
+            frame(id=3, method="rec", params={"tag": "c", "execution_id": "e3"}),
+        ],
+        expect=3,
+        model={"rec": records},
+        settle=10.0,
+        until=lambda ms: len(ms) >= 3,
+    )
+    check("model work runs in the order it was queued", order == ["a", "b", "c"], failures)
 
     # Events carry both identifiers, so one from an abandoned attempt cannot be
     # mistaken for the current one.
@@ -327,7 +460,7 @@ def main() -> int:
 
     for failure in failures:
         print(f"FAIL: {failure}", file=sys.stderr)
-    total = 40
+    total = 47
     print(f"{total - len(failures)}/{total} protocol checks passed")
     return 1 if failures else 0
 
