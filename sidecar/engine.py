@@ -21,6 +21,7 @@ import shutil
 import sys
 import time
 import traceback
+from dataclasses import dataclass
 from pathlib import Path
 
 import platform
@@ -506,40 +507,85 @@ def m_rename_voice(params: dict) -> dict:
     return {"voices": [{"voice_id": k, **v} for k, v in _voices.items()]}
 
 
-def _forget_conditioning() -> None:
+class UnsupportedCacheLayout(Exception):
+    """A model is loaded but its conditioning cache cannot be located.
+
+    Distinct from an empty cache: that one means there is nothing to remove,
+    which is a normal result. This one means derived conditioning may still be
+    reachable by the engine and this process can no longer prove otherwise, so
+    the only honest answer is to end the process holding it.
+    """
+
+
+@dataclass(frozen=True)
+class ConditioningInvalidation:
+    entries_removed: int
+    # The cache is keyed on the waveform, so there is no per-voice key to evict
+    # from outside and one deletion clears every voice. Reported rather than
+    # implied: the caller must not read this as a targeted eviction.
+    scope_applied: str
+    status: str
+
+    def as_reply(self) -> dict:
+        return {
+            "entries_removed": self.entries_removed,
+            "scope_applied": self.scope_applied,
+            "status": self.status,
+        }
+
+
+# Where each supported backend keeps derived conditioning. Named rather than
+# searched for: the first version walked the model object looking for anything
+# clearable, found nothing on an adapter that keeps its cache one level in, and
+# reported success. A lookup that does not know where to look cannot tell that
+# apart from a cache that is already empty.
+_CACHE_LOCATIONS = (
+    ("_generator", "_prompt_cache", "_prompt_cache_lock"),
+    (None, "_prompt_cache", "_prompt_cache_lock"),
+    (None, "prompt_cache", None),
+)
+
+
+def _conditioning_cache(model: object) -> tuple[object, object | None]:
+    """The mapping holding derived conditioning, and whatever guards it."""
+    for inner, cache_name, lock_name in _CACHE_LOCATIONS:
+        holder = getattr(model, inner, None) if inner else model
+        if holder is None:
+            continue
+        cache = getattr(holder, cache_name, None)
+        if cache is None or not hasattr(cache, "clear"):
+            continue
+        return cache, getattr(holder, lock_name, None) if lock_name else None
+    raise UnsupportedCacheLayout(
+        f"no conditioning cache found on {type(model).__name__}"
+    )
+
+
+def _forget_conditioning() -> ConditioningInvalidation:
     """Drop the speaker conditioning held in memory by every loaded model.
 
     A deleted voice leaves its recording on disk gone, but the embedding and
-    acoustic prompt derived from it stay resident until the process exits —
-    which is still the person's voice, in memory, after they asked for it to be
-    removed. The cache is keyed on the waveform, so there is no per-voice key to
-    evict from outside; clearing it wholesale is the only certain answer. The
-    cost is that other voices re-prepare on next use, which is the right trade
-    against keeping data someone deleted.
+    acoustic prompt derived from it stay resident until something removes them
+    — which is still the person's voice, in memory, after they asked for it to
+    be removed.
+
+    This is eviction, not erasure: the allocator may hold the freed pages, and
+    nothing here can promise otherwise. What it does promise is that the engine
+    has no reachable conditioning left to speak with.
     """
-    cleared = 0
+    removed = 0
     for model in _models.values():
-        # The backend is reached through an adapter, and the cache sits on the
-        # generator inside it rather than on the object this holds. Looking only
-        # at the outer object found nothing and said nothing, which left a
-        # deleted person's conditioning resident for the life of the process.
-        for holder in (model, getattr(model, "_generator", None)):
-            if holder is None:
-                continue
-            lock = getattr(holder, "_prompt_cache_lock", None)
-            for attribute in ("_prompt_cache", "prompt_cache"):
-                cache = getattr(holder, attribute, None)
-                if cache is None or not hasattr(cache, "clear"):
-                    continue
-                with lock if lock is not None else contextlib.nullcontext():
-                    entries = len(cache) if hasattr(cache, "__len__") else "?"
-                    cache.clear()
-                cleared += 1
-                _log(f"cleared {attribute} ({entries} entries) after deletion")
-    # Said out loud: this is the one path where finding nothing is a failure
-    # rather than a no-op, and it is invisible unless it reports itself.
-    if _models and not cleared:
-        _log("WARNING: no conditioning cache found to clear — it may still be resident")
+        cache, lock = _conditioning_cache(model)
+        with lock if lock is not None else contextlib.nullcontext():
+            removed += len(cache) if hasattr(cache, "__len__") else 0
+            cache.clear()
+    result = ConditioningInvalidation(
+        entries_removed=removed,
+        scope_applied="all",
+        status="cleared" if removed else "already_empty",
+    )
+    _log(f"conditioning {result.status}: {removed} entr(ies), scope {result.scope_applied}")
+    return result
 
 
 def m_delete_voice(params: dict) -> dict:
@@ -561,10 +607,15 @@ def m_delete_voice(params: dict) -> dict:
             freed = audio.stat().st_size
             audio.unlink()
 
-    _forget_conditioning()
+    invalidation = _forget_conditioning()
     _save_voices_to_disk()
     clips = sum(1 for c in _load_clips() if c.get("voice_id") == voice_id)
-    return {"voices": sorted(_voices), "freed_bytes": freed, "clips": clips}
+    return {
+        "voices": sorted(_voices),
+        "freed_bytes": freed,
+        "clips": clips,
+        "conditioning": invalidation.as_reply(),
+    }
 
 
 # The model accepts at most 512 audio patches per call — a hard limit it
