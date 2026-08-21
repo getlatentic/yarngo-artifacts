@@ -14,6 +14,7 @@ and that difference is entirely reference processing.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shutil
@@ -516,12 +517,29 @@ def _forget_conditioning() -> None:
     cost is that other voices re-prepare on next use, which is the right trade
     against keeping data someone deleted.
     """
+    cleared = 0
     for model in _models.values():
-        for attribute in ("_prompt_cache", "prompt_cache"):
-            cache = getattr(model, attribute, None)
-            if cache is not None and hasattr(cache, "clear"):
-                cache.clear()
-                _log(f"cleared {attribute} after deletion")
+        # The backend is reached through an adapter, and the cache sits on the
+        # generator inside it rather than on the object this holds. Looking only
+        # at the outer object found nothing and said nothing, which left a
+        # deleted person's conditioning resident for the life of the process.
+        for holder in (model, getattr(model, "_generator", None)):
+            if holder is None:
+                continue
+            lock = getattr(holder, "_prompt_cache_lock", None)
+            for attribute in ("_prompt_cache", "prompt_cache"):
+                cache = getattr(holder, attribute, None)
+                if cache is None or not hasattr(cache, "clear"):
+                    continue
+                with lock if lock is not None else contextlib.nullcontext():
+                    entries = len(cache) if hasattr(cache, "__len__") else "?"
+                    cache.clear()
+                cleared += 1
+                _log(f"cleared {attribute} ({entries} entries) after deletion")
+    # Said out loud: this is the one path where finding nothing is a failure
+    # rather than a no-op, and it is invisible unless it reports itself.
+    if _models and not cleared:
+        _log("WARNING: no conditioning cache found to clear — it may still be resident")
 
 
 def m_delete_voice(params: dict) -> dict:
