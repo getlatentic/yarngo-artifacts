@@ -137,7 +137,10 @@ impl VoiceStudio {
                 .iter()
                 .find(|v| v.voice_id == id)
                 .map(|v| v.label.clone())
-                .unwrap_or_else(|| t!("voice.default").to_string()),
+                // The voice is gone, but the clip was still spoken in it. The
+                // default voice is the model's own, so naming it here would
+                // claim the model read those words.
+                .unwrap_or_else(|| t!("voice.deleted").to_string()),
         }
     }
 

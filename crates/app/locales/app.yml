@@ -61,6 +61,9 @@ voice:
   default:
     en: Default voice
     sk: Predvolený hlas
+  deleted:
+    en: Deleted voice
+    sk: Vymazaný hlas
   bundled:
     en: the model's own voice
     sk: vlastný hlas modelu
