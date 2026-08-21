@@ -135,9 +135,16 @@ pub fn request_cancel() {
 /// What the generation currently running has produced so far.
 #[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct Generating {
+    // Defaulted rather than required: a report that arrives without one of
+    // these is still a report, and refusing to read it turns a partial answer
+    // into no answer at all — which looks exactly like nothing running.
+    #[serde(default)]
     pub written_s: f32,
+    #[serde(default)]
     pub elapsed_s: f32,
+    #[serde(default)]
     pub chunks_done: u32,
+    #[serde(default)]
     pub chunks: u32,
 }
 

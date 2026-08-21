@@ -399,8 +399,24 @@ fn the_engine_answers_through_the_handle_while_it_is_generating() {
         })
     };
 
-    // Real progress: the engine saying it has finished part of the work. Not a
-    // sleep — a warm model would beat any sleep worth writing.
+    // First, that anything is said at all while a chunk is still running. A
+    // chunk is one blocking call into the model, so an engine that only spoke
+    // at chunk boundaries would leave a short clip silent for its whole length
+    // — which is exactly what the interface then shows.
+    let deadline = Instant::now() + PATIENCE;
+    let mut early = None;
+    while Instant::now() < deadline && early.is_none() {
+        early = handle.progress();
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let early = early.expect("nothing was reported while the first chunk ran");
+    assert_eq!(
+        early.chunks_done, 0,
+        "the first thing reported was a finished chunk, so nothing was said during it"
+    );
+
+    // Then real progress: the engine saying it has finished part of the work.
+    // Not a sleep — a warm model would beat any sleep worth writing.
     let deadline = Instant::now() + PATIENCE;
     let mut seen = None;
     while Instant::now() < deadline && seen.is_none() {

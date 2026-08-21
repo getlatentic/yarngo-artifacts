@@ -148,6 +148,21 @@ impl Store {
         Ok(())
     }
 
+    /// Close every session still recorded as running.
+    ///
+    /// Called at startup, before anything is reconciled. A session is closed by
+    /// the run that owned it saying so, and a run that was killed says nothing
+    /// — so the next one closes what it finds, because it knows something the
+    /// records do not: nothing else is running. Left open, those sessions make
+    /// their attempts look alive for ever and recovery finds nothing to do.
+    pub fn end_abandoned_sessions(&self, at: &str, reason: &str) -> Result<usize> {
+        Ok(self.raw().execute(
+            "UPDATE engine_sessions SET ended_at = ?1, exit_reason = ?2
+              WHERE ended_at IS NULL",
+            params![at, reason],
+        )?)
+    }
+
     pub fn insert_job(&self, job: &Job, target: Option<&str>, at: &str) -> Result<()> {
         self.raw().execute(
             "INSERT INTO jobs (id, kind, state, target_id, current_execution_id,

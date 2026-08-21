@@ -49,8 +49,13 @@ import protocol
 
 def generate(params, ctx):
     seconds = float(params.get("seed") or 2000) / 1000.0
+    # Said as soon as the work starts, as the real engine does: an application
+    # that hears nothing until the end cannot tell working from stuck.
+    ctx.emit("job.progress", {{"chunks_done": 0, "chunks": 1,
+                              "written_s": 0.0, "elapsed_s": 0.0}})
 {behaviour}
-    ctx.emit("job.progress", {{"chunks_done": 1, "chunks": 1}})
+    ctx.emit("job.progress", {{"chunks_done": 1, "chunks": 1,
+                              "written_s": round(seconds, 2), "elapsed_s": 0.1}})
     path = params["output_path"]
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as handle:

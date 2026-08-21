@@ -152,7 +152,12 @@ pub struct DurableEngine {
     running: Running,
     spawn: Spawn,
     progress: Reported,
-    sessions: u64,
+    /// What distinguishes this run's names from every other run's.
+    ///
+    /// Sessions, jobs and attempts all carry it. Numbering them from one within
+    /// a run made every run produce the same names, so the second one could not
+    /// insert a session at all and would not have been able to insert a job.
+    run: u128,
     jobs: u64,
     /// Keyed by the request whose reply finishes it. Held here rather than on
     /// the caller's stack, because the caller returned as soon as the engine
@@ -171,14 +176,21 @@ impl DurableEngine {
         layout.prepare().map_err(|e| EngineError::Transport(e.to_string()))?;
 
         // Whatever was running when this last stopped is over, whether or not
-        // anything said so at the time.
-        store.reconcile_ended_sessions(&now()).map_err(store_error)?;
+        // anything said so at the time. A run that was killed said nothing, so
+        // its session is closed here first — otherwise its attempts stay
+        // recorded as running and there is nothing for recovery to find.
+        let at = now();
+        store
+            .end_abandoned_sessions(&at, "process_exited")
+            .map_err(store_error)?;
+        store.reconcile_ended_sessions(&at).map_err(store_error)?;
         adopt_legacy(&mut store, data_dir)?;
 
         let (connection, events) = spawn.start()?;
         let progress = Reported::default();
         progress.follow(events);
-        let session = "session-1".to_string();
+        let run = stamp();
+        let session = format!("session-{run}");
         store
             .open_session(&session, "mlx", &now())
             .map_err(store_error)?;
@@ -188,7 +200,7 @@ impl DurableEngine {
             running: Running { connection, session },
             spawn,
             progress,
-            sessions: 1,
+            run,
             jobs: 0,
             in_flight: HashMap::new(),
             deleting: Vec::new(),
@@ -355,8 +367,8 @@ impl DurableEngine {
     fn next_job(&mut self) -> (String, String) {
         self.jobs += 1;
         (
-            format!("job-{}-{}", self.sessions, self.jobs),
-            format!("job-{}-{}/1", self.sessions, self.jobs),
+            format!("job-{}-{}", self.run, self.jobs),
+            format!("job-{}-{}/1", self.run, self.jobs),
         )
     }
 }
@@ -699,6 +711,11 @@ impl SpeechEngine for DurableEngine {
                 "a reply arrived for a synthesis nothing was waiting for".into(),
             ));
         };
+        // Progress describes a generation that is running. Cleared once none
+        // is, because a value left behind draws a bar for work that finished.
+        if self.in_flight.is_empty() {
+            self.progress.clear();
+        }
         let ended = self.running.connection.has_ended();
         let outcome = {
             let mut synthesis = crate::Synthesis {

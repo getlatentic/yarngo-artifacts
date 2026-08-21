@@ -1343,6 +1343,60 @@ def _recording(path: str) -> str:
     return path
 
 
+class _Reporting:
+    """Keep saying where a generation has got to while a chunk is running.
+
+    A chunk is one blocking call into the model, so the loop below can only
+    report at chunk boundaries — and a short clip is a single chunk, which left
+    the application showing nothing at all for the whole wait and then
+    finishing. This says the same fields between boundaries, advancing only the
+    one it actually knows: the clock. `written_s` stays where the last finished
+    chunk put it, because nothing has been written since.
+
+    Cheap to do often: the writer collapses progress per execution, so a
+    subscriber that is behind sees the latest rather than all of them.
+    """
+
+    def __init__(self, ctx: protocol.Context, total: int, period: float = 0.25) -> None:
+        self._ctx = ctx
+        self._total = total
+        self._period = period
+        self.written_s = 0.0
+        self.done = 0
+        self._started = time.perf_counter()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def _say(self) -> None:
+        self._ctx.emit(
+            "job.progress",
+            {
+                "chunks_done": self.done,
+                "chunks": self._total,
+                "written_s": round(self.written_s, 2),
+                "elapsed_s": round(time.perf_counter() - self._started, 2),
+            },
+        )
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._period):
+            self._say()
+
+    def __enter__(self) -> "_Reporting":
+        self._say()
+        self._thread.start()
+        return self
+
+    def chunk_done(self, written_s: float, done: int) -> None:
+        self.written_s = written_s
+        self.done = done
+        self._say()
+
+    def __exit__(self, *_exc: object) -> None:
+        self._stop.set()
+        self._thread.join(timeout=1.0)
+
+
 def m_synthesis_generate(params: dict, ctx: protocol.Context) -> dict:
     """Speak the text into the file the caller named, and record nothing.
 
@@ -1378,28 +1432,21 @@ def m_synthesis_generate(params: dict, ctx: protocol.Context) -> dict:
     pieces = []
     sample_rate = None
     written_s = 0.0
-    for index, chunk in enumerate(chunks):
-        # Between chunks rather than mid-utterance: a chunk boundary is a
-        # sentence end, and stopping inside one leaves half a sentence.
-        if ctx.cancelled():
-            raise protocol.Cancelled(f"stopped before chunk {index + 1} of {len(chunks)}")
-        result = model.generate(chunk, **kwargs)
-        sample_rate = result.sample_rate
-        piece = np.asarray(result.waveform, dtype=np.float32).squeeze()
-        pieces.append(piece)
-        written_s += piece.shape[0] / sample_rate
-        ctx.emit(
-            "job.progress",
-            {
-                "chunks_done": index + 1,
-                "chunks": len(chunks),
-                "written_s": round(written_s, 2),
-                "elapsed_s": round(time.perf_counter() - started, 2),
-            },
-        )
-        if index + 1 < len(chunks):
-            # A short gap between chunks reads as a breath rather than a join.
-            pieces.append(np.zeros(int(0.18 * sample_rate), dtype=np.float32))
+    with _Reporting(ctx, len(chunks)) as reporting:
+        for index, chunk in enumerate(chunks):
+            # Between chunks rather than mid-utterance: a chunk boundary is a
+            # sentence end, and stopping inside one leaves half a sentence.
+            if ctx.cancelled():
+                raise protocol.Cancelled(f"stopped before chunk {index + 1} of {len(chunks)}")
+            result = model.generate(chunk, **kwargs)
+            sample_rate = result.sample_rate
+            piece = np.asarray(result.waveform, dtype=np.float32).squeeze()
+            pieces.append(piece)
+            written_s += piece.shape[0] / sample_rate
+            reporting.chunk_done(written_s, index + 1)
+            if index + 1 < len(chunks):
+                # A short gap between chunks reads as a breath rather than a join.
+                pieces.append(np.zeros(int(0.18 * sample_rate), dtype=np.float32))
     gen_s = time.perf_counter() - started
 
     wav = np.concatenate(pieces) if len(pieces) > 1 else pieces[0]
