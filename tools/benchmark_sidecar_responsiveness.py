@@ -31,33 +31,60 @@ def heartbeat() -> None:
         lags.append(time.monotonic() - t0 - TICK)
 
 
-def materialise(value) -> float:
-    """Force any lazy array to a concrete one, and report what that cost."""
-    t0 = time.monotonic()
-    try:
-        import mlx.core as mx
-        mx.eval(value)
-    except Exception:
-        pass
-    try:
-        import numpy as np
-        np.asarray(value[0] if isinstance(value, tuple) else value)
-    except Exception:
-        pass
-    return time.monotonic() - t0
+def _arrays(value, depth: int = 0, seen: set | None = None) -> list:
+    """Every MLX array reachable from `value`, however it is wrapped.
+
+    Walking rather than evaluating the return value directly: the paths worth
+    measuring hand back a wrapper, a float, or nothing at all, and evaluating
+    those measures the harness rather than the backend.
+    """
+    import mlx.core as mx
+    seen = seen if seen is not None else set()
+    if depth > 4 or id(value) in seen:
+        return []
+    seen.add(id(value))
+    if isinstance(value, mx.array):
+        return [value]
+    if isinstance(value, (list, tuple, set)):
+        return [a for v in value for a in _arrays(v, depth + 1, seen)]
+    if isinstance(value, dict):
+        return [a for v in value.values() for a in _arrays(v, depth + 1, seen)]
+    if hasattr(value, "__dict__"):
+        return [a for v in vars(value).values() for a in _arrays(v, depth + 1, seen)]
+    return []
 
 
-def measure(name: str, fn, reps: int = 1) -> dict:
+def materialise(value) -> tuple[float, int]:
+    """Force every reachable lazy array, reporting the cost and how many.
+
+    The count matters: a near-zero cost means "already evaluated" only when
+    something was actually found to evaluate. It is also how the walk reports
+    its own blind spots — a whole model yielding one array means the parameters
+    were not reached, and that path's timing says nothing about readiness.
+    """
+    import mlx.core as mx
+    found = _arrays(value)
+    t0 = time.perf_counter()
+    if found:
+        mx.eval(found)
+    return time.perf_counter() - t0, len(found)
+
+
+def measure(name: str, fn, reps: int = 1, retained=None) -> dict:
+    """`retained` names what the engine kept, for paths that return nothing
+    useful — model weights, or the conditioning cache — so materialisation is
+    measured against the objects that actually hold the work."""
     runs = []
     for _ in range(reps):
         lags.clear()
         t0 = time.monotonic()
         out = fn()
         call_s = time.monotonic() - t0
-        eval_s = materialise(out)
+        eval_s, arrays = materialise(retained() if retained else out)
         runs.append({
             "call_s": round(call_s, 3),
-            "materialise_s": round(eval_s, 3),
+            "materialise_s": round(eval_s, 6),
+            "arrays_evaluated": arrays,
             "ticks_seen": len(lags),
             "ticks_expected": round(call_s / TICK),
             "lag_ms": {
@@ -78,14 +105,20 @@ def main() -> int:
     model_id = engine._default_model()
     spec = engine.MODELS[model_id]
     holder: dict = {}
-    results = [measure("model_load", lambda: holder.setdefault("m", engine._load(model_id)))]
+    results = [measure("model_load", lambda: holder.setdefault("m", engine._load(model_id)),
+                       retained=lambda: holder["m"])]
     model = holder["m"]
+
+    def conditioning_cache():
+        gen = getattr(model, "_generator", model)
+        return getattr(gen, "_prompt_cache", None)
     kwargs = dict(spec.get("gen") or {})
 
     voice_id = next(iter(engine._voices), None)
     if voice_id:
         results.append(measure("voice_conditioning_first_use",
-                               lambda: engine._prepare_voice(voice_id, model_id)))
+                               lambda: engine._prepare_voice(voice_id, model_id),
+                               retained=conditioning_cache))
 
     text = "The quick brown fox jumps over the lazy dog."
     results.append(measure("synthesis_default_voice",

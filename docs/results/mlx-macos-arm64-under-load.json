@@ -1,0 +1,157 @@
+{
+  "what": "python control-thread scheduling lag during blocking backend calls",
+  "proves": "schedulability of a protocol reader thread on this configuration only",
+  "does_not_prove": [
+    "MLX thread safety",
+    "that the real stdin reader and stdout writer keep up",
+    "end-to-end cancellation acknowledgement",
+    "any other backend, model, machine or MLX version"
+  ],
+  "host": {
+    "machine": "Apple M1 Max",
+    "memory_gb": 34.4,
+    "platform": "darwin-arm64",
+    "python": "3.13.5",
+    "mlx": "0.31.1"
+  },
+  "model": {
+    "id": "dots-tts-mf",
+    "repo": "appautomaton/dots-tts-mlx",
+    "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3"
+  },
+  "input_text_chars": 44,
+  "tick_interval_s": 0.05,
+  "idle_lag_ms_max": 6.2,
+  "results": [
+    {
+      "operation": "model_load",
+      "runs": [
+        {
+          "call_s": 4.358,
+          "materialise_s": 0.001418,
+          "arrays_evaluated": 1,
+          "ticks_seen": 67,
+          "ticks_expected": 87,
+          "lag_ms": {
+            "p50": 5.0,
+            "p95": 16.3,
+            "max": 621.4
+          }
+        }
+      ]
+    },
+    {
+      "operation": "voice_conditioning_first_use",
+      "runs": [
+        {
+          "call_s": 79.995,
+          "materialise_s": 6e-06,
+          "arrays_evaluated": 2,
+          "ticks_seen": 1453,
+          "ticks_expected": 1600,
+          "lag_ms": {
+            "p50": 4.9,
+            "p95": 10.2,
+            "max": 47.9
+          }
+        }
+      ]
+    },
+    {
+      "operation": "synthesis_default_voice",
+      "runs": [
+        {
+          "call_s": 6.906,
+          "materialise_s": 1e-05,
+          "arrays_evaluated": 1,
+          "ticks_seen": 119,
+          "ticks_expected": 138,
+          "lag_ms": {
+            "p50": 5.1,
+            "p95": 19.3,
+            "max": 89.7
+          }
+        },
+        {
+          "call_s": 4.641,
+          "materialise_s": 1.1e-05,
+          "arrays_evaluated": 1,
+          "ticks_seen": 83,
+          "ticks_expected": 93,
+          "lag_ms": {
+            "p50": 5.1,
+            "p95": 13.1,
+            "max": 23.3
+          }
+        },
+        {
+          "call_s": 5.209,
+          "materialise_s": 0.000137,
+          "arrays_evaluated": 1,
+          "ticks_seen": 89,
+          "ticks_expected": 104,
+          "lag_ms": {
+            "p50": 5.5,
+            "p95": 26.4,
+            "max": 88.2
+          }
+        }
+      ]
+    },
+    {
+      "operation": "synthesis_cloned_voice",
+      "runs": [
+        {
+          "call_s": 24.033,
+          "materialise_s": 6e-06,
+          "arrays_evaluated": 1,
+          "ticks_seen": 416,
+          "ticks_expected": 481,
+          "lag_ms": {
+            "p50": 5.1,
+            "p95": 20.4,
+            "max": 170.5
+          }
+        },
+        {
+          "call_s": 22.569,
+          "materialise_s": 7e-06,
+          "arrays_evaluated": 1,
+          "ticks_seen": 392,
+          "ticks_expected": 451,
+          "lag_ms": {
+            "p50": 5.0,
+            "p95": 19.8,
+            "max": 158.4
+          }
+        },
+        {
+          "call_s": 23.612,
+          "materialise_s": 7.9e-05,
+          "arrays_evaluated": 1,
+          "ticks_seen": 414,
+          "ticks_expected": 472,
+          "lag_ms": {
+            "p50": 5.0,
+            "p95": 17.5,
+            "max": 120.0
+          }
+        }
+      ]
+    }
+  ],
+  "conditions": {
+    "concurrent_load": "the application and its own sidecar were running, with a second copy of the model resident; conditioning took 80s here against 37s on a quiet machine, so these figures are contended, not best-case"
+  },
+  "coverage": {
+    "materialisation_verified": [
+      "voice_conditioning_first_use",
+      "synthesis_default_voice",
+      "synthesis_cloned_voice"
+    ],
+    "materialisation_unverified": [
+      "model_load"
+    ],
+    "why": "the array walk reaches 1 array for a whole model, so the weights are not being found; model_load timing may exclude weight materialisation and must not be read as time-to-ready-for-generation"
+  }
+}
