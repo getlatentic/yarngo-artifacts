@@ -373,8 +373,8 @@ compose:
     en: "Generating — about %{seconds} seconds left"
     sk: "Generuje sa — ostáva približne %{seconds} s"
   written_of:
-    en: "%{written} of %{total} seconds of audio · %{rtf}× realtime"
-    sk: "%{written} z %{total} sekúnd zvuku · %{rtf}× reálneho času"
+    en: "part %{done} of %{chunks} · %{written} seconds written · %{rtf}× realtime"
+    sk: "časť %{done} z %{chunks} · %{written} s zapísaných · %{rtf}× reálny čas"
   write_first:
     en: Write something first. The model's own voice is ready — nothing to record.
     sk: Najprv niečo napíšte. Predvolený hlas je pripravený — nič netreba nahrávať.

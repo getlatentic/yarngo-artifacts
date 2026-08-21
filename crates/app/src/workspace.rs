@@ -358,13 +358,17 @@ impl VoiceStudio {
                     true,
                     false,
                 )
+                // A running row is taller by the height of its own progress
+                // bar. At the fixed 52px the bar sat on top of the line that
+                // says "generating", clipping it.
+                .when(running, |d| d.h(px(62.0)))
                 .when(running, |d| {
                     d.child(
                         div()
                             .absolute()
                             .left(px(9.0))
                             .right(px(9.0))
-                            .bottom(px(5.0))
+                            .bottom(px(8.0))
                             .h(px(3.0))
                             .rounded_full()
                             .bg(theme::hex(0xFFE0C2))
@@ -1073,13 +1077,21 @@ impl VoiceStudio {
                     .child(
                         crate::ui::mono(
                             match rtf {
-                                Some(rtf) => t!(
-                                    "compose.written_of",
-                                    written = format!("{written:.0}"),
-                                    total = format!("{:.0}", self.expected_s),
-                                    rtf = realtime(rtf)
-                                )
-                                .to_string(),
+                                // Chunks done, and seconds actually written.
+                                // Both are counted. The old line divided by a
+                                // word-count estimate and so could read "163
+                                // of 149 seconds".
+                                Some(rtf) => {
+                                    let p = self.progress.as_ref();
+                                    t!(
+                                        "compose.written_of",
+                                        done = p.map(|p| p.chunks_done).unwrap_or(0).to_string(),
+                                        chunks = p.map(|p| p.chunks).unwrap_or(0).to_string(),
+                                        written = format!("{written:.0}"),
+                                        rtf = realtime(rtf)
+                                    )
+                                    .to_string()
+                                }
                                 None => t!("compose.starting").to_string(),
                             },
                             11.5,
@@ -1181,6 +1193,10 @@ impl VoiceStudio {
                 div()
                     .flex_1()
                     .min_h(px(0.0))
+                    // Without this the field paints over the count and the
+                    // border beneath it once the text is longer than the box:
+                    // gpui does not clip to the box on its own.
+                    .overflow_hidden()
                     .text_size(px(15.0))
                     .line_height(px(25.5))
                     .child(Textarea::new(&self.text).appearance(false).h_full()),

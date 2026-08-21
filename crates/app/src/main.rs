@@ -997,13 +997,24 @@ impl VoiceStudio {
         cx.notify();
     }
 
-    /// Seconds still to run, from what has been written against what was
-    /// asked for, at the rate this machine is actually managing. `None` until
-    /// the first chunk lands, because until then there is no rate to use.
+    /// Seconds still to run, measured in chunks finished rather than seconds of
+    /// audio against a guess.
+    ///
+    /// This used to divide by `expected_s`, which is a word count over an
+    /// assumed speaking rate. Real speech regularly overshoots it, and when it
+    /// did the remainder clamped to zero: the interface said "163 of 149
+    /// seconds" and "about 0 seconds left" while generation carried on. Chunks
+    /// are counted, not estimated, so the figure only ever moves at a chunk
+    /// boundary and cannot run past the end.
+    ///
+    /// `None` until the first chunk lands, because until then there is no
+    /// measured rate to project from — and a number invented before the first
+    /// measurement is what made the estimate swing.
     pub(crate) fn seconds_left(&self) -> Option<f32> {
         let p = self.progress.as_ref()?;
-        (p.written_s > 0.0 && p.elapsed_s > 0.0)
-            .then(|| (self.expected_s - p.written_s).max(0.0) * (p.elapsed_s / p.written_s))
+        let (done, total) = (p.chunks_done, p.chunks);
+        (done > 0 && total > done && p.elapsed_s > 0.0)
+            .then(|| p.elapsed_s / done as f32 * (total - done) as f32)
     }
 
     /// How far the running generation is, by chunks finished — a fact, where

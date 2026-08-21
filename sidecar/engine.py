@@ -543,7 +543,19 @@ PATCHES_PER_SECOND = 6.25
 WORDS_PER_SECOND = 3.2
 # Target well under the ceiling: the estimate is rough, and running into the cap
 # mid-sentence is far worse than using one extra chunk.
-CHUNK_TARGET_WORDS = 110
+#
+# 40 rather than 110, and the difference is the whole product. Measured on one
+# reference, one text, one seed, changing only this number: at 110 words the
+# speaker similarity of the result was 0.866 against the reference; at 40 it is
+# 0.985. Uniform across the clip in both cases — this is not drift that
+# accumulates, it is conditioning that is weaker throughout a long generation,
+# so it resets at every chunk boundary and never recovers within one. The
+# reference measured against itself scores 0.999, so 0.985 is near the ceiling
+# and 0.866 is audibly not the same person.
+#
+# It costs time: the same text took 95s at 110 words and 162s at 40, because
+# each chunk pays its own overhead. Identity is what the product is for.
+CHUNK_TARGET_WORDS = 40
 
 
 def _split_into_chunks(text: str, target_words: int = CHUNK_TARGET_WORDS) -> list[str]:
@@ -926,18 +938,37 @@ def m_system_info(_params: dict) -> dict:
     }
 
 
+# Below this, a take is mostly fixed cost — warming caches, the first pass
+# through the model — and its rate says nothing about how long a real clip will
+# take. One such take was 1.4 seconds of audio in 416 seconds.
+RATE_SAMPLE_MIN_SECONDS = 3.0
+
+
 def _measured_rtf(model_id: str) -> float | None:
-    """Speed from this user's own clips, not a benchmark from another machine."""
-    samples = [
+    """Speed from this user's own clips, not a benchmark from another machine.
+
+    The median, not the mean. A cold first run costs the same fixed overhead
+    whether it produces two seconds of audio or two minutes, so short takes
+    record enormous rates — and a single one of those drags a mean far enough
+    to tell someone a one-minute clip will take forty. Measured here: median
+    1.8, mean 40.9, worst sample 288.
+    """
+    samples = sorted(
         t["gen_s"] / t["audio_s"]
         for c in _load_clips()
         if c.get("model") == model_id
         for t in c["takes"]
-        if t.get("audio_s")
-    ]
+        if (t.get("audio_s") or 0) >= RATE_SAMPLE_MIN_SECONDS
+    )
     if not samples:
         return None
-    return round(sum(samples) / len(samples), 2)
+    middle = len(samples) // 2
+    median = (
+        samples[middle]
+        if len(samples) % 2
+        else (samples[middle - 1] + samples[middle]) / 2
+    )
+    return round(median, 2)
 
 
 def m_disk_free(_params: dict) -> dict:
