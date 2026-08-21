@@ -86,9 +86,6 @@ CREATE TABLE voice_revisions (
     id              TEXT PRIMARY KEY,
     voice_id        TEXT NOT NULL,
     source_asset_id TEXT,
-    -- Kept as it was at this revision, so a clip can say what it was made with
-    -- even after the profile is renamed or gone.
-    label_at_revision TEXT NOT NULL,
     created_at      TEXT NOT NULL,
     deleted_at      TEXT,
 
@@ -119,12 +116,17 @@ CREATE TABLE clips (
     id                TEXT PRIMARY KEY,
     name              TEXT NOT NULL,
     text              TEXT NOT NULL,
-    -- Which voice spoke it. `built_in` means the model's own, and is why this
-    -- is a named kind rather than a null revision: "no custom voice" and "the
-    -- voice is gone" are different facts and must not share a representation.
+    -- Where the voice came from, and nothing about what became of it. A clip
+    -- made with a custom voice stays custom after that voice is deleted; the
+    -- deletion is the profile's state, and saying so here would be two places
+    -- to look and one of them wrong.
     voice_kind        TEXT NOT NULL,  -- built_in | custom
     voice_revision_id TEXT,
-    audio_asset_id    TEXT NOT NULL,
+    -- What the voice was called when this was made. Presentation history, kept
+    -- apart from the revision, which is about which recording was used: a
+    -- rename changes the name and not the identity. Null where it was never
+    -- recorded, which is every clip made before this column existed.
+    voice_label_at_generation TEXT,
     model_id          TEXT,
     -- What was not recorded when this clip was made. Legacy rows say so rather
     -- than borrowing today's values and presenting them as history.
@@ -133,11 +135,26 @@ CREATE TABLE clips (
     deleted_at        TEXT,
 
     FOREIGN KEY (voice_revision_id) REFERENCES voice_revisions(id) ON DELETE RESTRICT,
-    FOREIGN KEY (audio_asset_id)    REFERENCES assets(id)          ON DELETE RESTRICT,
     CHECK (voice_kind IN ('built_in', 'custom')),
     CHECK (voice_kind = 'built_in' OR voice_revision_id IS NOT NULL)
 );
 
+-- One reading of a clip. Editing the text keeps the old audio, so a clip is
+-- several of these and the newest is only the newest.
+CREATE TABLE clip_takes (
+    id             TEXT PRIMARY KEY,
+    clip_id        TEXT NOT NULL,
+    audio_asset_id TEXT NOT NULL,
+    audio_seconds  REAL,
+    generated_seconds REAL,
+    seed           INTEGER,
+    created_at     TEXT NOT NULL,
+
+    FOREIGN KEY (clip_id)        REFERENCES clips(id)  ON DELETE RESTRICT,
+    FOREIGN KEY (audio_asset_id) REFERENCES assets(id) ON DELETE RESTRICT
+);
+
+CREATE INDEX idx_clip_takes_clip ON clip_takes(clip_id);
 CREATE INDEX idx_clips_voice_revision ON clips(voice_revision_id);
 CREATE INDEX idx_clips_created ON clips(created_at);
 

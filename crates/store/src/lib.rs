@@ -10,10 +10,14 @@
 //! the machinery that would hide it, and the queries are the interesting part.
 
 pub mod connection;
+pub mod import;
 pub mod jobs;
 pub mod migrations;
+pub mod voices;
 
 pub use connection::Store;
+pub use import::{ImportReport, Legacy};
+pub use voices::VoiceProvenance;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StoreError {
