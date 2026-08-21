@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/speech-engine", "crates/app"]
+members = ["crates/core", "crates/store", "crates/speech-engine", "crates/app"]
 
 [workspace.package]
 version = "0.1.0-alpha.1"

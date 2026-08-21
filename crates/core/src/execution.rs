@@ -138,6 +138,25 @@ impl Job {
         }
     }
 
+    /// Rebuild a job from what was written down. The only way to arrive at a
+    /// state without passing through the moves that lead to it, and therefore
+    /// only for the store: everything else must go through the transitions.
+    pub fn restored(
+        id: impl Into<String>,
+        kind: DurableJobKind,
+        state: JobStatus,
+        current_execution: Option<String>,
+        retry_of: Option<String>,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            kind,
+            retry_of,
+            state,
+            current_execution,
+        }
+    }
+
     pub fn state(&self) -> JobStatus {
         self.state
     }
@@ -208,11 +227,16 @@ impl Job {
 
     /// The engine carrying this job is gone.
     ///
+    /// Named for the event rather than exposed as a move to `Queued`. Returning
+    /// running work to the queue is only ever right because the thing running it
+    /// vanished, and a caller able to say so for any other reason could restart
+    /// work that is still in progress.
+    ///
     /// The attempt is over; the job usually is not. It returns to waiting for
     /// an engine that can take it — unless stopping had already been asked for,
     /// in which case resuming would restart work the person cancelled, and the
     /// engine going is how that cancellation finally took effect.
-    pub fn engine_lost(&mut self, execution: &mut Execution) -> Applied {
+    pub fn execution_interrupted(&mut self, execution: &mut Execution) -> Applied {
         if self.state.is_terminal() {
             return Applied::AlreadyFinished { state: self.state };
         }
@@ -323,7 +347,7 @@ mod tests {
     #[test]
     fn an_interrupted_execution_returns_its_job_to_the_queue() {
         let (mut job, mut exec) = dispatched();
-        assert_eq!(job.engine_lost(&mut exec), Applied::Moved { to: JobStatus::Queued });
+        assert_eq!(job.execution_interrupted(&mut exec), Applied::Moved { to: JobStatus::Queued });
         assert_eq!(exec.state(), ExecutionStatus::Interrupted);
         assert_eq!(job.state(), JobStatus::Queued);
         assert_eq!(job.current_execution(), None);
@@ -333,7 +357,7 @@ mod tests {
     #[test]
     fn a_queued_job_is_dispatched_to_a_second_attempt() {
         let (mut job, mut first) = dispatched();
-        job.engine_lost(&mut first);
+        job.execution_interrupted(&mut first);
         assert_eq!(job.dispatch("exec-2"), Applied::Moved { to: JobStatus::Running });
         assert_eq!(job.current_execution(), Some("exec-2"));
         assert_eq!(job.id, "job-1", "recovery changed which job this is");
@@ -344,7 +368,7 @@ mod tests {
     #[test]
     fn a_late_completion_from_the_first_attempt_is_ignored() {
         let (mut job, mut first) = dispatched();
-        job.engine_lost(&mut first);
+        job.execution_interrupted(&mut first);
         job.dispatch("exec-2");
         assert_eq!(
             job.observe("exec-1", Observation::Completed),
@@ -360,7 +384,7 @@ mod tests {
     #[test]
     fn the_second_attempt_completes_the_job() {
         let (mut job, mut first) = dispatched();
-        job.engine_lost(&mut first);
+        job.execution_interrupted(&mut first);
         job.dispatch("exec-2");
         let mut second = Execution::started("exec-2", "job-1", "session-2");
         assert_eq!(
@@ -380,17 +404,39 @@ mod tests {
         let (mut job, mut exec) = dispatched();
         job.request_cancel();
         assert_eq!(
-            job.engine_lost(&mut exec),
+            job.execution_interrupted(&mut exec),
             Applied::Moved { to: JobStatus::Cancelled }
         );
         assert_eq!(exec.state(), ExecutionStatus::Interrupted);
+    }
+
+    /// The two ways a cancellation ends differ in what the attempt did, and the
+    /// difference is the whole diagnostic value: one engine stopped when asked,
+    /// the other was killed for not stopping.
+    #[test]
+    fn a_cancelled_attempt_and_an_abandoned_one_are_told_apart() {
+        let (mut observed, mut stopped) = dispatched();
+        observed.request_cancel();
+        observed.settle(&mut stopped, Observation::Cancelled);
+        assert_eq!(observed.state(), JobStatus::Cancelled);
+        assert_eq!(stopped.state(), ExecutionStatus::Cancelled);
+
+        let (mut abandoned, mut vanished) = dispatched();
+        abandoned.request_cancel();
+        abandoned.execution_interrupted(&mut vanished);
+        assert_eq!(abandoned.state(), JobStatus::Cancelled);
+        assert_eq!(
+            vanished.state(),
+            ExecutionStatus::Interrupted,
+            "an engine that was killed is not one that cancelled"
+        );
     }
 
     /// An attempt that ended is not revived by recovery; recovery makes another.
     #[test]
     fn an_interrupted_attempt_stays_interrupted() {
         let (mut job, mut exec) = dispatched();
-        job.engine_lost(&mut exec);
+        job.execution_interrupted(&mut exec);
         assert!(!exec.interrupt(), "a finished attempt moved again");
         assert_eq!(exec.state(), ExecutionStatus::Interrupted);
     }
