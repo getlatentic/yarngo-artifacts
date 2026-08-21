@@ -100,14 +100,25 @@ CREATE INDEX idx_voice_revisions_voice ON voice_revisions(voice_id);
 -- something that did.
 CREATE TABLE consent_events (
     id                TEXT PRIMARY KEY,
-    voice_revision_id TEXT NOT NULL,
+    -- Null when the record cannot be attached to anything here. Consent is
+    -- evidence about a person's permission, and it outliving the voice it was
+    -- given for is a reason to keep it, not to discard it.
+    voice_revision_id TEXT,
+    -- Who the legacy record named, when that no longer resolves. Kept verbatim
+    -- so the row can still be read by a human deciding what it was.
+    legacy_subject_id TEXT,
+    -- linked      attached to a revision that exists
+    -- legacy_orphan  named something this store has no record of
+    classification    TEXT NOT NULL,
     event_type        TEXT NOT NULL,  -- granted | revoked
     statement         TEXT,
     app_version       TEXT,
     source            TEXT,
     occurred_at       TEXT NOT NULL,
 
-    FOREIGN KEY (voice_revision_id) REFERENCES voice_revisions(id) ON DELETE RESTRICT
+    FOREIGN KEY (voice_revision_id) REFERENCES voice_revisions(id) ON DELETE RESTRICT,
+    CHECK (classification IN ('linked', 'legacy_orphan')),
+    CHECK ((classification = 'linked') = (voice_revision_id IS NOT NULL))
 );
 
 CREATE INDEX idx_consent_events_revision ON consent_events(voice_revision_id);
@@ -120,6 +131,13 @@ CREATE TABLE clips (
     -- made with a custom voice stays custom after that voice is deleted; the
     -- deletion is the profile's state, and saying so here would be two places
     -- to look and one of them wrong.
+    --
+    -- On the clip rather than the take because every take of a clip is made
+    -- with the clip's own voice and model: regenerating reads them from the
+    -- clip, and choosing a voice only ever touches a draft. If regenerating
+    -- ever takes the current selection instead, these three columns and
+    -- `model_id` move to `clip_takes`, because then a clip stops having one
+    -- voice.
     voice_kind        TEXT NOT NULL,  -- built_in | custom
     voice_revision_id TEXT,
     -- What the voice was called when this was made. Presentation history, kept

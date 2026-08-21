@@ -32,9 +32,10 @@ pub struct ImportReport {
     pub consent_events: usize,
     /// Rows already present and identical. A second run is all of these.
     pub unchanged: usize,
-    /// Consent entries naming a voice that does not exist. Reported rather than
-    /// dropped: they are usually probes from development, but silently
-    /// discarding a consent record is not a thing to do quietly.
+    /// Consent entries naming a voice this store has no record of. Kept, not
+    /// dropped: whether they are development probes or evidence is not the
+    /// importer's call to make, and the one irreversible option is the one it
+    /// must not take on its own.
     pub consent_without_voice: Vec<String>,
     /// Files a record points at that are not on the disk.
     pub missing_files: Vec<String>,
@@ -215,9 +216,9 @@ impl Store {
         }
 
         for (index, consent) in legacy.consent.iter().enumerate() {
-            if !legacy.voices.contains_key(&consent.voice_id) {
+            let linked = legacy.voices.contains_key(&consent.voice_id);
+            if !linked {
                 report.consent_without_voice.push(consent.voice_id.clone());
-                continue;
             }
             let id = format!("consent:{}:{index}", consent.voice_id);
             if put(
@@ -225,7 +226,23 @@ impl Store {
                 "consent_events",
                 &id,
                 &[
-                    ("voice_revision_id", text(&revision_of(&consent.voice_id))),
+                    (
+                        "voice_revision_id",
+                        if linked {
+                            text(&revision_of(&consent.voice_id))
+                        } else {
+                            rusqlite::types::Value::Null
+                        },
+                    ),
+                    (
+                        "legacy_subject_id",
+                        if linked {
+                            rusqlite::types::Value::Null
+                        } else {
+                            text(&consent.voice_id)
+                        },
+                    ),
+                    ("classification", text(if linked { "linked" } else { "legacy_orphan" })),
                     ("event_type", text("granted")),
                     ("statement", maybe(consent.statement.as_deref())),
                     ("app_version", maybe(consent.app_version.as_deref())),

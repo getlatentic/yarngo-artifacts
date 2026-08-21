@@ -217,8 +217,29 @@ fn everything_in_the_snapshot_arrives_field_for_field() {
     assert_eq!(report.voices, 2);
     assert_eq!(report.takes, 4, "a clip with two takes lost one");
     assert_eq!(report.assets, 6, "two recordings and four generated files");
-    assert_eq!(report.consent_events, 1);
+    // Both, including the one naming a voice that does not exist. Whether that
+    // is a development probe or evidence is not the importer's decision.
+    assert_eq!(report.consent_events, 2);
     assert_eq!(report.consent_without_voice, ["consent-probe"]);
+    let (linked, orphan): (i64, i64) = store
+        .raw()
+        .query_row(
+            "SELECT sum(classification = 'linked'), sum(classification = 'legacy_orphan')
+               FROM consent_events",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("classification");
+    assert_eq!((linked, orphan), (1, 1));
+    let subject: Option<String> = store
+        .raw()
+        .query_row(
+            "SELECT legacy_subject_id FROM consent_events WHERE classification = 'legacy_orphan'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("subject");
+    assert_eq!(subject.as_deref(), Some("consent-probe"), "the record forgot who it named");
 
     for clip in &legacy.clips {
         let (name, text, kind, revision, created, provenance): (
@@ -430,7 +451,7 @@ fn the_real_store_imports_completely() {
          {:<3} clips              {:<3}\n  \
          {:<3} voices             {:<3}\n  \
          {:<3} takes              {:<3}\n  \
-         {:<3} consent entries    {:<3} ({} named no voice)\n  \
+         {:<3} consent entries    {:<3} ({} unlinked)\n  \
          {:<3} missing files",
         legacy.clips.len(),
         report.clips,
@@ -449,6 +470,13 @@ fn the_real_store_imports_completely() {
     assert_eq!(
         report.takes,
         legacy.clips.iter().map(|c| c.takes.len()).sum::<usize>()
+    );
+    // Every consent record is kept, whether or not it still names a voice.
+    assert_eq!(
+        report.consent_events,
+        legacy.consent.len(),
+        "consent records were dropped: {:?}",
+        report.consent_without_voice
     );
     assert!(
         report.missing_files.is_empty(),
@@ -489,17 +517,58 @@ fn the_real_store_imports_completely() {
     }
 }
 
-/// Nothing in the importer opens a legacy file for writing.
+/// Proof rather than inspection: the bytes of every legacy file are the same
+/// afterwards. A source scan for `File::create` proves nothing — a write can go
+/// through `OpenOptions`, a helper, another module, or a library — and it would
+/// keep passing while any of those did it.
 #[test]
-fn the_importer_never_writes_to_the_legacy_store() {
-    let source = std::fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("src/import.rs"),
-    )
-    .expect("read importer");
-    for forbidden in ["File::create", "write(", "OpenOptions", "remove_file", "rename("] {
-        assert!(
-            !source.contains(forbidden),
-            "the importer contains {forbidden:?}, which can modify the legacy store"
-        );
-    }
+fn the_legacy_files_are_byte_for_byte_unchanged() {
+    let Some(legacy) = real_legacy() else {
+        eprintln!("no application data on this machine; nothing to leave alone");
+        return;
+    };
+
+    let mut watched: Vec<PathBuf> = vec![
+        data_dir().join("clips/clips.json"),
+        data_dir().join("voices/voices.json"),
+        data_dir().join("consent.log"),
+    ];
+    // Every file the records point at, too: an importer that rewrote a WAV in
+    // place would pass a check that only watched the manifests.
+    watched.extend(legacy.voices.values().map(|v| PathBuf::from(&v.reference_audio)));
+    watched.extend(
+        legacy
+            .clips
+            .iter()
+            .flat_map(|c| c.takes.iter())
+            .map(|t| PathBuf::from(&t.path)),
+    );
+
+    let digest = |paths: &[PathBuf]| -> Vec<(PathBuf, u64, Vec<u8>)> {
+        paths
+            .iter()
+            .filter(|path| path.exists())
+            .map(|path| {
+                let bytes = std::fs::read(path).expect("read");
+                let length = bytes.len() as u64;
+                // The whole content for the manifests, a sample for the audio:
+                // reading tens of megabytes twice to prove nothing moved is a
+                // cost without a matching risk.
+                let sample = if length > 1_000_000 {
+                    bytes[..4096].to_vec()
+                } else {
+                    bytes
+                };
+                (path.clone(), length, sample)
+            })
+            .collect()
+    };
+
+    let before = digest(&watched);
+    assert!(before.len() > 3, "nothing was watched");
+
+    let mut store = Store::in_memory().expect("store");
+    store.import_legacy(&legacy).expect("import");
+
+    assert_eq!(digest(&watched), before, "the importer modified the legacy store");
 }
