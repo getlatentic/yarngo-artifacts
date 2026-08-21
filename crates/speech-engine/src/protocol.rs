@@ -1,10 +1,18 @@
-//! The wire, version 2: correlated replies and unsolicited events.
+//! The Yarngo engine API: JSON-RPC 2.0, one object per line, over the sidecar's
+//! stdio.
 //!
-//! Version 1 wrote a line and read the next one back, which made every reply
-//! the answer to the last question asked. Nothing else could arrive, so
-//! progress and cancellation had to travel by file — the only channel that
-//! stayed open to a process that was busy — and every cheap call queued behind
-//! whatever long one was running.
+//! The wire is not ours. Correlating a reply to its request by id regardless of
+//! arrival order, sending a notification that expects no reply, and reporting a
+//! fault in a defined shape are all JSON-RPC 2.0; writing our own version of
+//! them would only mean getting them subtly wrong. What is ours is the methods,
+//! and the concurrency underneath — which is what the specification is silent
+//! about.
+//!
+//! The previous version wrote a line and read the next one back, which made
+//! every reply the answer to the last question asked. Nothing else could
+//! arrive, so progress and cancellation had to travel by file — the only
+//! channel that stayed open to a process that was busy — and every cheap call
+//! queued behind whatever long one was running.
 //!
 //! Here a reader thread owns the child's output and sorts what comes off it.
 //! Anything carrying an `id` is a reply and goes to whoever is waiting for that
@@ -12,7 +20,10 @@
 //! thread owns the input, so two callers cannot interleave halves of a line.
 //!
 //! Both threads outlive individual requests, which is the point: the engine can
-//! speak while it works, and a request can be answered out of order.
+//! speak while it works, and a cheap call can be answered while an expensive one
+//! is still running. Model operations do not overtake each other — the sidecar
+//! runs those one at a time — so what arrives out of order is a broker reply
+//! ahead of a model reply asked for first.
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -27,10 +38,27 @@ use serde_json::{json, Value};
 
 use crate::{EngineError, Result};
 
-/// The version this build speaks. The sidecar states its own during the
-/// opening exchange, and a disagreement stops the connection there rather than
-/// at the first message whose shape has changed.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const JSONRPC_VERSION: &str = "2.0";
+
+/// The engine API's own version — the methods, not the wire. The sidecar states
+/// its own during the opening exchange, and a disagreement stops the connection
+/// there rather than at the first message whose shape has changed.
+pub const API_VERSION: u32 = 1;
+
+/// JSON-RPC's own codes, for faults in the exchange itself.
+pub mod code {
+    pub const PARSE_ERROR: i64 = -32700;
+    pub const INVALID_REQUEST: i64 = -32600;
+    pub const METHOD_NOT_FOUND: i64 = -32601;
+    pub const INVALID_PARAMS: i64 = -32602;
+    pub const INTERNAL_ERROR: i64 = -32603;
+
+    /// Ours, in the range the specification leaves to the server.
+    pub const ENGINE_BUSY: i64 = -32001;
+    pub const VOICE_DELETED: i64 = -32002;
+    pub const MODEL_NOT_INSTALLED: i64 = -32003;
+    pub const JOB_ALREADY_TERMINAL: i64 = -32004;
+}
 
 /// How many messages may be queued before a producer is made to wait, and how
 /// much progress may pile up before it is dropped instead.
@@ -162,21 +190,17 @@ impl Connection {
         (connection, Events { incoming, queued })
     }
 
-    /// The opening exchange. Establishes that both sides speak the same
-    /// version before anything depends on a message shape.
+    /// The opening exchange. Establishes that both sides speak the same API
+    /// before anything depends on a method's shape.
     pub fn initialize(&self, timeout: Duration) -> Result<Value> {
-        let reply = self.request(
-            "initialize",
-            json!({ "protocol_version": PROTOCOL_VERSION }),
-            timeout,
-        )?;
-        match reply.get("protocol_version").and_then(Value::as_u64) {
-            Some(theirs) if theirs as u32 == PROTOCOL_VERSION => Ok(reply),
+        let reply = self.request("initialize", json!({ "api_version": API_VERSION }), timeout)?;
+        match reply.get("api_version").and_then(Value::as_u64) {
+            Some(theirs) if theirs as u32 == API_VERSION => Ok(reply),
             Some(theirs) => Err(EngineError::Rejected(format!(
-                "sidecar speaks protocol {theirs}, this build speaks {PROTOCOL_VERSION}"
+                "sidecar speaks engine api {theirs}, this build speaks {API_VERSION}"
             ))),
             None => Err(EngineError::Transport(
-                "sidecar did not state a protocol version".into(),
+                "sidecar did not state an engine api version".into(),
             )),
         }
     }
@@ -191,7 +215,13 @@ impl Connection {
         let (answer, wait) = sync_channel(1);
         self.pending.lock().expect("pending").insert(id, answer);
 
-        let line = json!({ "id": id, "method": method, "params": params }).to_string();
+        let line = json!({
+            "jsonrpc": JSONRPC_VERSION,
+            "id": id,
+            "method": method,
+            "params": params,
+        })
+        .to_string();
         if self.outgoing.send(line).is_err() {
             self.pending.lock().expect("pending").remove(&id);
             return Err(EngineError::NotRunning);
@@ -270,12 +300,18 @@ fn spawn_reader(
                 continue;
             }
             let Ok(message) = serde_json::from_str::<Value>(line) else {
+                // Not a frame at all.
                 // Not a frame. Reported rather than ignored: on this channel it
                 // means something is writing where the protocol lives.
                 malformed.fetch_add(1, Ordering::SeqCst);
                 eprintln!("sidecar: unparseable protocol line: {line}");
                 continue;
             };
+            if message.get("jsonrpc").and_then(Value::as_str) != Some(JSONRPC_VERSION) {
+                malformed.fetch_add(1, Ordering::SeqCst);
+                eprintln!("sidecar: message is not JSON-RPC {JSONRPC_VERSION}: {line}");
+                continue;
+            }
             route(message, &pending, &events, &queued, &dropped);
         }
         // Output ended, so nothing else is coming and nobody should keep

@@ -85,7 +85,7 @@ MODEL = {"slow": slow, "touches_state": touches_state, "explodes": explodes}
 fn the_handshake_reports_the_version_and_capabilities() {
     let (engine, _events) = connect(HANDLERS);
     let reply = engine.initialize(PATIENCE).expect("initialize");
-    assert_eq!(reply["protocol_version"], 2);
+    assert_eq!(reply["api_version"], 1);
     assert_eq!(reply["backend"], "stand-in");
 }
 
