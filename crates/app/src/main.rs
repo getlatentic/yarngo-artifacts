@@ -140,6 +140,9 @@ pub struct VoiceStudio {
     /// The seek track's painted rectangle, so a click can be turned into a
     /// position along the clip.
     track: std::rc::Rc<std::cell::Cell<Bounds<Pixels>>>,
+    /// The clip text's scroll position and viewport, read back so the view can
+    /// tell where its bottom edge falls between two lines.
+    pub(crate) text_scroll: ScrollHandle,
     /// What the running generation has written so far, polled from the engine
     /// while it works. `None` between generations.
     pub(crate) progress: Option<runtime::Progress2>,
@@ -253,6 +256,7 @@ impl VoiceStudio {
             settings_pane: settings::Pane::Models,
             voice_name,
             track: std::rc::Rc::new(std::cell::Cell::new(Bounds::default())),
+            text_scroll: ScrollHandle::new(),
             progress: None,
             expected_s: 0.0,
             generating_row: None,
@@ -1662,7 +1666,7 @@ impl Render for VoiceStudio {
                     .flex_1()
                     .min_h(px(0.0))
                     .child(self.sidebar(cx))
-                    .child(self.composer(cx))
+                    .child(self.composer(window, cx))
                     .child(self.inspector_panel(cx))
                     // Inside the body, so the title bar stays lit and the sheet
                     // sits centred on the work rather than on the window.

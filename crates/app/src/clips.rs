@@ -216,6 +216,9 @@ impl VoiceStudio {
         let Some(take) = clip.take(&take_id).or_else(|| clip.latest()).cloned() else { return };
         self.selected = Selected::Clip(clip_id, take.id);
         self.text.update(cx, |state, cx| state.set_value(clip.text.clone(), window, cx));
+        // Different words, so the place the last ones were read to means
+        // nothing here.
+        self.text_scroll.set_offset(Default::default());
         self.renaming = None;
         self.load_clip(&take.path, take.audio_s, cx);
         cx.notify();

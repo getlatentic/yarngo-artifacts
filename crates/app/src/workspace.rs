@@ -20,6 +20,26 @@ use rust_i18n::t;
 use crate::theme;
 use crate::{Status, VoiceStudio};
 
+/// The line box the clip's text is set on. The read-only view covers whatever
+/// sliver of a line its scroll viewport cuts through, and that arithmetic is
+/// only right while this is the figure the text is actually laid out with — so
+/// there is one of it.
+const TEXT_LINE: f32 = 25.5;
+
+/// How far `distance` reaches into a line, given lines on a `TEXT_LINE` grid.
+///
+/// Both of the clip text's edges are measured with this. The viewport's height
+/// gives the slack no whole number of lines can fill, and the scroll offset
+/// gives how much of a line hangs past the bottom cut once the text has moved
+/// under it. Neither can be a fixed number: covering a fixed amount only moves
+/// the halved line one further up.
+fn line_sliver(distance: f32) -> f32 {
+    let sliver = distance.rem_euclid(TEXT_LINE);
+    // Landing a whisker short of a whole line is the division's rounding, not a
+    // cut — covering that much would hide a line that is entirely visible.
+    if sliver > TEXT_LINE - 0.5 { 0.0 } else { sliver }
+}
+
 /// Words per second used to estimate spoken length before generating, so the
 /// composer can say what it will cost in time. Measured, not guessed: the
 /// Nigerian sanity run averaged about 190 wpm.
@@ -1113,14 +1133,17 @@ impl VoiceStudio {
 
     /// The words: a field while writing, the record of what was said once the
     /// clip exists, and locked while it runs.
-    fn card_body(&self, cx: &mut Context<Self>) -> Div {
+    fn card_body(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let body = div()
             .v_flex()
             .flex_1()
             .min_h(px(0.0))
             .w_full()
             .px(px(18.0))
-            .py(px(16.0))
+            .pt(px(16.0))
+            // Lighter than the top: whatever the text's bottom edge cuts through
+            // is already covered in card colour, and that reads as space too.
+            .pb(px(9.0))
             .gap(px(11.0));
 
         if self.showing_generation() {
@@ -1182,17 +1205,31 @@ impl VoiceStudio {
                             })),
                         ),
                 )
-                .child(
-                    // Bounded and scrollable. Unbounded, a long clip's words ran
-                    // past the card and painted over the line beneath it — the
-                    // composer had the same fault and this branch was missed,
-                    // because only the editable one was fixed.
+                .child({
+                    // Bounded and scrollable. Unbounded, a long clip's words run
+                    // past the card and paint over the line beneath it.
                     //
-                    // A scroll viewport cuts wherever it happens to land, and a
-                    // line of text sliced through the middle reads as broken
-                    // rather than as "there is more". So the last few pixels
-                    // fade into the card instead: the cut stops being an edge
-                    // and becomes the usual signal that the text continues.
+                    // A scroll viewport cuts wherever it lands, and a line sawn
+                    // through the middle reads as broken rather than as "there
+                    // is more". The height rarely divides into whole lines, so
+                    // the remainder is parked above the text, under the heading
+                    // where it passes for spacing — leaving the bottom edge on
+                    // the grid, and the gap above the footer the padding alone.
+                    // Scrolling then walks the cut back off the grid, and that
+                    // much of a line is covered over.
+                    let viewport = self.text_scroll.bounds().size.height.as_f32();
+                    let scrolled = self.text_scroll.offset().y.as_f32().abs();
+                    if viewport <= 0.0 {
+                        // The geometry above is last frame's, and there was no
+                        // last frame: this region has never been laid out. Ask
+                        // for another, which will have one. `cx.notify` cannot
+                        // do this from inside a render — the dirty flag it sets
+                        // is cleared by the render it is already in.
+                        window.request_animation_frame();
+                    }
+                    let slack = line_sliver(viewport);
+                    let sliver = line_sliver(scrolled);
+
                     div()
                         .relative()
                         .flex_1()
@@ -1200,35 +1237,27 @@ impl VoiceStudio {
                         .child(
                             div()
                                 .id("clip-text")
+                                .track_scroll(&self.text_scroll)
                                 .size_full()
                                 .overflow_y_scroll()
-                                // Room at the end, so scrolling to the bottom
-                                // finishes on whitespace, under the fade.
-                                .pb(px(20.0))
+                                .pt(px(slack))
                                 .text_size(px(15.0))
-                                .line_height(px(25.5))
+                                .line_height(px(TEXT_LINE))
                                 .text_color(theme::hex(0x171717))
                                 .child(clip.text.clone()),
                         )
+                        // No id and no occlude, so it never takes the scroll it
+                        // is drawn over.
                         .child(
-                            // No id and no occlude, so it never takes the
-                            // scroll it is drawn over.
                             div()
                                 .absolute()
                                 .bottom_0()
                                 .left_0()
                                 .right_0()
-                                .h(px(28.0))
-                                .bg(gpui::linear_gradient(
-                                    180.0,
-                                    gpui::linear_color_stop(
-                                        theme::surface(false).opacity(0.0),
-                                        0.0,
-                                    ),
-                                    gpui::linear_color_stop(theme::surface(false), 1.0),
-                                )),
-                        ),
-                ),
+                                .h(px(sliver))
+                                .bg(theme::surface(false)),
+                        )
+                }),
             None => body.child(
                 div()
                     .flex_1()
@@ -1425,7 +1454,7 @@ impl VoiceStudio {
             .into_any_element()
     }
 
-    pub(crate) fn composer(&self, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn composer(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .v_flex()
             .flex_1()
@@ -1444,11 +1473,64 @@ impl VoiceStudio {
                     .min_h(px(0.0))
                     .w_full()
                     .child(self.card_strip(cx))
-                    .child(self.card_body(cx))
+                    .child(self.card_body(window, cx))
                     .child(self.card_footer(cx)),
             )
             .child(self.card_actions(cx))
     }
 
 
+}
+
+#[cfg(test)]
+mod tests {
+    // Named rather than glob-imported: this module's `use gpui::*` brings in
+    // gpui's own `test` attribute, which would shadow the one below.
+    use super::{line_sliver, TEXT_LINE};
+
+    /// The whole point, stated the way the layout uses it: pad the top by the
+    /// viewport's slack and cover the bottom by the scroll's, and the text is
+    /// cut on a line boundary from any height at any offset.
+    #[test]
+    fn the_text_is_cut_on_a_line_boundary() {
+        for tenths in 0..4000 {
+            let viewport = tenths as f32 / 10.0;
+            let slack = line_sliver(viewport);
+            for scrolled in [0.0, 1.0, 13.2, 25.5, 99.9, 510.0, 1234.5] {
+                // Where the bottom edge falls, measured in the text's own grid
+                // — which starts `slack` below the top of the content.
+                let cut = viewport + scrolled - slack - line_sliver(scrolled);
+                let into_line = cut.rem_euclid(TEXT_LINE);
+                assert!(
+                    into_line < 0.01 || into_line > TEXT_LINE - 0.51,
+                    "viewport {viewport} scrolled {scrolled}: cut {cut} is {into_line} into a line"
+                );
+            }
+        }
+    }
+
+    /// Never a whole line, or padding the top strands a line's worth of space
+    /// and covering the bottom eats a line that is entirely visible.
+    #[test]
+    fn a_sliver_is_less_than_a_line() {
+        for tenths in 0..4000 {
+            let sliver = line_sliver(tenths as f32 / 10.0);
+            assert!((0.0..TEXT_LINE).contains(&sliver), "{sliver} is not a sliver");
+        }
+    }
+
+    /// A whole number of lines leaves nothing over, and must not be handed
+    /// most of a line on a rounding error.
+    #[test]
+    fn a_whole_number_of_lines_leaves_nothing_over() {
+        for lines in 1..40 {
+            assert_eq!(line_sliver(TEXT_LINE * lines as f32), 0.0, "{lines} whole lines");
+        }
+    }
+
+    /// Before the first layout there is no geometry, and nothing to do.
+    #[test]
+    fn an_unlaid_out_viewport_is_left_alone() {
+        assert_eq!(line_sliver(0.0), 0.0);
+    }
 }
