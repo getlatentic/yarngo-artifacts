@@ -12,6 +12,8 @@
 //!
 //! The copy is deleted when the sandbox is dropped.
 
+pub mod standin;
+
 use std::path::{Path, PathBuf};
 
 use serde_json::Value;

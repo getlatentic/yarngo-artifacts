@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
@@ -29,6 +30,14 @@ const PATIENCE: Duration = Duration::from_secs(900);
 /// Anything that is not inference. A model that cannot answer these has stopped
 /// being an engine.
 const PROMPT: Duration = Duration::from_secs(60);
+/// How long a generation asked to stop is given to stop.
+///
+/// Short, because the person asked for the voice to go and whatever is being
+/// generated with it was going to be refused anyway. What waiting buys is an
+/// engine that stays up rather than one that has to load its model again, and
+/// that is worth a little and not much: cancellation is checked between
+/// chunks, so a chunk already running has to finish first.
+const GRACE: Duration = Duration::from_secs(30);
 
 /// How to start a sidecar, kept because deleting a voice may have to end one
 /// and put another in its place.
@@ -121,6 +130,22 @@ struct InFlight {
     model: String,
 }
 
+/// A deletion whose voice still has work the engine has not finished with.
+///
+/// The recording cannot go while something might still be reading it, and the
+/// job cannot be called cancelled until its attempt has actually ended. So the
+/// barrier goes up at once and the rest waits here for the attempts named in
+/// `awaiting` to settle.
+struct PendingDeletion {
+    voice_id: String,
+    job_id: String,
+    awaiting: Vec<String>,
+    deadline: Instant,
+    /// The engine was asked to stop, would not, and was ended. Recorded so it
+    /// is not ended a second time while the replies are still arriving.
+    forced: bool,
+}
+
 pub struct DurableEngine {
     store: Store,
     layout: Layout,
@@ -133,6 +158,8 @@ pub struct DurableEngine {
     /// the caller's stack, because the caller returned as soon as the engine
     /// had been given the work.
     in_flight: HashMap<u64, InFlight>,
+    deleting: Vec<PendingDeletion>,
+    grace: Duration,
 }
 
 impl DurableEngine {
@@ -164,9 +191,19 @@ impl DurableEngine {
             sessions: 1,
             jobs: 0,
             in_flight: HashMap::new(),
+            deleting: Vec::new(),
+            grace: GRACE,
         };
         engine.finish_what_was_left()?;
         Ok(engine)
+    }
+
+    /// How long a generation asked to stop is given before the process running
+    /// it is ended. For tests, which cannot spend the real grace on every case
+    /// that reaches the end of it.
+    pub fn with_grace(mut self, grace: Duration) -> Self {
+        self.grace = grace;
+        self
     }
 
     /// Publications the last run did not reach, and audio nothing will claim.
@@ -202,6 +239,92 @@ impl DurableEngine {
             .connection
             .request(method, params, patience)
             .map_err(|e| EngineError::Transport(format!("{e}")))
+    }
+
+    /// Stop every synthesis still open for this voice.
+    ///
+    /// A job that was never dispatched is cancelled outright: nothing is
+    /// running, so there is nothing to ask. One that is running is recorded as
+    /// asked to stop and then asked — which reaches the engine while its
+    /// synthesis is still pending, because the connection carries ids.
+    ///
+    /// Returns the attempts that have to end before the recording can go.
+    fn stop_work_for(&mut self, voice_id: &str, at: &str) -> Result<Vec<String>, EngineError> {
+        let open = self
+            .store
+            .open_synthesis_for_voice(voice_id)
+            .map_err(store_error)?;
+        let mut awaiting = Vec::new();
+        for mut job in open {
+            match job.current_execution().map(str::to_string) {
+                None => {
+                    job.request_cancel();
+                    self.store.save_progress(&job, None, at).map_err(store_error)?;
+                }
+                Some(execution_id) => {
+                    self.request_stop(&job.id, &execution_id)?;
+                    if self.running_now(&execution_id) {
+                        awaiting.push(execution_id);
+                    }
+                }
+            }
+        }
+        Ok(awaiting)
+    }
+
+    /// Whether this engine is the one running that attempt.
+    ///
+    /// An attempt named by a job but not here belongs to a session that has
+    /// ended, and nothing is waiting for it to stop.
+    fn running_now(&self, execution_id: &str) -> bool {
+        self.in_flight
+            .values()
+            .any(|work| work.work.execution.id == execution_id)
+    }
+
+    /// Finish deletions whose work has ended.
+    fn advance_deletions(&mut self) {
+        for deletion in &mut self.deleting {
+            deletion
+                .awaiting
+                .retain(|execution_id| {
+                    self.in_flight
+                        .values()
+                        .any(|work| &work.work.execution.id == execution_id)
+                });
+        }
+        let ready: Vec<(String, String)> = self
+            .deleting
+            .iter()
+            .filter(|deletion| deletion.awaiting.is_empty())
+            .map(|deletion| (deletion.voice_id.clone(), deletion.job_id.clone()))
+            .collect();
+        self.deleting.retain(|deletion| !deletion.awaiting.is_empty());
+        for (voice_id, job_id) in ready {
+            if let Err(failure) = self.complete_deletion(&voice_id, &job_id) {
+                eprintln!("could not finish deleting {voice_id}: {failure}");
+            }
+        }
+    }
+
+    /// Forget it, or end the process that will not.
+    fn complete_deletion(&mut self, voice_id: &str, job_id: &str) -> Result<(), EngineError> {
+        let mut conditioning = EngineConditioning {
+            running: &mut self.running,
+            spawn: &self.spawn,
+            progress: &self.progress,
+        };
+        let outcome = self
+            .store
+            .finish_voice_deletion(voice_id, job_id, &mut conditioning, &now())
+            .map_err(store_error)?;
+        match outcome {
+            DeletionOutcome::Deleted { .. } | DeletionOutcome::AlreadyDeleted => Ok(()),
+            // The recording stays and the voice stays refused for new work.
+            // Said plainly rather than reported as success: nothing here can
+            // show the engine has forgotten it.
+            DeletionOutcome::Blocked { reason } => Err(EngineError::Transport(reason)),
+        }
     }
 
     /// Ask one attempt to stop.
@@ -323,6 +446,45 @@ impl SpeechEngine for DurableEngine {
         Ok(())
     }
 
+    /// A generation asked to stop and still going is ended.
+    ///
+    /// Cooperative cancellation is checked between chunks, so an engine part
+    /// way through one takes as long as that chunk. Past the grace, the answer
+    /// is not to wait longer: the person asked for the voice to go, and a
+    /// process that has been asked to stop and has not is a process that can
+    /// still speak in it. Ending it is what makes that untrue.
+    ///
+    /// Its pending requests then fail, which arrives here as the attempt being
+    /// interrupted, and the deletion finishes on that.
+    fn attend(&mut self) {
+        let overdue = self
+            .deleting
+            .iter()
+            .any(|deletion| !deletion.forced && Instant::now() >= deletion.deadline);
+        if overdue {
+            let mut conditioning = EngineConditioning {
+                running: &mut self.running,
+                spawn: &self.spawn,
+                progress: &self.progress,
+            };
+            let ended = conditioning.terminate();
+            // A replacement failing leaves the application without an engine,
+            // which is a problem — and not one that justifies keeping a
+            // recording somebody asked to delete.
+            let replaced = conditioning.restart();
+            for deletion in &mut self.deleting {
+                deletion.forced = true;
+            }
+            if let Err(failure) = ended {
+                eprintln!("could not end the engine holding a deleted voice: {failure}");
+            }
+            if let Err(failure) = replaced {
+                eprintln!("no engine is running: {failure}");
+            }
+        }
+        self.advance_deletions();
+    }
+
     fn progress(&mut self) -> Option<Generating> {
         self.progress.latest()
     }
@@ -385,28 +547,37 @@ impl SpeechEngine for DurableEngine {
         self.voices()
     }
 
+    /// Put the barrier up, stop what is running, and finish when it has.
+    ///
+    /// Returns once the voice is refused: from that moment nothing new can be
+    /// conditioned with it, generated with it, or published against it. What
+    /// comes after — an attempt actually ending, the recording leaving the disk
+    /// — waits for work already running, and cannot be waited for here: the
+    /// reply that settles that work arrives on this same thread.
     fn delete_voice(&mut self, voice_id: &str) -> Result<(), EngineError> {
         let (job_id, _) = self.next_job();
         let at = now();
-        self.store
+        let began = self
+            .store
             .begin_voice_deletion(voice_id, &job_id, &at)
             .map_err(store_error)?;
-        let mut conditioning = EngineConditioning {
-            running: &mut self.running,
-            spawn: &self.spawn,
-            progress: &self.progress,
-        };
-        let outcome = self
-            .store
-            .finish_voice_deletion(voice_id, &job_id, &mut conditioning, &at)
-            .map_err(store_error)?;
-        match outcome {
-            DeletionOutcome::Deleted { .. } | DeletionOutcome::AlreadyDeleted => Ok(()),
-            // The recording stays and the voice stays refused for new work. Said
-            // plainly rather than reported as success: nothing here can show the
-            // engine has forgotten it.
-            DeletionOutcome::Blocked { reason } => Err(EngineError::Transport(reason)),
+        if !began {
+            // Already gone. Answered against the tombstone rather than started
+            // a second time.
+            return Ok(());
         }
+        let awaiting = self.stop_work_for(voice_id, &at)?;
+        if awaiting.is_empty() {
+            return self.complete_deletion(voice_id, &job_id);
+        }
+        self.deleting.push(PendingDeletion {
+            voice_id: voice_id.to_string(),
+            job_id,
+            awaiting,
+            deadline: Instant::now() + self.grace,
+            forced: false,
+        });
+        Ok(())
     }
 
     fn clips(&mut self) -> Result<Vec<Clip>, EngineError> {
@@ -545,6 +716,9 @@ impl SpeechEngine for DurableEngine {
                 crate::Finished::Settled(outcome) => outcome,
             }
         };
+
+        // Something may have been waiting for exactly this attempt to end.
+        self.advance_deletions();
 
         let Outcome::Published { take_id, path } = outcome else {
             return Err(EngineError::Transport(match outcome {

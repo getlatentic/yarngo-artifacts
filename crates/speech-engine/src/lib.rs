@@ -353,6 +353,15 @@ pub trait SpeechEngine {
     /// this returning.
     fn cancel_generation(&mut self) -> Result<()>;
 
+    /// A moment in which nothing was asked of the engine.
+    ///
+    /// A backend with a deadline of its own — work it asked to stop and which
+    /// has not stopped — acts on it here. Called by the thread that owns the
+    /// backend, which is the only place something can safely be done about it:
+    /// the reply that would settle the work arrives on that same thread, so a
+    /// deadline enforced by waiting would be a deadline that never fires.
+    fn attend(&mut self) {}
+
     /// What the running generation has produced so far, if one is running.
     ///
     /// On the engine rather than read from a fixed file, because how it is

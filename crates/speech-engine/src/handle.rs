@@ -17,7 +17,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
@@ -33,6 +33,11 @@ use crate::{
 /// deadline anybody is waiting on — the caller has its own — but a point past
 /// which an engine that has said nothing is not going to.
 const GENEROUS: Duration = Duration::from_secs(1800);
+
+/// How often a backend with nothing being asked of it is given a moment. Often
+/// enough that a deadline is met about when it says, rare enough that an idle
+/// application is doing nothing.
+const ATTENTION: Duration = Duration::from_millis(500);
 
 /// Turn a reply into a message the engine thread will read in its turn.
 ///
@@ -126,7 +131,16 @@ impl EngineHandle {
 
                 // Each arm replies on the caller's channel; a disconnected
                 // caller is not an error, it just means nobody is waiting.
-                for command in rx {
+                loop {
+                    let command = match rx.recv_timeout(ATTENTION) {
+                        Ok(command) => command,
+                        // Nothing was asked. The backend gets the moment.
+                        Err(RecvTimeoutError::Timeout) => {
+                            engine.attend();
+                            continue;
+                        }
+                        Err(RecvTimeoutError::Disconnected) => break,
+                    };
                     match command {
                         Command::Models(refresh, reply) => {
                             let _ = reply.send(engine.models(refresh));

@@ -246,6 +246,35 @@ impl Store {
     /// Deletions the last run did not finish. Found from the records — a voice
     /// held at the barrier with a job that never completed — rather than from
     /// anything remembered in memory, which is what a crash takes with it.
+    /// Synthesis jobs still open for anything made with this voice.
+    ///
+    /// Every revision of it, because a recording is being removed and it does
+    /// not matter which version of the voice a job named. Only jobs with an
+    /// outcome still to come: one that already has one is not work, it is
+    /// history.
+    pub fn open_synthesis_for_voice(&self, voice_id: &str) -> Result<Vec<Job>> {
+        let ids: Vec<String> = {
+            let mut statement = self.raw().prepare(
+                "SELECT j.id FROM jobs j
+                   JOIN clips c            ON c.id = j.target_id
+                   JOIN voice_revisions r  ON r.id = c.voice_revision_id
+                  WHERE r.voice_id = ?1
+                    AND j.kind = 'synthesis'
+                    AND j.state NOT IN ('completed', 'failed', 'cancelled')
+                  ORDER BY j.created_at",
+            )?;
+            let rows = statement.query_map(params![voice_id], |row| row.get(0))?;
+            rows.collect::<std::result::Result<_, _>>()?
+        };
+        let mut jobs = Vec::new();
+        for id in ids {
+            if let Some(job) = self.load_job(&id)? {
+                jobs.push(job);
+            }
+        }
+        Ok(jobs)
+    }
+
     pub fn unfinished_voice_deletions(&self) -> Result<Vec<(String, String)>> {
         let mut statement = self.raw().prepare(
             "SELECT j.target_id, j.id
