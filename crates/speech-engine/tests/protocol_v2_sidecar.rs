@@ -99,7 +99,7 @@ fn a_broker_call_is_answered_while_the_actor_works() {
     std::thread::scope(|scope| {
         scope.spawn(|| {
             engine
-                .request("slow", json!({ "job_id": "j1", "chunks": 4, "each": 0.4 }), PATIENCE)
+                .request("slow", json!({ "job_id": "j1", "execution_id": "j1/1", "chunks": 4, "each": 0.4 }), PATIENCE)
                 .expect("slow");
         });
         std::thread::sleep(Duration::from_millis(300));
@@ -123,12 +123,13 @@ fn progress_arrives_before_the_result() {
     std::thread::scope(|scope| {
         scope.spawn(|| {
             engine
-                .request("slow", json!({ "job_id": "j2", "chunks": 3, "each": 0.2 }), PATIENCE)
+                .request("slow", json!({ "job_id": "j2", "execution_id": "j2/1", "chunks": 3, "each": 0.2 }), PATIENCE)
                 .expect("slow");
         });
         let first = events.recv_timeout(PATIENCE).expect("progress");
         assert_eq!(first.method, "job.progress");
         assert_eq!(first.params["job_id"], "j2");
+        assert_eq!(first.params["execution_id"], "j2/1");
         assert_eq!(first.params["completed"], 1);
     });
 }
@@ -143,13 +144,13 @@ fn a_cancellation_is_acknowledged_at_once_and_stops_the_work() {
     std::thread::scope(|scope| {
         let work = scope.spawn(|| {
             engine
-                .request("slow", json!({ "job_id": "j3", "chunks": 20, "each": 0.2 }), PATIENCE)
+                .request("slow", json!({ "job_id": "j3", "execution_id": "j3/1", "chunks": 20, "each": 0.2 }), PATIENCE)
                 .expect("slow")
         });
         std::thread::sleep(Duration::from_millis(400));
         let at = Instant::now();
         let ack = engine
-            .request("job.cancel", json!({ "job_id": "j3" }), PATIENCE)
+            .request("job.cancel", json!({ "execution_id": "j3/1" }), PATIENCE)
             .expect("cancel");
         assert_eq!(ack["state"], "cancel_requested");
         assert!(

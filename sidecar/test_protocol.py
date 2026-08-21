@@ -154,9 +154,108 @@ def main() -> int:
     check("an event is JSON-RPC 2.0", events[0].get("jsonrpc") == "2.0", failures)
     check("an event names its method", events[0].get("method") == "job.progress", failures)
 
+    # Positional params are a different call from an empty object, and must
+    # arrive as sent.
+    seen: list = []
+    exchange(
+        [frame(id=1, method="ping", params=[])],
+        expect=1,
+        broker={"ping": lambda params: seen.append(params) or {}},
+    )
+    check("an empty positional list is preserved", seen == [[]], failures)
+
+    seen.clear()
+    exchange(
+        [frame(id=1, method="ping", params=["a", 2])],
+        expect=1,
+        broker={"ping": lambda params: seen.append(params) or {}},
+    )
+    check("positional params arrive as a list", seen == [["a", 2]], failures)
+
+    # A batch is valid JSON-RPC that this profile does not serve, and says so.
+    replies = exchange([json.dumps([{"jsonrpc": "2.0", "id": 1, "method": "ping"}])], expect=1)
+    check(
+        "a batch is refused by name",
+        "batch" in replies[0].get("error", {}).get("message", "").lower(),
+        failures,
+    )
+
+    # An explicit null id is a request, not a notification, and is answered.
+    replies = exchange([json.dumps({"jsonrpc": "2.0", "id": None, "method": "ping"})], expect=1)
+    check("an explicit null id is answered", len(replies) == 1, failures)
+    check("and answered against null", replies[0].get("id") is None, failures)
+
+    # Oversized frames are refused before they are parsed.
+    huge = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {"x": "y" * (9 * 1024 * 1024)}})
+    replies = exchange([huge], expect=1)
+    check(
+        "an oversized frame is refused",
+        replies[0].get("error", {}).get("message") == "frame exceeds the size limit",
+        failures,
+    )
+
+    # Cancellation is keyed on the execution, so a stale one cannot reach the
+    # attempt that replaced it.
+    ran: list = []
+
+    def watches(params, ctx):
+        for _ in range(20):
+            if ctx.cancelled():
+                ran.append(("stopped", ctx.execution_id))
+                return {}
+            time.sleep(0.02)
+        ran.append(("finished", ctx.execution_id))
+        return {}
+
+    exchange(
+        [
+            # Carries the job the next attempt also has: keyed on the job,
+            # this cancellation would reach it.
+            frame(id=1, method="job.cancel", params={"job_id": "abc", "execution_id": "abc/1"}),
+            frame(id=2, method="watch", params={"job_id": "abc", "execution_id": "abc/2"}),
+        ],
+        expect=2,
+        model={"watch": watches},
+    )
+    check(
+        "a cancellation for one attempt does not stop another",
+        ran and ran[-1][0] == "finished",
+        failures,
+    )
+
+    ran.clear()
+    exchange(
+        [
+            frame(id=1, method="job.cancel", params={"job_id": "abc", "execution_id": "abc/2"}),
+            frame(id=2, method="watch", params={"job_id": "abc", "execution_id": "abc/2"}),
+        ],
+        expect=2,
+        model={"watch": watches},
+    )
+    check(
+        "a cancellation for this attempt does stop it",
+        ran and ran[-1][0] == "stopped",
+        failures,
+    )
+
+    # Events carry both identifiers, so one from an abandoned attempt cannot be
+    # mistaken for the current one.
+    def emits_both(params, ctx):
+        ctx.emit("job.progress", {"completed": 1})
+        return {}
+
+    messages = exchange(
+        [frame(id=1, method="work", params={"job_id": "abc", "execution_id": "abc/7"})],
+        expect=2,
+        model={"work": emits_both},
+    )
+    events = [m for m in messages if "method" in m]
+    check("an event names its job", events[0]["params"].get("job_id") == "abc", failures)
+    check("an event names its execution", events[0]["params"].get("execution_id") == "abc/7", failures)
+
     for failure in failures:
         print(f"FAIL: {failure}", file=sys.stderr)
-    total = 21
+    total = 33
     print(f"{total - len(failures)}/{total} protocol checks passed")
     return 1 if failures else 0
 

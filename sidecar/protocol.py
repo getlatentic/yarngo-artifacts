@@ -50,6 +50,16 @@ API_VERSION = 1
 # limit; the refusal is a reply, so it is visible.
 ACTOR_QUEUE_DEPTH = 64
 
+# How much may be queued for stdout before progress starts being dropped. The
+# queue itself is unbounded, which is deliberate: blocking a sender would block
+# either the actor mid-job or the reader mid-request, and a reader that stops
+# reading cannot receive the drain that would release it.
+OUTBOX_SOFT_LIMIT = 256
+
+# The longest line either side will accept. A peer that sends more than this is
+# not one of ours, and reading it would mean allocating whatever it claims.
+MAX_FRAME_BYTES = 8 * 1024 * 1024
+
 # JSON-RPC's own codes, for faults in the exchange itself.
 PARSE_ERROR = -32700
 INVALID_REQUEST = -32600
@@ -72,7 +82,13 @@ class Emit(Protocol):
 
 @dataclass
 class Cancellation:
-    """Which jobs have been asked to stop.
+    """Which executions have been asked to stop.
+
+    Keyed on the execution rather than the job. A job may be attempted more than
+    once — after an engine restart, or a retry — and a cancellation aimed at the
+    attempt that was abandoned must not reach the one that replaced it. Rust
+    owns which attempt is current; this only has to answer about the one it was
+    told to run.
 
     Written by the reader thread the moment a cancellation arrives, read by the
     actor at whatever checkpoint it reaches next. That gap is the honest cost of
@@ -83,41 +99,72 @@ class Cancellation:
     _asked: set[str] = field(default_factory=set)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def request(self, job_id: str) -> None:
+    def request(self, execution_id: str) -> None:
         with self._lock:
-            self._asked.add(job_id)
+            self._asked.add(execution_id)
 
-    def is_requested(self, job_id: str) -> bool:
+    def is_requested(self, execution_id: str) -> bool:
         with self._lock:
-            return job_id in self._asked
+            return execution_id in self._asked
 
-    def forget(self, job_id: str) -> None:
+    def forget(self, execution_id: str) -> None:
         with self._lock:
-            self._asked.discard(job_id)
+            self._asked.discard(execution_id)
 
 
 @dataclass
 class Context:
-    """What a model operation is given beyond its parameters."""
+    """What a model operation is given beyond its parameters.
 
-    emit: Emit
+    Both identifiers travel with everything it says. The job is what the user
+    started and what Rust keeps; the execution is this attempt at it. An event
+    naming only the job could be mistaken for the current attempt when it came
+    from an abandoned one.
+    """
+
+    emit_raw: Emit
     cancellation: Cancellation
     job_id: str | None = None
+    execution_id: str | None = None
+
+    def emit(self, method: str, params: dict) -> None:
+        stamped = dict(params)
+        if self.job_id is not None:
+            stamped.setdefault("job_id", self.job_id)
+        if self.execution_id is not None:
+            stamped.setdefault("execution_id", self.execution_id)
+        self.emit_raw(method, stamped)
 
     def cancelled(self) -> bool:
-        return self.job_id is not None and self.cancellation.is_requested(self.job_id)
+        return self.execution_id is not None and self.cancellation.is_requested(
+            self.execution_id
+        )
 
 
 class Writer:
-    """The only thing that writes to stdout."""
+    """The only thing that writes to stdout.
+
+    Nothing that hands it a message ever waits. Progress is dropped once the
+    backlog passes `OUTBOX_SOFT_LIMIT` — it is the same fact at successive
+    values, and the newest supersedes what is queued. Everything else is kept,
+    because a lost reply strands a caller and a lost terminal event strands a
+    job. Blocking instead would stall the actor mid-operation, or the reader
+    mid-request, and a reader that has stopped reading cannot receive whatever
+    would have released it.
+    """
 
     def __init__(self, stream) -> None:
         self._stream = stream
         self._outbox: queue.Queue = queue.Queue()
+        self.dropped = 0
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def send(self, message: dict) -> None:
+        coalescible = message.get("method") == "job.progress"
+        if coalescible and self._outbox.qsize() >= OUTBOX_SOFT_LIMIT:
+            self.dropped += 1
+            return
         self._outbox.put(message)
 
     def _run(self) -> None:
@@ -177,11 +224,14 @@ class ModelActor:
     def _run(self) -> None:
         while True:
             request_id, method, params, is_notification = self._work.get()
-            job_id = params.get("job_id") if isinstance(params, dict) else None
+            fields = params if isinstance(params, dict) else {}
+            job_id = fields.get("job_id")
+            execution_id = fields.get("execution_id")
             context = Context(
-                emit=self._writer.event,
+                emit_raw=self._writer.event,
                 cancellation=self._cancellation,
                 job_id=job_id,
+                execution_id=execution_id,
             )
             try:
                 result = self._handlers[method](params, context)
@@ -197,8 +247,8 @@ class ModelActor:
                         request_id, INTERNAL_ERROR, f"{type(exc).__name__}: {exc}"
                     )
             finally:
-                if job_id:
-                    self._cancellation.forget(job_id)
+                if execution_id:
+                    self._cancellation.forget(execution_id)
 
 
 def _log(message: str) -> None:
@@ -234,6 +284,12 @@ def serve(
         line = line.strip()
         if not line:
             continue
+        if len(line) > MAX_FRAME_BYTES:
+            # Refused by size before it is parsed. A guard rather than a hard
+            # bound: the line has already been read to find its end, so this
+            # stops us acting on it, not receiving it.
+            writer.error(None, INVALID_REQUEST, "frame exceeds the size limit")
+            continue
         try:
             request = json.loads(line)
         except json.JSONDecodeError as exc:
@@ -252,7 +308,11 @@ def serve(
             continue
 
         method = request["method"]
-        params = request.get("params") or {}
+        # Kept as sent. `or {}` turned an empty positional list into an object,
+        # which is a different call.
+        params = request["params"] if "params" in request else {}
+        if params is None:
+            params = {}
         # Absent rather than null: a request without an id is a notification,
         # and answering one is as wrong as failing to answer a request.
         request_id = request.get("id")
@@ -274,12 +334,17 @@ def serve(
             # Answered here rather than queued, which is the point of it: a
             # cancellation that waited its turn behind the job it is cancelling
             # would arrive after the work it was meant to stop.
-            job_id = params.get("job_id")
-            if not job_id:
+            # By execution rather than by job: the caller knows which attempt is
+            # current, and a cancellation meant for an abandoned one must not
+            # reach its replacement.
+            execution_id = params.get("execution_id") if isinstance(params, dict) else None
+            if not execution_id:
                 if not is_notification:
-                    writer.error(request_id, INVALID_PARAMS, "job.cancel needs a job_id")
+                    writer.error(
+                        request_id, INVALID_PARAMS, "job.cancel needs an execution_id"
+                    )
             else:
-                cancellation.request(job_id)
+                cancellation.request(execution_id)
                 if not is_notification:
                     writer.reply(request_id, {"state": "cancel_requested"})
             continue
@@ -312,6 +377,11 @@ def serve(
 
 def _envelope_fault(request: Any) -> str | None:
     """Why this is not a JSON-RPC request, or None when it is one."""
+    if isinstance(request, list):
+        # A valid JSON-RPC construction this profile does not serve. Refused by
+        # name, so a caller learns which it is rather than guessing from a
+        # generic complaint about shape.
+        return "batches are not supported by this engine"
     if not isinstance(request, dict):
         return "a request must be an object"
     if request.get("jsonrpc") != JSONRPC_VERSION:

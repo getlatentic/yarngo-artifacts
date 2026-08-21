@@ -64,6 +64,11 @@ pub mod code {
 /// much progress may pile up before it is dropped instead.
 const QUEUE_DEPTH: usize = 256;
 
+/// The longest line this will act on. A guard rather than a hard bound: the
+/// line has already been read to find its end, so this stops us parsing what
+/// arrived, not receiving it.
+const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024;
+
 /// Something the engine said without being asked.
 #[derive(Clone, Debug)]
 pub struct Event {
@@ -297,6 +302,11 @@ fn spawn_reader(
         for line in BufReader::new(stdout).lines().map_while(std::result::Result::ok) {
             let line = line.trim();
             if line.is_empty() {
+                continue;
+            }
+            if line.len() > MAX_FRAME_BYTES {
+                malformed.fetch_add(1, Ordering::SeqCst);
+                eprintln!("sidecar: frame exceeds the size limit ({} bytes)", line.len());
                 continue;
             }
             let Ok(message) = serde_json::from_str::<Value>(line) else {
