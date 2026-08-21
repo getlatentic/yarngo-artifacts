@@ -44,9 +44,19 @@ class Collected:
             return [json.loads(line) for line in self.lines]
 
 
-def exchange(requests: list[str], *, expect: int, broker=None, model=None) -> list[dict]:
+def exchange(
+    requests: list[str],
+    *,
+    expect: int,
+    broker=None,
+    model=None,
+    fatals: list | None = None,
+    settle: float = 2.0,
+    until=None,
+) -> list[dict]:
     """Feed raw lines in, and collect what comes out."""
     out = Collected()
+    record = fatals if fatals is not None else []
     served = threading.Thread(
         target=protocol.serve,
         kwargs={
@@ -55,14 +65,20 @@ def exchange(requests: list[str], *, expect: int, broker=None, model=None) -> li
             "capabilities": {},
             "stdin": io.StringIO("\n".join(requests) + "\n"),
             "stdout": out,
+            "on_fatal": record.append,
         },
         daemon=True,
     )
     served.start()
     served.join(timeout=5)
-    # The writer runs on its own thread, so give it a moment to drain.
-    deadline = time.monotonic() + 2
-    while time.monotonic() < deadline and len(out.lines) < expect:
+    # `serve` returns when its input ends, which can be long before the actor
+    # has finished and the writer has drained. Wait for what is expected rather
+    # than for the reader to stop.
+    deadline = time.monotonic() + settle
+    # A line count is the wrong thing to wait for once progress collapses: three
+    # progress lines satisfy `expect=3` long before the reply is written.
+    done = until or (lambda messages: len(messages) >= expect)
+    while time.monotonic() < deadline and not done(out.messages()):
         time.sleep(0.01)
     return out.messages()
 
@@ -187,10 +203,17 @@ def main() -> int:
 
     # Oversized frames are refused before they are parsed.
     huge = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {"x": "y" * (9 * 1024 * 1024)}})
-    replies = exchange([huge], expect=1)
+    fatals: list = []
+    replies = exchange([huge, frame(id=2, method="ping")], expect=1, fatals=fatals)
     check(
         "an oversized frame is refused",
-        replies[0].get("error", {}).get("message") == "frame exceeds the size limit",
+        replies and replies[0].get("error", {}).get("message") == "frame exceeds the size limit",
+        failures,
+    )
+    check("an oversized frame ends the session", len(fatals) == 1, failures)
+    check(
+        "nothing after an oversized frame is served",
+        all(m.get("id") != 2 for m in replies),
         failures,
     )
 
@@ -253,9 +276,58 @@ def main() -> int:
     check("an event names its job", events[0]["params"].get("job_id") == "abc", failures)
     check("an event names its execution", events[0]["params"].get("execution_id") == "abc/7", failures)
 
+    # Saturation: a flood of progress against exactly one reply and one
+    # terminal event. Progress may collapse; neither of the others may.
+    def floods(params, ctx):
+        for i in range(100_000):
+            ctx.emit("job.progress", {"completed": i})
+        ctx.emit("job.completed", {})
+        return {"done": True}
+
+    messages = exchange(
+        [frame(id=1, method="flood", params={"job_id": "j", "execution_id": "j/1"})],
+        expect=3,
+        model={"flood": floods},
+        settle=30.0,
+        until=lambda ms: any("id" in m for m in ms)
+        and any(m.get("method") == "job.completed" for m in ms),
+    )
+    replies = [m for m in messages if "id" in m]
+    completed = [m for m in messages if m.get("method") == "job.completed"]
+    progress = [m for m in messages if m.get("method") == "job.progress"]
+    check("the reply arrives exactly once", len(replies) == 1, failures)
+    check("the terminal event arrives exactly once", len(completed) == 1, failures)
+    check("progress collapsed rather than queued", len(progress) < 100_000, failures)
+    check(
+        "the progress that survived is the newest",
+        progress and progress[-1]["params"]["completed"] == 99_999,
+        failures,
+    )
+
+    # One job's progress cannot displace another's.
+    def two_streams(params, ctx):
+        for i in range(500):
+            ctx.emit_raw("job.progress", {"execution_id": "a/1", "completed": i})
+            ctx.emit_raw("job.progress", {"execution_id": "b/1", "completed": i})
+        return {}
+
+    messages = exchange(
+        [frame(id=1, method="two")],
+        expect=2,
+        model={"two": two_streams},
+        settle=10.0,
+        until=lambda ms: any("id" in m for m in ms),
+    )
+    streams = {
+        m["params"]["execution_id"]
+        for m in messages
+        if m.get("method") == "job.progress"
+    }
+    check("progress is coalesced per execution", streams == {"a/1", "b/1"}, failures)
+
     for failure in failures:
         print(f"FAIL: {failure}", file=sys.stderr)
-    total = 33
+    total = 40
     print(f"{total - len(failures)}/{total} protocol checks passed")
     return 1 if failures else 0
 

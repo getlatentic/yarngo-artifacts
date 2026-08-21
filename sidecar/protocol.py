@@ -33,10 +33,12 @@ other — the actor is one thread and runs them in the order they were queued.
 from __future__ import annotations
 
 import json
+import os
 import queue
 import sys
 import threading
 import traceback
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Protocol
 
@@ -50,14 +52,16 @@ API_VERSION = 1
 # limit; the refusal is a reply, so it is visible.
 ACTOR_QUEUE_DEPTH = 64
 
-# How much may be queued for stdout before progress starts being dropped. The
-# queue itself is unbounded, which is deliberate: blocking a sender would block
-# either the actor mid-job or the reader mid-request, and a reader that stops
-# reading cannot receive the drain that would release it.
-OUTBOX_SOFT_LIMIT = 256
+# How much may be waiting on the control lane. Bounded, and its ceiling is
+# calculable rather than hoped for: a reply exists only because a request was
+# read, admission is bounded by the actor's queue, and terminal events are one
+# per execution. Reaching this means an assumption is wrong, so it is fatal
+# rather than dropped — a lost reply strands a caller for ever.
+CONTROL_LANE_LIMIT = 512
 
-# The longest line either side will accept. A peer that sends more than this is
-# not one of ours, and reading it would mean allocating whatever it claims.
+# The longest line either side will accept, enforced while reading rather than
+# after. A peer sending more than this is not one of ours, and finding the end
+# of its line before objecting would mean allocating whatever it claimed.
 MAX_FRAME_BYTES = 8 * 1024 * 1024
 
 # JSON-RPC's own codes, for faults in the exchange itself.
@@ -142,38 +146,67 @@ class Context:
 
 
 class Writer:
-    """The only thing that writes to stdout.
+    """The only thing that writes to stdout, in two lanes.
 
-    Nothing that hands it a message ever waits. Progress is dropped once the
-    backlog passes `OUTBOX_SOFT_LIMIT` — it is the same fact at successive
-    values, and the newest supersedes what is queued. Everything else is kept,
-    because a lost reply strands a caller and a lost terminal event strands a
-    job. Blocking instead would stall the actor mid-operation, or the reader
-    mid-request, and a reader that has stopped reading cannot receive whatever
-    would have released it.
+    A bounded queue, never blocking, and never losing anything cannot all hold
+    at once, so this says which gives. Progress is coalesced: one entry per
+    execution, replaced as newer values arrive, because it is the same fact at
+    successive values and only the newest is worth sending. Its memory is
+    therefore the number of live executions, not the number of updates.
+
+    The control lane — replies, errors, terminal events — loses nothing. It is
+    bounded, but its ceiling is calculable rather than hoped for: a reply exists
+    only because a request was read, admission is bounded by the actor's queue,
+    and a terminal event is one per execution. Reaching the limit means one of
+    those is untrue, and a dropped reply would strand a caller silently, so it
+    ends the session instead and lets the parent start a fresh one.
+
+    Nothing that hands it a message waits. Blocking would stall the actor
+    mid-operation or the reader mid-request, and a reader that has stopped
+    reading cannot receive whatever would have released it.
     """
 
-    def __init__(self, stream) -> None:
+    def __init__(self, stream, on_fatal=None) -> None:
         self._stream = stream
-        self._outbox: queue.Queue = queue.Queue()
-        self.dropped = 0
+        self._control: deque = deque()
+        self._progress: dict[str, dict] = {}
+        self._ready = threading.Condition()
+        self._on_fatal = on_fatal or _die
+        self.coalesced = 0
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def send(self, message: dict) -> None:
-        coalescible = message.get("method") == "job.progress"
-        if coalescible and self._outbox.qsize() >= OUTBOX_SOFT_LIMIT:
-            self.dropped += 1
-            return
-        self._outbox.put(message)
+        key = _progress_key(message)
+        with self._ready:
+            if key is not None:
+                if key in self._progress:
+                    self.coalesced += 1
+                self._progress[key] = message
+            else:
+                if len(self._control) >= CONTROL_LANE_LIMIT:
+                    self._on_fatal(
+                        f"control lane exceeded {CONTROL_LANE_LIMIT} messages; "
+                        "a reply would have to be dropped"
+                    )
+                    return
+                self._control.append(message)
+            self._ready.notify()
 
     def _run(self) -> None:
         while True:
-            message = self._outbox.get()
-            if message is None:
-                return
-            self._stream.write(json.dumps(message) + "\n")
-            self._stream.flush()
+            with self._ready:
+                while not self._control and not self._progress:
+                    self._ready.wait()
+                # Control first and in full: progress that is superseded while
+                # a reply is being written was never worth sending.
+                batch = list(self._control)
+                self._control.clear()
+                batch.extend(self._progress.values())
+                self._progress.clear()
+            for message in batch:
+                self._stream.write(json.dumps(message) + "\n")
+                self._stream.flush()
 
     def reply(self, request_id: Any, result: dict) -> None:
         self.send({"jsonrpc": JSONRPC_VERSION, "id": request_id, "result": result})
@@ -255,6 +288,22 @@ def _log(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
+def _die(reason: str) -> None:
+    """End the session. The parent notices the output stop and starts another."""
+    _log(f"protocol failure: {reason}")
+    sys.stderr.flush()
+    os._exit(70)
+
+
+def _progress_key(message: dict) -> str | None:
+    """Which stream of progress this supersedes, or None if it supersedes
+    nothing. Keyed per execution so one job's updates cannot displace another's."""
+    if message.get("method") != "job.progress":
+        return None
+    params = message.get("params") or {}
+    return str(params.get("execution_id") or params.get("job_id") or "")
+
+
 def serve(
     *,
     broker: dict[str, Callable],
@@ -262,6 +311,7 @@ def serve(
     capabilities: dict | None = None,
     stdin=None,
     stdout=None,
+    on_fatal=None,
 ) -> None:
     """Read requests until the input ends.
 
@@ -276,19 +326,27 @@ def serve(
         sys.stdout = sys.stderr
 
     source = stdin if stdin is not None else sys.stdin
-    writer = Writer(protocol_out)
+    on_fatal = on_fatal or _die
+    writer = Writer(protocol_out, on_fatal=on_fatal)
     cancellation = Cancellation()
     actor = ModelActor(model, writer, cancellation)
 
-    for line in source:
-        line = line.strip()
-        if not line:
-            continue
-        if len(line) > MAX_FRAME_BYTES:
-            # Refused by size before it is parsed. A guard rather than a hard
-            # bound: the line has already been read to find its end, so this
-            # stops us acting on it, not receiving it.
+    while True:
+        # Read at most one frame's worth. A line longer than the limit comes
+        # back without its newline, which is how an oversized frame is told
+        # apart from a large-but-legal one.
+        raw = source.readline(MAX_FRAME_BYTES + 1)
+        if raw == "":
+            break
+        if len(raw) > MAX_FRAME_BYTES and not raw.endswith("\n"):
+            # No attempt to resynchronise: the rest of that frame is still in
+            # the stream, and guessing where it ends is how a parser starts
+            # reading someone else's bytes as a message.
             writer.error(None, INVALID_REQUEST, "frame exceeds the size limit")
+            on_fatal("oversized frame")
+            return
+        line = raw.strip()
+        if not line:
             continue
         try:
             request = json.loads(line)
