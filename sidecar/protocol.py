@@ -44,8 +44,12 @@ from typing import Any, Callable, Protocol
 
 JSONRPC_VERSION = "2.0"
 
-# The engine API's own version, which is about the methods rather than the wire.
-API_VERSION = 1
+# What this speaks, named so a peer can tell it apart from anything else that
+# also happens to be JSON-RPC over a pipe. The wire is a standard; the methods
+# are ours, and this is the version of those. It starts at one because nothing
+# has shipped: there is no earlier version to be compatible with.
+PROTOCOL_NAME = "yarngo-engine"
+PROTOCOL_VERSION = 1
 
 # Requests waiting for the model actor: one running, one ready to start. Shallow
 # on purpose. A deep queue here would make this a second scheduler holding a
@@ -183,6 +187,7 @@ class Writer:
         self._progress: dict[str, dict] = {}
         self._ready = threading.Condition()
         self._on_fatal = on_fatal or _die
+        self._closing = False
         self.coalesced = 0
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -204,11 +209,26 @@ class Writer:
                 self._control.append(message)
             self._ready.notify()
 
+    def close(self, timeout: float = 5.0) -> None:
+        """Wait for what is queued to be written.
+
+        The writer is a daemon thread, so without this the process can end
+        between a reply being handed over and it reaching the pipe — and the
+        caller waiting on that reply learns nothing except that the engine
+        stopped.
+        """
+        with self._ready:
+            self._closing = True
+            self._ready.notify()
+        self._thread.join(timeout)
+
     def _run(self) -> None:
         while True:
             with self._ready:
-                while not self._control and not self._progress:
+                while not self._control and not self._progress and not self._closing:
                     self._ready.wait()
+                if self._closing and not self._control and not self._progress:
+                    return
                 # Control first and in full: progress that is superseded while
                 # a reply is being written was never worth sending.
                 batch = list(self._control)
@@ -439,8 +459,8 @@ def serve(
                 writer.reply(
                     request_id,
                     {
-                        "jsonrpc": JSONRPC_VERSION,
-                        "api_version": API_VERSION,
+                        "protocol": PROTOCOL_NAME,
+                        "version": PROTOCOL_VERSION,
                         **(capabilities or {}),
                     },
                 )
@@ -500,6 +520,10 @@ def serve(
 
         if not is_notification:
             writer.error(request_id, METHOD_NOT_FOUND, f"unknown method {method!r}")
+
+    # The input has ended, so nothing more will be asked. What has already been
+    # answered still has to arrive.
+    writer.close()
 
 
 def _envelope_fault(request: Any) -> str | None:

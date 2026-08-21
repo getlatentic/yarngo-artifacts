@@ -13,7 +13,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use serde_json::json;
-use speech_engine::protocol::{Connection, Events, API_VERSION};
+use speech_engine::protocol::{Connection, Events, PROTOCOL_NAME, PROTOCOL_VERSION};
 use speech_engine::EngineError;
 
 const PATIENCE: Duration = Duration::from_secs(10);
@@ -44,7 +44,7 @@ for line in sys.stdin:
         continue
     req = json.loads(line)
     if req.get("method") == "initialize":
-        send({{"id": req["id"], "result": {{"api_version": {API_VERSION}}}}})
+        send({{"id": req["id"], "result": {{"protocol": {PROTOCOL_NAME:?}, "version": {PROTOCOL_VERSION}}}}})
         continue
     threading.Thread(target=handle, args=(req,), daemon=True).start()
 "#
@@ -81,7 +81,8 @@ fn both_sides_agree_on_a_version_before_anything_else() {
     let dir = dir();
     let (engine, _events) = connect(&dir, "handshake", ECHO);
     let reply = engine.initialize(PATIENCE).expect("initialize");
-    assert_eq!(reply["api_version"], API_VERSION);
+    assert_eq!(reply["protocol"], PROTOCOL_NAME);
+    assert_eq!(reply["version"], PROTOCOL_VERSION);
 }
 
 #[test]
@@ -94,7 +95,7 @@ fn an_api_version_mismatch_stops_the_connection() {
 import json, sys
 for line in sys.stdin:
     req = json.loads(line)
-    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": req["id"], "result": {"api_version": 99}}) + "\n")
+    sys.stdout.write(json.dumps({"jsonrpc": "2.0", "id": req["id"], "result": {"protocol": "yarngo-engine", "version": 99}}) + "\n")
     sys.stdout.flush()
 "#,
     )
@@ -114,7 +115,7 @@ for line in sys.stdin:
     let (engine, _events) = Connection::attach(child, stdin, stdout, stderr);
     let error = engine.initialize(PATIENCE).expect_err("should refuse");
     assert!(
-        matches!(&error, EngineError::Rejected(m) if m.contains("engine api 99")),
+        matches!(&error, EngineError::Rejected(m) if m.contains("yarngo-engine 99")),
         "{error:?}"
     );
 }

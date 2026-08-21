@@ -40,10 +40,14 @@ use crate::{EngineError, Result};
 
 pub const JSONRPC_VERSION: &str = "2.0";
 
-/// The engine API's own version — the methods, not the wire. The sidecar states
-/// its own during the opening exchange, and a disagreement stops the connection
-/// there rather than at the first message whose shape has changed.
-pub const API_VERSION: u32 = 1;
+/// What this speaks, named so a peer can be told apart from anything else that
+/// is also JSON-RPC over a pipe. The wire is a standard; the methods are ours.
+pub const PROTOCOL_NAME: &str = "yarngo-engine";
+
+/// The version of those methods. One because nothing has shipped — there is no
+/// earlier version to be compatible with, and carrying a number that suggests
+/// otherwise would invite compatibility work nobody owes.
+pub const PROTOCOL_VERSION: u32 = 1;
 
 /// JSON-RPC's own codes, for faults in the exchange itself.
 pub mod code {
@@ -195,17 +199,34 @@ impl Connection {
         (connection, Events { incoming, queued })
     }
 
-    /// The opening exchange. Establishes that both sides speak the same API
-    /// before anything depends on a method's shape.
+    /// The opening exchange. Establishes that the other end is this engine, and
+    /// this version of it, before anything depends on a method's shape.
     pub fn initialize(&self, timeout: Duration) -> Result<Value> {
-        let reply = self.request("initialize", json!({ "api_version": API_VERSION }), timeout)?;
-        match reply.get("api_version").and_then(Value::as_u64) {
-            Some(theirs) if theirs as u32 == API_VERSION => Ok(reply),
+        let reply = self.request(
+            "initialize",
+            json!({ "protocol": PROTOCOL_NAME, "version": PROTOCOL_VERSION }),
+            timeout,
+        )?;
+        match reply.get("protocol").and_then(Value::as_str) {
+            Some(PROTOCOL_NAME) => {}
+            Some(other) => {
+                return Err(EngineError::Rejected(format!(
+                    "the other end speaks {other:?}, not {PROTOCOL_NAME:?}"
+                )))
+            }
+            None => {
+                return Err(EngineError::Transport(
+                    "the other end did not say what it speaks".into(),
+                ))
+            }
+        }
+        match reply.get("version").and_then(Value::as_u64) {
+            Some(theirs) if theirs as u32 == PROTOCOL_VERSION => Ok(reply),
             Some(theirs) => Err(EngineError::Rejected(format!(
-                "sidecar speaks engine api {theirs}, this build speaks {API_VERSION}"
+                "sidecar speaks {PROTOCOL_NAME} {theirs}, this build speaks {PROTOCOL_VERSION}"
             ))),
             None => Err(EngineError::Transport(
-                "sidecar did not state an engine api version".into(),
+                "sidecar did not state a protocol version".into(),
             )),
         }
     }

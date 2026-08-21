@@ -1282,10 +1282,57 @@ METHODS = {
 }
 
 
-def main() -> None:
-    _offline_by_default()
-    _load_voices_from_disk()
-    _log("sidecar ready")
+# Which methods may be answered without touching the model or anything derived
+# from it. Sorted by what they own rather than by how long they take: reading
+# the voice table while a registration writes it is a torn read, however quick.
+BROKER_METHODS = ("ping", "system_info", "install_status")
+
+
+def _capabilities() -> dict:
+    """What this engine is, stated once at the handshake."""
+    return {
+        "backend": BACKEND,
+        "models": sorted(MODELS),
+        "default_model": _default_model(),
+        # The cache is keyed on the waveform, so forgetting one voice forgets
+        # them all. Said here rather than discovered when a deletion reports it.
+        "conditioning_eviction": "all",
+    }
+
+
+def m_conditioning_invalidate(_params: dict) -> dict:
+    """Forget every voice this engine has derived conditioning for."""
+    return _forget_conditioning().as_reply()
+
+
+def _serve_jsonrpc() -> None:
+    """The same operations, answered over JSON-RPC.
+
+    One engine underneath both front ends. Two implementations of synthesis
+    would drift, and the one that drifted would be the one nobody was running.
+    """
+    import protocol
+
+    broker = {name: METHODS[name] for name in BROKER_METHODS if name in METHODS}
+    model = {
+        name: (lambda handler: lambda params, _ctx: handler(params))(handler)
+        for name, handler in METHODS.items()
+        if name not in BROKER_METHODS
+    }
+    # Named for what they are rather than for the function that does them, since
+    # these are the ones the application's own workflows call by name.
+    model["conditioning.prepare"] = lambda params, _ctx: m_prepare_voice(params)
+    model["conditioning.invalidate"] = lambda params, _ctx: m_conditioning_invalidate(params)
+    protocol.serve(broker=broker, model=model, capabilities=_capabilities())
+
+
+def _serve_legacy() -> None:
+    """One request, one reply, nothing in between.
+
+    Kept only until the JSON-RPC path carries everything the application does.
+    Nothing has shipped, so there is no compatibility to preserve — this is a
+    way back during development and is meant to be deleted, not versioned.
+    """
     for line in sys.stdin:
         line = line.strip()
         if not line:
@@ -1310,6 +1357,27 @@ def main() -> None:
             _log(traceback.format_exc())
             print(json.dumps({"id": req_id, "ok": False, "error": f"{type(exc).__name__}: {exc}"}),
                   flush=True)
+
+
+def main() -> None:
+    _offline_by_default()
+    _load_voices_from_disk()
+
+    # Chosen by the parent, which is the only thing that knows which client it
+    # is. Defaulting to the old one keeps the running application working while
+    # the new path is proved against it.
+    protocol_name = "legacy"
+    if "--protocol" in sys.argv:
+        protocol_name = sys.argv[sys.argv.index("--protocol") + 1]
+
+    _log(f"sidecar ready ({protocol_name})")
+    if protocol_name == "jsonrpc":
+        _serve_jsonrpc()
+    elif protocol_name == "legacy":
+        _serve_legacy()
+    else:
+        _log(f"unknown protocol {protocol_name!r}")
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
