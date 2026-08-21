@@ -20,82 +20,6 @@ fn data_dir() -> PathBuf {
     PathBuf::from("/Users/dev/Library/Application Support/Yarngo Studio")
 }
 
-/// Read the application's own files. `None` when they are not there.
-fn real_legacy() -> Option<Legacy> {
-    let clips_path = data_dir().join("clips/clips.json");
-    let voices_path = data_dir().join("voices/voices.json");
-    if !clips_path.exists() || !voices_path.exists() {
-        return None;
-    }
-    let clips: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&clips_path).ok()?).ok()?;
-    let voices: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&voices_path).ok()?).ok()?;
-
-    let clips = clips
-        .as_array()?
-        .iter()
-        .map(|clip| LegacyClip {
-            id: clip["id"].as_str().unwrap_or_default().into(),
-            name: clip["name"].as_str().unwrap_or_default().into(),
-            text: clip["text"].as_str().unwrap_or_default().into(),
-            voice_id: clip["voice_id"].as_str().map(Into::into),
-            model: clip["model"].as_str().map(Into::into),
-            created: clip["created"].as_str().unwrap_or_default().into(),
-            takes: clip["takes"]
-                .as_array()
-                .map(|takes| {
-                    takes
-                        .iter()
-                        .map(|take| LegacyTake {
-                            id: take["id"].as_str().unwrap_or_default().into(),
-                            path: take["path"].as_str().unwrap_or_default().into(),
-                            audio_s: take["audio_s"].as_f64(),
-                            gen_s: take["gen_s"].as_f64(),
-                            seed: take["seed"].as_i64(),
-                            created: take["created"].as_str().unwrap_or_default().into(),
-                        })
-                        .collect()
-                })
-                .unwrap_or_default(),
-        })
-        .collect();
-
-    let voices = voices
-        .as_object()?
-        .iter()
-        .map(|(id, voice)| {
-            (
-                id.clone(),
-                LegacyVoice {
-                    label: voice["label"].as_str().unwrap_or_default().into(),
-                    reference_audio: voice["reference_audio"].as_str().unwrap_or_default().into(),
-                    seconds: voice["seconds"].as_f64(),
-                    created: voice["created"].as_str().unwrap_or_default().into(),
-                },
-            )
-        })
-        .collect();
-
-    let consent = std::fs::read_to_string(data_dir().join("consent.log"))
-        .map(|log| {
-            log.lines()
-                .filter(|line| !line.trim().is_empty())
-                .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
-                .map(|entry| LegacyConsent {
-                    voice_id: entry["voice_id"].as_str().unwrap_or_default().into(),
-                    statement: entry["statement"].as_str().map(Into::into),
-                    app_version: entry["app_version"].as_str().map(Into::into),
-                    source: entry["source"].as_str().map(Into::into),
-                    granted_at: entry["granted_at"].as_str().unwrap_or_default().into(),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    Some(Legacy { clips, voices, consent })
-}
-
 /// A snapshot with the shapes that matter: a built-in clip, a custom one, one
 /// with two takes, and a voice whose clips must survive its deletion.
 fn fixture() -> Legacy {
@@ -439,7 +363,7 @@ fn a_failed_import_leaves_the_database_as_it_was() {
 /// what did not line up.
 #[test]
 fn the_real_store_imports_completely() {
-    let Some(legacy) = real_legacy() else {
+    let Some(legacy) = Legacy::read(&data_dir()) else {
         eprintln!("no application data on this machine; fixture coverage only");
         return;
     };
@@ -523,7 +447,7 @@ fn the_real_store_imports_completely() {
 /// keep passing while any of those did it.
 #[test]
 fn the_legacy_files_are_byte_for_byte_unchanged() {
-    let Some(legacy) = real_legacy() else {
+    let Some(legacy) = Legacy::read(&data_dir()) else {
         eprintln!("no application data on this machine; nothing to leave alone");
         return;
     };
