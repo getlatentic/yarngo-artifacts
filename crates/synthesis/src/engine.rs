@@ -5,15 +5,18 @@
 //! and the sidecar answers for models and inference. Nothing asks the sidecar
 //! what the person has.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use serde_json::json;
 use speech_engine::protocol::{Connection, Events};
+use speech_engine::runtime::Generating;
 use speech_engine::{
-    Capabilities, Clip, DiskSpace, EngineError, InstallStatus, ModelSpec, SpeechEngine, Synthesis,
-    SynthesisRequest, SystemInfo, Voice,
+    Capabilities, Clip, DiskSpace, EngineError, InstallStatus, ModelSpec, SpeechEngine, Started,
+    Synthesis, SynthesisRequest, SystemInfo, Voice,
 };
 use yarngo_store::deletion::{Conditioning, Invalidation, Outcome as DeletionOutcome};
 use yarngo_store::Store;
@@ -71,8 +74,51 @@ impl Spawn {
 /// The sidecar currently answering, and the session its work belongs to.
 struct Running {
     connection: Connection,
-    _events: Events,
     session: String,
+}
+
+/// What the engine has said about the generation it is running.
+///
+/// Sent rather than written to a file, because this engine can speak while it
+/// works. Kept as the latest rather than as a stream: the interface draws where
+/// the generation is now, and every earlier answer to that is out of date.
+#[derive(Clone, Default)]
+pub struct Reported(Arc<Mutex<Option<Generating>>>);
+
+impl Reported {
+    pub fn latest(&self) -> Option<Generating> {
+        self.0.lock().ok().and_then(|held| held.clone())
+    }
+
+    fn clear(&self) {
+        if let Ok(mut held) = self.0.lock() {
+            *held = None;
+        }
+    }
+
+    /// Follow one connection's events until it ends.
+    fn follow(&self, events: Events) {
+        let held = self.0.clone();
+        std::thread::spawn(move || {
+            while let Ok(event) = events.recv_timeout(Duration::from_secs(3600)) {
+                if event.method != "job.progress" {
+                    continue;
+                }
+                let reported = serde_json::from_value(event.params).ok();
+                if let Ok(mut latest) = held.lock() {
+                    *latest = reported;
+                }
+            }
+        });
+    }
+}
+
+/// A synthesis the engine has and has not answered, and what publishing it
+/// will need.
+struct InFlight {
+    work: crate::Dispatched,
+    clip_id: String,
+    model: String,
 }
 
 pub struct DurableEngine {
@@ -80,8 +126,13 @@ pub struct DurableEngine {
     layout: Layout,
     running: Running,
     spawn: Spawn,
+    progress: Reported,
     sessions: u64,
     jobs: u64,
+    /// Keyed by the request whose reply finishes it. Held here rather than on
+    /// the caller's stack, because the caller returned as soon as the engine
+    /// had been given the work.
+    in_flight: HashMap<u64, InFlight>,
 }
 
 impl DurableEngine {
@@ -98,6 +149,8 @@ impl DurableEngine {
         adopt_legacy(&mut store, data_dir)?;
 
         let (connection, events) = spawn.start()?;
+        let progress = Reported::default();
+        progress.follow(events);
         let session = "session-1".to_string();
         store
             .open_session(&session, "mlx", &now())
@@ -105,10 +158,12 @@ impl DurableEngine {
         let mut engine = Self {
             store,
             layout,
-            running: Running { connection, _events: events, session },
+            running: Running { connection, session },
             spawn,
+            progress,
             sessions: 1,
             jobs: 0,
+            in_flight: HashMap::new(),
         };
         engine.finish_what_was_left()?;
         Ok(engine)
@@ -133,6 +188,7 @@ impl DurableEngine {
             let mut conditioning = EngineConditioning {
                 running: &mut self.running,
                 spawn: &self.spawn,
+                progress: &self.progress,
             };
             self.store
                 .finish_voice_deletion(&voice_id, &job_id, &mut conditioning, &at)
@@ -145,6 +201,31 @@ impl DurableEngine {
         self.running
             .connection
             .request(method, params, patience)
+            .map_err(|e| EngineError::Transport(format!("{e}")))
+    }
+
+    /// Ask one attempt to stop.
+    ///
+    /// The job is moved and persisted before anything is sent. A process that
+    /// disappears between the two leaves a job recorded as asked to stop, which
+    /// a restart can finish; the other order leaves one nobody knows was
+    /// cancelled and an engine still working on it.
+    fn request_stop(&mut self, job_id: &str, execution_id: &str) -> Result<(), EngineError> {
+        let at = now();
+        if let Some(work) = self.in_flight.values_mut().find(|w| w.work.job.id == job_id) {
+            work.work.job.request_cancel();
+            self.store
+                .save_progress(&work.work.job, Some(&work.work.execution), &at)
+                .map_err(store_error)?;
+        }
+        self.running
+            .connection
+            .request(
+                "job.cancel",
+                json!({ "job_id": job_id, "execution_id": execution_id }),
+                PROMPT,
+            )
+            .map(|_| ())
             .map_err(|e| EngineError::Transport(format!("{e}")))
     }
 
@@ -220,6 +301,32 @@ impl SpeechEngine for DurableEngine {
         serde_json::from_value(reply).map_err(|e| EngineError::Transport(e.to_string()))
     }
 
+    fn ping(&mut self) -> Result<(), EngineError> {
+        self.call("ping", json!({}), PROMPT).map(|_| ())
+    }
+
+    /// Asked for on the same connection the generation is running on, which is
+    /// the point of the connection carrying ids.
+    ///
+    /// The job is moved and persisted first. If this process disappears between
+    /// the two, a restart finds a job that was asked to stop and finishes the
+    /// asking; the other order finds a job nobody knows was cancelled.
+    fn cancel_generation(&mut self) -> Result<(), EngineError> {
+        let running: Vec<(String, String)> = self
+            .in_flight
+            .values()
+            .map(|work| (work.work.job.id.clone(), work.work.execution.id.clone()))
+            .collect();
+        for (job_id, execution_id) in running {
+            self.request_stop(&job_id, &execution_id)?;
+        }
+        Ok(())
+    }
+
+    fn progress(&mut self) -> Option<Generating> {
+        self.progress.latest()
+    }
+
     fn disk_space(&mut self) -> Result<DiskSpace, EngineError> {
         // From the one answer about this machine, rather than a second method
         // asking half of the same question.
@@ -228,16 +335,41 @@ impl SpeechEngine for DurableEngine {
     }
 
     fn prepare_voice(&mut self, voice_id: &str, model: Option<&str>) -> Result<f32, EngineError> {
+        match self.start_preparation(voice_id, model)? {
+            Started::Done(answer) => answer,
+            Started::Awaiting(sent) => {
+                let id = sent.id();
+                let reply = sent.wait(PATIENCE);
+                self.finish_preparation(id, reply)
+            }
+        }
+    }
+
+    /// Conditioning takes about forty seconds, which is long enough that a
+    /// deletion arriving during it must not queue behind it.
+    fn start_preparation(
+        &mut self,
+        voice_id: &str,
+        model: Option<&str>,
+    ) -> Result<Started<f32>, EngineError> {
         let Some((_, audio, _)) = library::reference(&self.store, voice_id).map_err(store_error)?
         else {
             return Err(EngineError::Transport(format!("no such voice: {voice_id}")));
         };
-        let reply = self.call(
-            "conditioning.prepare",
-            json!({ "reference_audio": audio, "model": model }),
-            PATIENCE,
-        )?;
-        Ok(reply["prepared_s"].as_f64().unwrap_or(0.0) as f32)
+        let sent = self
+            .running
+            .connection
+            .send("conditioning.prepare", json!({ "reference_audio": audio, "model": model }))
+            .map_err(|e| EngineError::Transport(format!("{e}")))?;
+        Ok(Started::Awaiting(sent))
+    }
+
+    fn finish_preparation(
+        &mut self,
+        _id: u64,
+        reply: Result<serde_json::Value, EngineError>,
+    ) -> Result<f32, EngineError> {
+        Ok(reply?["prepared_s"].as_f64().unwrap_or(0.0) as f32)
     }
 
     fn voices(&mut self) -> Result<Vec<Voice>, EngineError> {
@@ -262,6 +394,7 @@ impl SpeechEngine for DurableEngine {
         let mut conditioning = EngineConditioning {
             running: &mut self.running,
             spawn: &self.spawn,
+            progress: &self.progress,
         };
         let outcome = self
             .store
@@ -296,7 +429,24 @@ impl SpeechEngine for DurableEngine {
         self.clips()
     }
 
+    /// Kept because the trait has it, and used by nothing here: a caller that
+    /// waits for a synthesis holds the engine thread for the length of one, and
+    /// then a cancellation cannot reach the engine that is doing the work.
     fn synthesize(&mut self, request: &SynthesisRequest) -> Result<Synthesis, EngineError> {
+        match self.start_synthesis(request)? {
+            Started::Done(answer) => answer,
+            Started::Awaiting(sent) => {
+                let id = sent.id();
+                let reply = sent.wait(PATIENCE);
+                self.finish_synthesis(id, reply)
+            }
+        }
+    }
+
+    fn start_synthesis(
+        &mut self,
+        request: &SynthesisRequest,
+    ) -> Result<Started<Synthesis>, EngineError> {
         let at = now();
         let model = request.model.clone().unwrap_or_default();
 
@@ -350,7 +500,7 @@ impl SpeechEngine for DurableEngine {
             seed: request.seed.map(|s| s as i64),
         };
 
-        let outcome = {
+        let (work, sent) = {
             let mut synthesis = crate::Synthesis {
                 store: &mut self.store,
                 layout: &self.layout,
@@ -360,8 +510,40 @@ impl SpeechEngine for DurableEngine {
                 .begin(&job_id, &execution_id, &asked, &at)
                 .map_err(|e| EngineError::Transport(e.to_string()))?;
             synthesis
-                .generate(pending, &self.running.connection, PATIENCE, &now())
+                .dispatch(pending, &self.running.connection, &at)
                 .map_err(|e| EngineError::Transport(e.to_string()))?
+        };
+        self.in_flight
+            .insert(sent.id(), InFlight { work, clip_id, model });
+        Ok(Started::Awaiting(sent))
+    }
+
+    fn finish_synthesis(
+        &mut self,
+        id: u64,
+        reply: Result<serde_json::Value, EngineError>,
+    ) -> Result<Synthesis, EngineError> {
+        let Some(InFlight { work, clip_id, model }) = self.in_flight.remove(&id) else {
+            return Err(EngineError::Transport(
+                "a reply arrived for a synthesis nothing was waiting for".into(),
+            ));
+        };
+        let ended = self.running.connection.has_ended();
+        let outcome = {
+            let mut synthesis = crate::Synthesis {
+                store: &mut self.store,
+                layout: &self.layout,
+                session_id: &self.running.session,
+            };
+            let finished = synthesis
+                .arrived(work, reply, ended, &now())
+                .map_err(|e| EngineError::Transport(e.to_string()))?;
+            match finished {
+                crate::Finished::Produced { mut job, execution, output } => synthesis
+                    .publish(&mut job, &execution, &output, &now())
+                    .map_err(|e| EngineError::Transport(e.to_string()))?,
+                crate::Finished::Settled(outcome) => outcome,
+            }
         };
 
         let Outcome::Published { take_id, path } = outcome else {
@@ -426,6 +608,7 @@ fn adopt_legacy(store: &mut Store, data_dir: &Path) -> Result<(), EngineError> {
 struct EngineConditioning<'a> {
     running: &'a mut Running,
     spawn: &'a Spawn,
+    progress: &'a Reported,
 }
 
 impl Conditioning for EngineConditioning<'_> {
@@ -452,7 +635,9 @@ impl Conditioning for EngineConditioning<'_> {
     fn restart(&mut self) -> Result<(), String> {
         let (connection, events) = self.spawn.start().map_err(|e| e.to_string())?;
         self.running.connection = connection;
-        self.running._events = events;
+        // Whatever the old engine last said it was doing, it is not doing now.
+        self.progress.clear();
+        self.progress.follow(events);
         Ok(())
     }
 }

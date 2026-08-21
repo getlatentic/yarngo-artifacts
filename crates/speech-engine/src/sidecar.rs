@@ -222,6 +222,23 @@ impl SpeechEngine for MlxSidecar {
         self.call("system_info", json!({}))
     }
 
+    fn ping(&mut self) -> Result<()> {
+        let _: Value = self.call("ping", json!({}))?;
+        Ok(())
+    }
+
+    /// By file, because this backend is not reading its input while it works:
+    /// one request and one reply over a pipe, and the request in flight is the
+    /// generation being asked to stop.
+    fn cancel_generation(&mut self) -> Result<()> {
+        crate::runtime::request_cancel();
+        Ok(())
+    }
+
+    fn progress(&mut self) -> Option<crate::runtime::Generating> {
+        crate::runtime::read_progress()
+    }
+
     fn synthesize(&mut self, request: &SynthesisRequest) -> Result<Synthesis> {
         self.call(
             "synthesize",

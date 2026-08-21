@@ -251,6 +251,17 @@ pub type Result<T> = std::result::Result<T, EngineError>;
 
 /// One speech backend. Implementations are expected to keep models resident
 /// between calls: loading dominates cost, and a desktop app should pay it once.
+/// What became of an operation that was begun.
+///
+/// The distinction is whether the backend can do anything else while this runs.
+/// One request and one reply over a pipe cannot, so it answers outright; a
+/// connection that carries ids can, so it hands back the reply to come and
+/// stays available in the meantime.
+pub enum Started<T> {
+    Done(Result<T>),
+    Awaiting(protocol::Outstanding),
+}
+
 pub trait SpeechEngine {
     fn capabilities(&self) -> Capabilities;
 
@@ -280,6 +291,40 @@ pub trait SpeechEngine {
 
     fn synthesize(&mut self, request: &SynthesisRequest) -> Result<Synthesis>;
 
+    /// Begin a synthesis without waiting for it.
+    ///
+    /// Overridden by a backend that can be spoken to while it works. The
+    /// default answers outright, which is the honest thing for a transport that
+    /// has nowhere to put a second request.
+    fn start_synthesis(&mut self, request: &SynthesisRequest) -> Result<Started<Synthesis>> {
+        Ok(Started::Done(self.synthesize(request)))
+    }
+
+    /// Finish one that was deferred. `id` is the request whose reply arrived.
+    fn finish_synthesis(&mut self, id: u64, reply: Result<serde_json::Value>) -> Result<Synthesis> {
+        let _ = (id, reply);
+        Err(EngineError::Transport(
+            "this engine answers a synthesis outright and has none outstanding".into(),
+        ))
+    }
+
+    /// The same, for conditioning, which is the other operation long enough
+    /// that everything else waiting on it would be a fault.
+    fn start_preparation(
+        &mut self,
+        voice_id: &str,
+        model: Option<&str>,
+    ) -> Result<Started<f32>> {
+        Ok(Started::Done(self.prepare_voice(voice_id, model)))
+    }
+
+    fn finish_preparation(&mut self, id: u64, reply: Result<serde_json::Value>) -> Result<f32> {
+        let _ = (id, reply);
+        Err(EngineError::Transport(
+            "this engine answers conditioning outright and has none outstanding".into(),
+        ))
+    }
+
     /// Begin downloading a model. Returns immediately; poll `install_status`.
     fn install_model(&mut self, model: &str) -> Result<InstallStatus>;
 
@@ -296,4 +341,22 @@ pub trait SpeechEngine {
     fn duplicate_clip(&mut self, clip_id: &str) -> Result<Vec<Clip>>;
 
     fn system_info(&mut self) -> Result<SystemInfo>;
+
+    /// Whether the engine is there, asked in a way it can answer while it is
+    /// working.
+    fn ping(&mut self) -> Result<()>;
+
+    /// Ask the running generation to stop.
+    ///
+    /// Cooperative: it stops at the next point where stopping leaves something
+    /// whole. Whether it stopped is reported by how the generation ends, not by
+    /// this returning.
+    fn cancel_generation(&mut self) -> Result<()>;
+
+    /// What the running generation has produced so far, if one is running.
+    ///
+    /// On the engine rather than read from a fixed file, because how it is
+    /// known depends on the backend: one writes it to disk because it cannot
+    /// speak while it works, and the other sends it.
+    fn progress(&mut self) -> Option<crate::runtime::Generating>;
 }

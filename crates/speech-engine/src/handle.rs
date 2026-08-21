@@ -1,22 +1,56 @@
 //! A `Send + Sync` handle over a backend that is neither.
 //!
 //! The sidecar owns pipes and a child process, so it cannot be shared across
-//! threads. It also blocks for 15-25 seconds during synthesis, which would
-//! freeze any UI that called it directly. Both problems have the same answer:
-//! give the engine its own thread and talk to it over channels.
+//! threads. It also takes minutes over a synthesis, which would freeze any UI
+//! that called it directly. Both problems have the same answer: give the engine
+//! its own thread and talk to it over channels.
 //!
-//! Callers get blocking methods that are safe to invoke from a background task.
+//! The thread submits work and does not wait for it. That distinction is the
+//! point: the connection underneath carries request ids and can answer a ping
+//! or a cancellation while a synthesis is still running, and a thread that sat
+//! on the synthesis reply would throw that away one layer above the wire. So a
+//! deferred operation is recorded here and its reply comes back as another
+//! message on the same channel, taking its turn like anything else.
+//!
+//! Callers still get blocking methods, because a caller on a background task
+//! wants an answer. What no longer blocks is the engine.
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Mutex;
 use std::thread;
+use std::time::Duration;
 
 use crate::sidecar::MlxSidecar;
+use crate::protocol::Outstanding;
 use crate::{
-    Clip, DiskSpace, EngineError, InstallStatus, ModelSpec, Result, SpeechEngine, Synthesis,
-    SynthesisRequest, SystemInfo, Voice,
+    Clip, DiskSpace, EngineError, InstallStatus, ModelSpec, Result, SpeechEngine, Started,
+    Synthesis, SynthesisRequest, SystemInfo, Voice,
 };
+
+/// Long enough for a cold model load and several minutes of speech. Not a
+/// deadline anybody is waiting on — the caller has its own — but a point past
+/// which an engine that has said nothing is not going to.
+const GENEROUS: Duration = Duration::from_secs(1800);
+
+/// Turn a reply into a message the engine thread will read in its turn.
+///
+/// A thread that does nothing but wait, so the one that matters does not. It
+/// could be avoided by handing the connection a sender of this channel's type,
+/// which would mean teaching the protocol layer what a `Command` is.
+fn forward(sent: Outstanding, timeout: Duration, into: Sender<Command>) {
+    thread::spawn(move || {
+        let id = sent.id();
+        let _ = into.send(Command::Replied(id, sent.wait(timeout)));
+    });
+}
+
+/// Who is waiting for a reply that has not arrived.
+enum Waiting {
+    Synthesis(Sender<Result<Synthesis>>),
+    Preparation(Sender<Result<f32>>),
+}
 
 enum Command {
     Models(bool, Sender<Result<Vec<ModelSpec>>>),
@@ -35,6 +69,16 @@ enum Command {
     RenameClip(String, String, Sender<Result<Vec<Clip>>>),
     DuplicateClip(String, Sender<Result<Vec<Clip>>>),
     SystemInfo(Sender<Result<SystemInfo>>),
+    Ping(Sender<Result<()>>),
+    CancelGeneration(Sender<Result<()>>),
+    Progress(Sender<Result<Option<crate::runtime::Generating>>>),
+    /// A deferred operation's reply, put back on this channel by the thread
+    /// that was waiting for it. Handled in turn, which is what lets everything
+    /// sent in the meantime have been handled already.
+    Replied(u64, Result<serde_json::Value>),
+    /// The handle is gone. Needed because the thread holds a sender of its own
+    /// for replies, so the channel does not close on its own.
+    Stop,
 }
 
 /// Owns the engine thread. Dropping it shuts the engine down.
@@ -63,6 +107,7 @@ impl EngineHandle {
     ) -> Result<Self> {
         let (tx, rx) = channel::<Command>();
         let (ready_tx, ready_rx) = channel::<Result<()>>();
+        let replies = tx.clone();
 
         thread::Builder::new()
             .name("speech-engine".into())
@@ -77,6 +122,7 @@ impl EngineHandle {
                         return;
                     }
                 };
+                let mut outstanding: HashMap<u64, Waiting> = HashMap::new();
 
                 // Each arm replies on the caller's channel; a disconnected
                 // caller is not an error, it just means nobody is waiting.
@@ -98,13 +144,35 @@ impl EngineHandle {
                             let _ = reply.send(engine.rename_voice(&id, &label));
                         }
                         Command::PrepareVoice(id, model, reply) => {
-                            let _ = reply.send(engine.prepare_voice(&id, model.as_deref()));
+                            match engine.start_preparation(&id, model.as_deref()) {
+                                Ok(Started::Done(answer)) => {
+                                    let _ = reply.send(answer);
+                                }
+                                Ok(Started::Awaiting(sent)) => {
+                                    outstanding.insert(sent.id(), Waiting::Preparation(reply));
+                                    forward(sent, GENEROUS, replies.clone());
+                                }
+                                Err(err) => {
+                                    let _ = reply.send(Err(err));
+                                }
+                            }
                         }
                         Command::DeleteModel(model, reply) => {
                             let _ = reply.send(engine.delete_model(&model));
                         }
                         Command::Synthesize(request, reply) => {
-                            let _ = reply.send(engine.synthesize(&request));
+                            match engine.start_synthesis(&request) {
+                                Ok(Started::Done(answer)) => {
+                                    let _ = reply.send(answer);
+                                }
+                                Ok(Started::Awaiting(sent)) => {
+                                    outstanding.insert(sent.id(), Waiting::Synthesis(reply));
+                                    forward(sent, GENEROUS, replies.clone());
+                                }
+                                Err(err) => {
+                                    let _ = reply.send(Err(err));
+                                }
+                            }
                         }
                         Command::InstallModel(model, reply) => {
                             let _ = reply.send(engine.install_model(&model));
@@ -130,6 +198,27 @@ impl EngineHandle {
                         Command::SystemInfo(reply) => {
                             let _ = reply.send(engine.system_info());
                         }
+                        Command::Ping(reply) => {
+                            let _ = reply.send(engine.ping());
+                        }
+                        Command::CancelGeneration(reply) => {
+                            let _ = reply.send(engine.cancel_generation());
+                        }
+                        Command::Progress(reply) => {
+                            let _ = reply.send(Ok(engine.progress()));
+                        }
+                        Command::Replied(id, result) => match outstanding.remove(&id) {
+                            Some(Waiting::Synthesis(reply)) => {
+                                let _ = reply.send(engine.finish_synthesis(id, result));
+                            }
+                            Some(Waiting::Preparation(reply)) => {
+                                let _ = reply.send(engine.finish_preparation(id, result));
+                            }
+                            // Nobody is waiting: the caller gave up, or this is
+                            // a reply to something already settled another way.
+                            None => {}
+                        },
+                        Command::Stop => break,
                     }
                 }
             })
@@ -240,7 +329,33 @@ impl EngineHandle {
         self.dispatch(|reply| Command::DuplicateClip(id, reply))
     }
 
+    /// Whether the engine is there. Answerable while it is working, which is
+    /// the only reason to ask.
+    pub fn ping(&self) -> Result<()> {
+        self.dispatch(Command::Ping)
+    }
+
+    /// Ask the running generation to stop.
+    pub fn cancel_generation(&self) -> Result<()> {
+        self.dispatch(Command::CancelGeneration)
+    }
+
+    /// Where the running generation has got to.
+    pub fn progress(&self) -> Option<crate::runtime::Generating> {
+        self.dispatch(Command::Progress).ok().flatten()
+    }
+
     pub fn system_info(&self) -> Result<SystemInfo> {
         self.dispatch(Command::SystemInfo)
+    }
+}
+
+impl Drop for EngineHandle {
+    fn drop(&mut self) {
+        // Said rather than inferred from a closed channel: the thread keeps a
+        // sender so replies can come back to it, so the channel outlives this.
+        if let Ok(tx) = self.tx.lock() {
+            let _ = tx.send(Command::Stop);
+        }
     }
 }

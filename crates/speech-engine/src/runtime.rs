@@ -132,16 +132,16 @@ pub fn request_cancel() {
     let _ = std::fs::write(path, b"1");
 }
 
-/// What the current generation has produced so far, if one is running.
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct Progress2 {
+/// What the generation currently running has produced so far.
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct Generating {
     pub written_s: f32,
     pub elapsed_s: f32,
     pub chunks_done: u32,
     pub chunks: u32,
 }
 
-pub fn read_progress() -> Option<Progress2> {
+pub fn read_progress() -> Option<Generating> {
     let raw = std::fs::read_to_string(progress_path()).ok()?;
     serde_json::from_str(&raw).ok()
 }

@@ -132,6 +132,44 @@ type Waiting = SyncSender<std::result::Result<Value, RpcError>>;
 /// caller has to be told at once.
 type Pending = Arc<Mutex<HashMap<u64, Waiting>>>;
 
+/// A request the engine has been given and has not answered.
+///
+/// Holding one costs nothing and blocks nothing. Dropping one abandons the
+/// reply, which the reader will then have nowhere to put and will discard.
+pub struct Outstanding {
+    id: u64,
+    method: String,
+    waiting: Receiver<std::result::Result<Value, RpcError>>,
+    pending: Pending,
+}
+
+impl Outstanding {
+    pub fn id(&self) -> u64 {
+        self.id
+    }
+
+    pub fn method(&self) -> &str {
+        &self.method
+    }
+
+    pub fn wait(self, timeout: Duration) -> Result<Value> {
+        match self.waiting.recv_timeout(timeout) {
+            Ok(Ok(result)) => Ok(result),
+            Ok(Err(error)) => Err(EngineError::Rejected(error.to_string())),
+            // The reader drops every waiting sender when the child ends, which
+            // arrives here as a closed channel rather than as a timeout.
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(EngineError::NotRunning),
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                self.pending.lock().expect("pending").remove(&self.id);
+                Err(EngineError::Transport(format!(
+                    "{} did not answer within {timeout:?}",
+                    self.method
+                )))
+            }
+        }
+    }
+}
+
 pub struct Connection {
     child: Child,
     outgoing: SyncSender<String>,
@@ -233,12 +271,18 @@ impl Connection {
 
     /// Ask, and wait for the reply with this request's id — not for the next
     /// line to arrive, which may belong to someone else or to no one.
-    pub fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value> {
+    /// Write a request and return without waiting for it.
+    ///
+    /// The reply arrives on the returned handle whenever it arrives, and other
+    /// requests can be written and answered in the meantime — which is the
+    /// whole reason this protocol carries ids. A caller that waits here instead
+    /// of holding the handle turns a multiplexed connection back into a queue.
+    pub fn send(&self, method: &str, params: Value) -> Result<Outstanding> {
         if self.ended.load(Ordering::SeqCst) {
             return Err(EngineError::NotRunning);
         }
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let (answer, wait) = sync_channel(1);
+        let (answer, waiting) = sync_channel(1);
         self.pending.lock().expect("pending").insert(id, answer);
 
         let line = json!({
@@ -252,20 +296,18 @@ impl Connection {
             self.pending.lock().expect("pending").remove(&id);
             return Err(EngineError::NotRunning);
         }
+        Ok(Outstanding {
+            id,
+            method: method.to_string(),
+            waiting,
+            pending: self.pending.clone(),
+        })
+    }
 
-        match wait.recv_timeout(timeout) {
-            Ok(Ok(result)) => Ok(result),
-            Ok(Err(error)) => Err(EngineError::Rejected(error.to_string())),
-            // The reader drops every waiting sender when the child ends, which
-            // arrives here as a closed channel rather than as a timeout.
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => Err(EngineError::NotRunning),
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                self.pending.lock().expect("pending").remove(&id);
-                Err(EngineError::Transport(format!(
-                    "{method} did not answer within {timeout:?}"
-                )))
-            }
-        }
+    /// Write a request and wait for its reply. For callers with nothing to do
+    /// in between.
+    pub fn request(&self, method: &str, params: Value, timeout: Duration) -> Result<Value> {
+        self.send(method, params)?.wait(timeout)
     }
 
     /// Progress events discarded because nothing was reading them.

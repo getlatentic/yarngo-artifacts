@@ -12,7 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::OnceLock;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use speech_engine::protocol::{Connection, Events};
 use yarngo_core::{JobStatus, Rejection};
@@ -345,4 +345,91 @@ fn the_durable_engine_answers_for_the_library_and_the_machine() {
     assert!(machine.memory_bytes > 0 && !machine.chip.is_empty());
     let disk = engine.disk_space().expect("disk");
     assert!(disk.total_bytes > disk.free_bytes);
+}
+
+/// The engine thread submits work and does not wait for it.
+///
+/// The connection underneath has always been able to answer a ping while a
+/// synthesis runs — it carries request ids and Python answers cancellation on
+/// its reader. What this proves is that the layer above no longer throws that
+/// away by sitting on the reply: everything here goes through the one
+/// `EngineHandle` the application uses, while a real model is speaking.
+#[test]
+fn the_engine_answers_through_the_handle_while_it_is_generating() {
+    if !wanted() {
+        eprintln!("set YARNGO_TEST_ENGINE=1 to run against the real engine");
+        return;
+    }
+    use speech_engine::{EngineHandle, SynthesisRequest};
+    use std::sync::Arc;
+    use yarngo_synthesis::engine::{DurableEngine, Spawn};
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let Some((_, legacy)) = shadowed(dir.path()) else { return };
+    let Some((clip_id, _)) = a_custom_clip(&legacy) else { return };
+    let database = dir.path().join("app.db");
+    let data = data_dir();
+    let spawn = Spawn {
+        python: python(),
+        script: repo().join("sidecar/engine.py"),
+        work_dir: repo(),
+        data_dir: data.clone(),
+    };
+    let handle = Arc::new(
+        EngineHandle::spawn_backend(move || {
+            Ok(Box::new(DurableEngine::open(&database, &data, spawn)?))
+        })
+        .expect("engine"),
+    );
+
+    // Long enough to be split, so it is still going when we interrupt it.
+    let generating = {
+        let handle = handle.clone();
+        let clip_id = clip_id.clone();
+        std::thread::spawn(move || {
+            handle.synthesize(SynthesisRequest {
+                text: two_chunks(),
+                output: PathBuf::new(),
+                model: None,
+                clip_id: Some(clip_id),
+                voice_id: None,
+                seed: Some(4242),
+                name: None,
+            })
+        })
+    };
+
+    // Real progress: the engine saying it has finished part of the work. Not a
+    // sleep — a warm model would beat any sleep worth writing.
+    let deadline = Instant::now() + PATIENCE;
+    let mut seen = None;
+    while Instant::now() < deadline && seen.is_none() {
+        seen = handle.progress().filter(|p| p.chunks_done >= 1);
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let seen = seen.expect("the engine never reported finishing a chunk");
+    assert!(seen.chunks >= 2, "the text was not split, so nothing was still running");
+    assert!(!generating.is_finished(), "the synthesis finished before we could interrupt it");
+
+    // Through the same handle, while that is still outstanding.
+    let at = Instant::now();
+    handle.ping().expect("ping");
+    let pinged = at.elapsed();
+
+    let at = Instant::now();
+    handle.cancel_generation().expect("cancel");
+    let cancelled = at.elapsed();
+
+    assert!(
+        !generating.is_finished(),
+        "both answers arrived only because the synthesis had already ended"
+    );
+    assert!(
+        pinged < Duration::from_secs(5) && cancelled < Duration::from_secs(5),
+        "ping took {pinged:?} and cancel took {cancelled:?} while generating"
+    );
+
+    // And the cancellation was not merely acknowledged: it stopped the work.
+    let outcome = generating.join().expect("the synthesis thread");
+    assert!(outcome.is_err(), "a cancelled generation produced a take: {outcome:?}");
 }

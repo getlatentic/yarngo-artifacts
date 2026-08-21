@@ -26,7 +26,8 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use speech_engine::protocol::Connection;
+use speech_engine::protocol::{Connection, Outstanding};
+use speech_engine::EngineError;
 use yarngo_core::{DurableJobKind, Execution, Job, Rejection};
 use yarngo_store::takes::{Output, Produced};
 use yarngo_store::Store;
@@ -41,6 +42,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("no record of what {0} was asked to produce")]
     NoIntent(String),
+    #[error("{0}")]
+    Engine(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -109,6 +112,20 @@ impl<'a> Synthesis<'a> {
         Ok(Pending { job, execution, staged, request: request.clone() })
     }
 
+    /// Dispatch and wait, for a caller with nothing to do in between — which
+    /// is a test, or a recovery run. The application does not use it.
+    pub fn run(
+        &mut self,
+        pending: Pending,
+        engine: &Connection,
+        patience: Duration,
+        at: &str,
+    ) -> Result<Finished> {
+        let (dispatched, sent) = self.dispatch(pending, engine, at)?;
+        let reply = sent.wait(patience);
+        self.arrived(dispatched, reply, engine.has_ended(), at)
+    }
+
     /// The whole of it, for a caller with nothing to do in between.
     pub fn generate(
         &mut self,
@@ -153,12 +170,17 @@ impl<'a> Synthesis<'a> {
         Ok(staged)
     }
 
-    /// Hand it to the engine and wait for the attempt to end.
+    /// Hand it to the engine, and return as soon as it has been handed over.
     ///
-    /// Returns without having settled the job when the engine produced audio:
-    /// that is the point of the split. What the engine wrote is on the disk and
-    /// recorded, and nothing has said whether it is a take.
-    pub fn run(&mut self, pending: Pending, engine: &Connection, patience: Duration, at: &str) -> Result<Finished> {
+    /// Does not wait. The connection carries ids and can answer a cancellation
+    /// while this is still running, and waiting here is exactly how that gets
+    /// thrown away.
+    pub fn dispatch(
+        &mut self,
+        pending: Pending,
+        engine: &Connection,
+        at: &str,
+    ) -> Result<(Dispatched, Outstanding)> {
         let Pending { mut job, mut execution, staged, request } = pending;
 
         // Recorded as running before the request goes, never after. A crash the
@@ -168,8 +190,33 @@ impl<'a> Synthesis<'a> {
         execution.dispatched();
         self.store.save_progress(&job, Some(&execution), at)?;
 
-        let reply = engine.request("synthesis.generate", params(&request, &execution, &staged), patience);
+        match engine.send("synthesis.generate", params(&request, &execution, &staged)) {
+            Ok(sent) => Ok((Dispatched { job, execution, staged }, sent)),
+            Err(failure) => {
+                // Never reached the engine. Nobody is doing the work and nobody
+                // decided it should not be done.
+                job.execution_interrupted(&mut execution);
+                self.store.save_progress(&job, Some(&execution), at)?;
+                remove(&staged);
+                Err(Error::Engine(failure.to_string()))
+            }
+        }
+    }
 
+    /// The engine answered. Settles the attempt, and the job when there is
+    /// nothing left to decide.
+    ///
+    /// Returns without having settled the job when the engine produced audio:
+    /// that is the point of the split. What the engine wrote is on the disk and
+    /// recorded, and nothing has said whether it is a take.
+    pub fn arrived(
+        &mut self,
+        dispatched: Dispatched,
+        reply: std::result::Result<Value, EngineError>,
+        engine_ended: bool,
+        at: &str,
+    ) -> Result<Finished> {
+        let Dispatched { mut job, mut execution, staged } = dispatched;
         match reply {
             Ok(result) if result.get("state").and_then(Value::as_str) == Some("cancelled") => {
                 job.execution_cancelled(&mut execution);
@@ -185,7 +232,7 @@ impl<'a> Synthesis<'a> {
                 let output = self.intent(&execution.id)?;
                 Ok(Finished::Produced { job, execution, output })
             }
-            Err(failure) if engine.has_ended() => {
+            Err(failure) if engine_ended || matches!(failure, EngineError::NotRunning) => {
                 // Nobody is doing the work and nobody decided it should not be
                 // done. The job goes back to waiting for an engine that can.
                 let _ = failure;
@@ -311,6 +358,13 @@ impl<'a> Synthesis<'a> {
         }
         Ok(settled)
     }
+}
+
+/// An attempt the engine has been given, waiting for it to answer.
+pub struct Dispatched {
+    pub job: Job,
+    pub execution: Execution,
+    pub staged: PathBuf,
 }
 
 /// How an attempt ended.

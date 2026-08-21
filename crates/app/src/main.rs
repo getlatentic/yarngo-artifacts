@@ -175,7 +175,7 @@ pub struct VoiceStudio {
     pub(crate) text_scroll: ScrollHandle,
     /// What the running generation has written so far, polled from the engine
     /// while it works. `None` between generations.
-    pub(crate) progress: Option<runtime::Progress2>,
+    pub(crate) progress: Option<runtime::Generating>,
     /// Seconds of speech this generation is expected to produce, from the word
     /// count. An estimate, and labelled as one — the exact length is not known
     /// until the model has finished.
@@ -885,16 +885,24 @@ impl VoiceStudio {
     /// than mid-sentence, so a one-chunk clip finishes; anything longer stops
     /// where a sentence ended.
     pub(crate) fn cancel_generation(&mut self, cx: &mut Context<Self>) {
-        runtime::request_cancel();
+        // Through the engine, because how a generation is asked to stop is the
+        // engine's business: one is not listening while it works and has to be
+        // told by file, the other is and can simply be asked.
+        let Some(engine) = self.engine.clone() else { return };
+        cx.background_spawn(async move { engine.cancel_generation() }).detach();
         cx.notify();
     }
 
-    /// Poll what the engine has written while it works. The loop ends with the
-    /// generation, so an idle app is not reading a file ten times a second.
+    /// Poll where the generation has got to. The loop ends with the generation,
+    /// so an idle app is not asking ten times a second.
     fn tick_progress(&mut self, cx: &mut Context<Self>) {
         cx.spawn(async move |this, cx| loop {
             cx.background_executor().timer(Duration::from_millis(150)).await;
-            let reported = cx.background_spawn(async move { runtime::read_progress() }).await;
+            let engine = this.update(cx, |this, _| this.engine.clone()).ok().flatten();
+            let reported = match engine {
+                Some(engine) => cx.background_spawn(async move { engine.progress() }).await,
+                None => None,
+            };
             let generating = this
                 .update(cx, |this, cx| {
                     this.progress = reported;
