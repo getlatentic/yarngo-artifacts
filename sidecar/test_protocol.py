@@ -341,6 +341,17 @@ def main() -> int:
         [e for e in ran if e[1] == "two"] == [],
         failures,
     )
+    # The reply says the submission was cancelled; the event says how the job
+    # ended. A durable job sitting in cancel_requested needs the second — the
+    # two answer different questions.
+    ended = [
+        m
+        for m in replies
+        if m.get("method") == "job.cancelled"
+        and m["params"].get("execution_id") == "two"
+    ]
+    check("a cancelled queue entry reports a terminal event", len(ended) == 1, failures)
+    check("and says it never started", ended and ended[0]["params"].get("started") is False, failures)
 
     # Cancelling something this engine has never seen says so.
     replies = exchange([frame(id=1, method="job.cancel", params={"execution_id": "nope"})], expect=1)
@@ -373,7 +384,9 @@ def main() -> int:
     )
     source.close()
 
-    # Model work runs in the order it was queued.
+    # Model work runs in the order it was queued. Two, because admission is
+    # deliberately shallow — a third would be refused, which is a different
+    # property and is tested from the client side.
     order: list = []
 
     def records(params, ctx):
@@ -385,14 +398,16 @@ def main() -> int:
         [
             frame(id=1, method="rec", params={"tag": "a", "execution_id": "e1"}),
             frame(id=2, method="rec", params={"tag": "b", "execution_id": "e2"}),
-            frame(id=3, method="rec", params={"tag": "c", "execution_id": "e3"}),
         ],
-        expect=3,
+        expect=2,
         model={"rec": records},
         settle=10.0,
-        until=lambda ms: len(ms) >= 3,
+        until=lambda ms: len(ms) >= 2,
     )
-    check("model work runs in the order it was queued", order == ["a", "b", "c"], failures)
+    check("model work runs in the order it was queued", order == ["a", "b"], failures)
+
+    # Admission is shallow so the application keeps the backlog, not the engine.
+    check("the engine holds one running and one ready", protocol.ACTOR_QUEUE_DEPTH == 2, failures)
 
     # Events carry both identifiers, so one from an abandoned attempt cannot be
     # mistaken for the current one.
@@ -458,9 +473,38 @@ def main() -> int:
     }
     check("progress is coalesced per execution", streams == {"a/1", "b/1"}, failures)
 
+    # The registry of finished executions exists so a late cancellation can be
+    # answered, not to be a record. Driven against the actor directly: pushing
+    # hundreds through `serve` would exhaust admission and be refused rather
+    # than run, which measures the wrong bound.
+    out2 = Collected()
+    actor = protocol.ModelActor(
+        {"quick": lambda params, ctx: {}},
+        protocol.Writer(out2, on_fatal=lambda reason: None),
+        protocol.Cancellation(),
+    )
+    for i in range(protocol.FINISHED_MEMORY + 20):
+        while not actor.submit(i, "quick", {"execution_id": f"e{i}"}):
+            time.sleep(0.005)
+    check(
+        "every execution finished",
+        wait_for(out2, lambda ms: len(ms) >= protocol.FINISHED_MEMORY + 20, timeout=30),
+        failures,
+    )
+    check(
+        "the most recent finished execution is remembered",
+        actor.state_of(f"e{protocol.FINISHED_MEMORY + 19}") == "terminal",
+        failures,
+    )
+    check(
+        "the oldest has been forgotten rather than kept for ever",
+        actor.state_of("e0") == "unknown",
+        failures,
+    )
+
     for failure in failures:
         print(f"FAIL: {failure}", file=sys.stderr)
-    total = 47
+    total = 53
     print(f"{total - len(failures)}/{total} protocol checks passed")
     return 1 if failures else 0
 

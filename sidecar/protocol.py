@@ -47,10 +47,13 @@ JSONRPC_VERSION = "2.0"
 # The engine API's own version, which is about the methods rather than the wire.
 API_VERSION = 1
 
-# Requests waiting for the model actor. Bounded so a caller that submits faster
-# than the engine works is refused rather than allowed to grow the queue without
-# limit; the refusal is a reply, so it is visible.
-ACTOR_QUEUE_DEPTH = 64
+# Requests waiting for the model actor: one running, one ready to start. Shallow
+# on purpose. A deep queue here would make this a second scheduler holding a
+# backlog the application cannot see, reorder, or recover — and the application
+# is the one that knows what a restart should retry. Deeper than one so the
+# engine is not idle between operations; no deeper, because nothing here can be
+# rescheduled.
+ACTOR_QUEUE_DEPTH = 2
 
 # How much may be waiting on the control lane. Bounded, and its ceiling is
 # calculable rather than hoped for: a reply exists only because a request was
@@ -60,7 +63,11 @@ ACTOR_QUEUE_DEPTH = 64
 CONTROL_LANE_LIMIT = 512
 
 # How many finished executions to remember, so a cancellation arriving after the
-# work ended can say so rather than calling it unknown.
+# work ended can say so rather than calling it unknown. Bounded and not
+# persisted: this is a courtesy for late messages, never a record. The
+# application keeps the history, and after a restart an old execution is
+# genuinely unknown here — which is the truth, since whatever was running died
+# with the process.
 FINISHED_MEMORY = 256
 
 # The longest line either side will accept, enforced while reading rather than
@@ -295,8 +302,15 @@ class ModelActor:
                 self._cancellation.forget(execution_id)
                 with self._lock:
                     self._running = None
-                    if execution_id:
-                        self._finished.append(execution_id)
+                    self._finished.append(execution_id)
+                # The terminal event, not only the reply. The caller's job is
+                # sitting in `cancel_requested` waiting to be told how it ended,
+                # and a reply to the submission does not say that: the two are
+                # answers to different questions.
+                self._writer.event(
+                    "job.cancelled",
+                    {"job_id": job_id, "execution_id": execution_id, "started": False},
+                )
                 if not is_notification:
                     self._writer.reply(request_id, {"state": "cancelled", "started": False})
                 continue

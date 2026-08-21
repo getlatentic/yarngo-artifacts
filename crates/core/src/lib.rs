@@ -13,9 +13,11 @@
 //! *inputs* — the voice revision, the recording, the consent it was given
 //! under — are durable, and belong to the store.
 
+pub mod execution;
 pub mod job;
 pub mod voice;
 
+pub use execution::{Applied, Job, Observation};
 pub use job::{DurableJobKind, JobStatus};
 pub use voice::VoiceStatus;
 
