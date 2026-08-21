@@ -23,6 +23,7 @@ enum Command {
     RegisterVoice(Voice, Sender<Result<()>>),
     Voices(Sender<Result<Vec<Voice>>>),
     DeleteVoice(String, Sender<Result<()>>),
+    RenameVoice(String, String, Sender<Result<Vec<Voice>>>),
     PrepareVoice(String, Option<String>, Sender<Result<f32>>),
     DeleteModel(String, Sender<Result<u64>>),
     Synthesize(SynthesisRequest, Sender<Result<Synthesis>>),
@@ -80,6 +81,9 @@ impl EngineHandle {
                         }
                         Command::DeleteVoice(id, reply) => {
                             let _ = reply.send(engine.delete_voice(&id));
+                        }
+                        Command::RenameVoice(id, label, reply) => {
+                            let _ = reply.send(engine.rename_voice(&id, &label));
                         }
                         Command::PrepareVoice(id, model, reply) => {
                             let _ = reply.send(engine.prepare_voice(&id, model.as_deref()));
@@ -164,6 +168,15 @@ impl EngineHandle {
     pub fn delete_voice(&self, voice_id: impl Into<String>) -> Result<()> {
         let id = voice_id.into();
         self.dispatch(|reply| Command::DeleteVoice(id, reply))
+    }
+
+    pub fn rename_voice(
+        &self,
+        voice_id: impl Into<String>,
+        label: impl Into<String>,
+    ) -> Result<Vec<Voice>> {
+        let (id, label) = (voice_id.into(), label.into());
+        self.dispatch(|reply| Command::RenameVoice(id, label, reply))
     }
 
     /// Warm a voice so the first generation does not pay for it. Blocks for

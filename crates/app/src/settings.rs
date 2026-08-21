@@ -11,7 +11,7 @@
 
 use gpui::prelude::FluentBuilder;
 use gpui::*;
-use gpui_component::{ActiveTheme, StyledExt};
+use gpui_component::{input::Input, ActiveTheme, StyledExt};
 use rust_i18n::t;
 use speech_engine::{runtime, ModelSpec};
 
@@ -296,6 +296,7 @@ impl VoiceStudio {
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.confirming_delete = None;
                 this.confirming_voice = None;
+                this.renaming_voice = None;
                         cx.notify();
                     })),
             )
@@ -523,6 +524,7 @@ impl VoiceStudio {
         let current = self.speaking_voice() == Some(id.as_str());
         let clips = self.clips.iter().filter(|c| c.voice_id.as_deref() == Some(id.as_str())).count();
         let asking = self.confirming_voice.as_deref() == Some(id.as_str());
+        let renaming = self.renaming_voice.as_deref() == Some(id.as_str());
 
         let mut facts = Vec::new();
         if voice.seconds > 0.0 {
@@ -576,28 +578,63 @@ impl VoiceStudio {
                     .v_flex()
                     .flex_1()
                     .min_w(px(0.0))
-                    .child(
-                        div()
-                            .h_flex()
-                            .items_baseline()
-                            .gap(px(8.0))
-                            .child(
-                                div()
-                                    .font_family(theme::FONT_DISPLAY)
-                                    .text_size(px(13.5))
-                                    .font_semibold()
-                                    .child(voice.label.clone()),
-                            )
-                            .when(current, |d| {
-                                d.child(
+                    .when(renaming, |d| {
+                        d.child(
+                            div()
+                                .h_flex()
+                                .h(px(26.0))
+                                .w_full()
+                                .items_center()
+                                .rounded(px(7.0))
+                                .bg(theme::surface(false))
+                                .border_2()
+                                .border_color(theme::hex(0x171717))
+                                .font_family(theme::FONT_DISPLAY)
+                                .text_size(px(13.5))
+                                .font_semibold()
+                                // Its own frame, so the component's border and
+                                // focus ring do not draw a second box in this one.
+                                .key_context(crate::RENAME_CONTEXT)
+                                .child(Input::new(&self.voice_rename).appearance(false)),
+                        )
+                        .child(
+                            div()
+                                .h_flex()
+                                .items_baseline()
+                                .gap(px(4.0))
+                                .mt(px(3.0))
+                                .text_size(px(11.0))
+                                .text_color(theme::hex(0x6B645A))
+                                .child(crate::VoiceStudio::key_cap("Enter"))
+                                .child(t!("clip.rename_save").to_string())
+                                .child(crate::VoiceStudio::key_cap("Esc"))
+                                .child(t!("clip.rename_cancel").to_string()),
+                        )
+                    })
+                    .when(!renaming, |d| {
+                        d.child(
+                            div()
+                                .h_flex()
+                                .items_baseline()
+                                .gap(px(8.0))
+                                .child(
                                     div()
-                                        .text_size(px(11.0))
-                                        .text_color(theme::hex(0x8F4406))
-                                        .child(t!("settings.in_use").to_string()),
+                                        .font_family(theme::FONT_DISPLAY)
+                                        .text_size(px(13.5))
+                                        .font_semibold()
+                                        .child(voice.label.clone()),
                                 )
-                            }),
-                    )
-                    .child(ui::mono(facts.join(" · "), 11.5, theme::hex(0x6B645A)).mt(px(2.0))),
+                                .when(current, |d| {
+                                    d.child(
+                                        div()
+                                            .text_size(px(11.0))
+                                            .text_color(theme::hex(0x8F4406))
+                                            .child(t!("settings.in_use").to_string()),
+                                    )
+                                }),
+                        )
+                        .child(ui::mono(facts.join(" · "), 11.5, theme::hex(0x6B645A)).mt(px(2.0)))
+                    }),
             )
             // Deleting here says what goes and what stays before it happens,
             // which the sidebar's two-tap cannot.
@@ -615,7 +652,20 @@ impl VoiceStudio {
                         }),
                 )
             })
-            .child(
+            .when(!renaming, |d| {
+                let id = id.clone();
+                d.child(
+                    ui::secondary_button(None, t!("settings.rename").to_string())
+                        .h(px(30.0))
+                        .px(px(11.0))
+                        .rounded(px(7.0))
+                        .id(SharedString::from(format!("vrow-name-{id}")))
+                        .on_click(cx.listener(move |this, _, window, cx| {
+                            this.start_voice_rename(id.clone(), window, cx)
+                        })),
+                )
+            })
+            .when(!renaming, |d| d.child(
                 ui::secondary_button(None, t!("settings.delete").to_string())
                     .h(px(30.0))
                     .px(px(11.0))
@@ -634,7 +684,7 @@ impl VoiceStudio {
                             cx.notify();
                         }
                     })),
-            )
+            ))
             .into_any_element()
     }
 
@@ -653,26 +703,53 @@ impl VoiceStudio {
             .overflow_hidden()
             .child(
                 div()
-                    .v_flex()
+                    .h_flex()
+                    .w_full()
                     .flex_none()
+                    .items_start()
+                    .justify_between()
+                    .gap(px(12.0))
                     .child(
                         div()
-                            .font_family(theme::FONT_DISPLAY)
-                            .text_size(px(17.0))
-                            .font_semibold()
-                            .child(t!("settings.voices").to_string()),
-                    )
-                    .child(
-                        div()
-                            .text_size(px(12.0))
-                            .text_color(theme::hex(0x6B645A))
-                            .mt(px(3.0))
-                            .child(t!(
-                                "settings.voices_line",
-                                count = voices.len(),
-                                time = crate::workspace::duration(total)
+                            .v_flex()
+                            .min_w(px(0.0))
+                            .child(
+                                div()
+                                    .font_family(theme::FONT_DISPLAY)
+                                    .text_size(px(17.0))
+                                    .font_semibold()
+                                    .child(t!("settings.voices").to_string()),
                             )
-                            .to_string()),
+                            .child(
+                                div()
+                                    .text_size(px(12.0))
+                                    .text_color(theme::hex(0x6B645A))
+                                    .mt(px(3.0))
+                                    .child(t!(
+                                        "settings.voices_line",
+                                        count = voices.len(),
+                                        time = crate::workspace::duration(total)
+                                    )
+                                    .to_string()),
+                            ),
+                    )
+                    // The recorder takes the whole window, so this closes the
+                    // settings on the way rather than opening one over the other.
+                    .child(
+                        ui::secondary_button(
+                            Some((icon::name::MIC, 15)),
+                            t!("settings.add_voice").to_string(),
+                        )
+                        .flex_none()
+                        .h(px(30.0))
+                        .px(px(11.0))
+                        .rounded(px(7.0))
+                        .id("voices-add")
+                        .on_click(cx.listener(|this, _, window, cx| {
+                            this.settings_open = false;
+                            this.renaming_voice = None;
+                            this.begin_enrolment(window, cx);
+                        })),
                     ),
             )
             .child(
@@ -758,6 +835,7 @@ impl VoiceStudio {
                 this.settings_open = false;
                 this.confirming_delete = None;
                 this.confirming_voice = None;
+                this.renaming_voice = None;
                 cx.notify();
             }))
             .child(
@@ -800,6 +878,7 @@ impl VoiceStudio {
                                         this.settings_open = false;
                                         this.confirming_delete = None;
                 this.confirming_voice = None;
+                this.renaming_voice = None;
                                         cx.notify();
                                     })),
                             )

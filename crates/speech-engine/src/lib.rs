@@ -269,6 +269,10 @@ pub trait SpeechEngine {
 
     fn delete_voice(&mut self, voice_id: &str) -> Result<()>;
 
+    /// Change what a voice is called. The recording and the consent it was
+    /// given under are untouched, and so are the clips already made with it.
+    fn rename_voice(&mut self, voice_id: &str, label: &str) -> Result<Vec<Voice>>;
+
     /// Materialise a voice's conditioning ahead of time. Optional to call and
     /// safe to repeat; it only moves work earlier. Returns seconds spent.
     fn prepare_voice(&mut self, voice_id: &str, model: Option<&str>) -> Result<f32>;

@@ -813,7 +813,6 @@ impl VoiceStudio {
                                         .h(px(26.0))
                                         .min_w(px(300.0))
                                         .items_center()
-                                        .px(px(9.0))
                                         .rounded(px(7.0))
                                         .bg(theme::surface(false))
                                         .border_2()
@@ -905,7 +904,7 @@ impl VoiceStudio {
     }
 
     /// A key name inside a sentence, in the mono face the design sets it in.
-    fn key_cap(key: &'static str) -> Div {
+    pub(crate) fn key_cap(key: &'static str) -> Div {
         div()
             .font_family(theme::FONT_MONO)
             .text_size(px(11.0))

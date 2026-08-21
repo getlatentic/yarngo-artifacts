@@ -189,6 +189,12 @@ impl VoiceStudio {
     /// What to say under the voice list, if anything. The design only explains
     /// the cases that need it.
     fn voice_note(&self, chosen: Option<&str>, clone_ok: bool) -> Option<String> {
+        // A voice still being worked out comes first: it is the only one of
+        // these that stops being true on its own, and saving a recording now
+        // leaves nothing else on screen to say the work is still going.
+        if self.warming.is_some() {
+            return Some(t!("voice.preparing").to_string());
+        }
         if !clone_ok {
             return Some(t!("voice.model_cannot_clone").to_string());
         }

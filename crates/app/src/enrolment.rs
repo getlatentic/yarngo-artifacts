@@ -762,7 +762,7 @@ impl VoiceStudio {
             // During setup there is no window behind this to close to, but
             // there is a way past it: the bundled voice works with every model,
             // so recording is an offer here and not a toll.
-            .when(!closable && !matches!(self.enrolment, Enrolment::Saving), |d| {
+            .when(!closable, |d| {
                 d.child(
                     ui::secondary_button(None, t!("enrol.skip").to_string())
                         .h(px(32.0))
@@ -794,7 +794,6 @@ impl VoiceStudio {
 
     /// The recorder's body, identical wherever it is shown.
     fn enrolment_panel(&self, closable: bool, window: &Window, cx: &mut Context<Self>) -> Div {
-        let saving = matches!(self.enrolment, Enrolment::Saving);
         div()
             .v_flex()
             .w_full()
@@ -804,15 +803,7 @@ impl VoiceStudio {
             .rounded(px(14.0))
             .overflow_hidden()
             .child(self.enrolment_header(closable, cx))
-            .when(saving, |d| {
-                d.child(
-                    div()
-                        .p(px(20.0))
-                        .text_size(px(12.5))
-                        .child(t!("enrol.learning_detail").to_string()),
-                )
-            })
-            .when(!saving, |d| d.child(self.enrolment_columns(window, cx)))
+            .child(self.enrolment_columns(window, cx))
     }
 
     /// Setup step 3: the recorder as a full screen, under the wizard's stepper.

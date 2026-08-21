@@ -168,6 +168,12 @@ impl SpeechEngine for MlxSidecar {
         Ok(())
     }
 
+    fn rename_voice(&mut self, voice_id: &str, label: &str) -> Result<Vec<Voice>> {
+        let reply: VoicesReply =
+            self.call("rename_voice", json!({ "voice_id": voice_id, "label": label }))?;
+        Ok(reply.voices)
+    }
+
     fn delete_model(&mut self, model: &str) -> Result<u64> {
         let reply: FreedReply = self.call("delete_model", json!({ "model": model }))?;
         Ok(reply.freed_bytes)

@@ -45,7 +45,7 @@ actions!(voicestudio, [Speak, CommitRename, CancelRename]);
 
 /// Key context for the inline name field, so Enter and Escape mean rename only
 /// while a name is open for editing.
-pub(crate) const RENAME_CONTEXT: &str = "ClipRename";
+pub(crate) const RENAME_CONTEXT: &str = "Rename";
 
 const APP_ROOT: &str = "/Users/dev/workspace/voicestudio";
 
@@ -84,7 +84,6 @@ pub enum Enrolment {
     Review(Quality),
     /// Recorded but rejected, with advice on what to fix.
     Rejected(String),
-    Saving,
 }
 
 /// What the user is currently waiting on, if anything.
@@ -203,6 +202,11 @@ pub struct VoiceStudio {
     /// The name being edited inline in the header, and what it belongs to.
     pub(crate) clip_name: Entity<InputState>,
     pub(crate) renaming: Option<clips::Selected>,
+    /// The voice whose name is being edited in the settings window, if any.
+    /// Separate from `renaming`: that one names a clip, and both windows can be
+    /// on screen at once.
+    pub(crate) renaming_voice: Option<String>,
+    pub(crate) voice_rename: Entity<InputState>,
     /// The runtime finished installing and the user has not moved on yet.
     /// Setup holds the screen until they do: a download they watched for
     /// minutes should end by saying so, not by vanishing.
@@ -280,6 +284,8 @@ impl VoiceStudio {
             next_draft: 1,
             clip_name,
             renaming: None,
+            renaming_voice: None,
+            voice_rename: cx.new(|cx| InputState::new(window, cx)),
             in_setup: false,
             voice_saved: None,
         };
@@ -576,10 +582,18 @@ impl VoiceStudio {
             source: if self.imported.is_some() { "imported" } else { "recording" }.into(),
         };
 
-        self.enrolment = Enrolment::Saving;
-        self.status = Status::Preparing(
-            t!("enrol.learning_status").to_string(),
-        );
+        // Registering conditions the voice, and that is the slow part — around
+        // forty seconds. None of it needs the recorder on screen, so the sheet
+        // closes on the way out and the work carries on behind whatever the
+        // person goes back to. `warming` rather than a `Status`: it explains a
+        // slower first clip without switching Generate off.
+        self.enrolment = Enrolment::Closed;
+        self.in_setup = false;
+        self.recorder = None;
+        self.consent_given = false;
+        self.imported = None;
+        self.clear_take();
+        self.warming = Some(voice_id.clone());
         cx.notify();
 
         let enrolled_id = voice_id.clone();
@@ -602,6 +616,12 @@ impl VoiceStudio {
                 .await;
 
             this.update(cx, |this, cx| {
+                // Whatever happened, this voice is no longer being worked on.
+                // Checked rather than cleared outright: a second enrolment may
+                // have started since, and that one is still going.
+                if this.warming.as_deref() == Some(enrolled_id.as_str()) {
+                    this.warming = None;
+                }
                 match result {
                     Ok(voices) => {
                         // The clip that asked for the voice switches to it —
@@ -619,18 +639,11 @@ impl VoiceStudio {
                             this.selected_voice = Some(id);
                             this.warm_selected_voice(cx);
                         }
-                        this.enrolment = Enrolment::Closed;
-                        this.in_setup = false;
-                        this.recorder = None;
-                        this.consent_given = false;
-                        this.imported = None;
-                        this.clear_take();
-                        this.status = Status::Idle;
                     }
-                    Err(err) => {
-                        this.enrolment = Enrolment::Rejected(format!("{err}"));
-                        this.status = Status::Idle;
-                    }
+                    // The recorder is long gone and the person has moved on, so
+                    // this goes to the row that carries failures rather than
+                    // pulling them back to a sheet they finished with.
+                    Err(err) => this.status = Status::Failed(format!("{err}")),
                 }
                 cx.notify();
             })
@@ -1321,6 +1334,48 @@ impl VoiceStudio {
         .detach();
     }
 
+    /// Put a voice's name into the field and hand it the keyboard.
+    pub(crate) fn start_voice_rename(
+        &mut self,
+        voice_id: String,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(voice) = self.voices.iter().find(|v| v.voice_id == voice_id) else { return };
+        let label = voice.label.clone();
+        self.voice_rename.update(cx, |state, cx| state.set_value(label, window, cx));
+        self.renaming_voice = Some(voice_id);
+        self.confirming_voice = None;
+        self.voice_rename.update(cx, |state, cx| state.focus(window, cx));
+        cx.notify();
+    }
+
+    /// Save the edited name, unless it has been emptied — a voice with no name
+    /// is a row that cannot be told from the others.
+    pub(crate) fn commit_voice_rename(&mut self, cx: &mut Context<Self>) {
+        let Some(voice_id) = self.renaming_voice.take() else { return };
+        let label = self.voice_rename.read(cx).value().trim().to_string();
+        // The field has closed either way, so the pane has to be told even when
+        // there is nothing to save.
+        cx.notify();
+        let Some(engine) = self.engine.clone() else { return };
+        if label.is_empty() {
+            return;
+        }
+        cx.spawn(async move |this, cx| {
+            let voices =
+                cx.background_spawn(async move { engine.rename_voice(voice_id, label) }).await;
+            this.update(cx, |this, cx| {
+                if let Ok(voices) = voices {
+                    this.voices = voices;
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
     pub(crate) fn delete_voice(&mut self, voice_id: String, cx: &mut Context<Self>) {
         let Some(engine) = self.engine.clone() else { return };
         self.confirming_voice = None;
@@ -1653,8 +1708,22 @@ impl Render for VoiceStudio {
             .size_full()
             .bg(cx.theme().background)
             .on_action(cx.listener(|this, _: &Speak, _, cx| this.generate(None, cx)))
-            .on_action(cx.listener(|this, _: &CommitRename, _, cx| this.commit_rename(cx)))
-            .on_action(cx.listener(|this, _: &CancelRename, _, cx| this.cancel_rename(cx)))
+            // Enter and Escape mean the same thing to either name field; which
+            // one is open decides which is answered.
+            .on_action(cx.listener(|this, _: &CommitRename, _, cx| {
+                if this.renaming_voice.is_some() {
+                    this.commit_voice_rename(cx);
+                } else {
+                    this.commit_rename(cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &CancelRename, _, cx| {
+                if this.renaming_voice.take().is_some() {
+                    cx.notify();
+                } else {
+                    this.cancel_rename(cx);
+                }
+            }))
             .child(self.title_bar(window, cx))
             .child(match screen {
                 Screen::Setup => self.setup_screen(cx).into_any_element(),

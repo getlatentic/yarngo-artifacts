@@ -491,6 +491,20 @@ def m_list_voices(_params: dict) -> dict:
     return {"voices": [{"voice_id": k, **v} for k, v in _voices.items()]}
 
 
+def m_rename_voice(params: dict) -> dict:
+    """Rename a voice. Only the label changes — the recording, the consent it
+    was given under, and every clip already made with it are untouched."""
+    voice = _voices.get(params["voice_id"])
+    if voice is None:
+        raise ValueError(f"no such voice: {params['voice_id']}")
+    label = (params.get("label") or "").strip()
+    if not label:
+        raise ValueError("a voice needs a name")
+    voice["label"] = label
+    _save_voices_to_disk()
+    return {"voices": [{"voice_id": k, **v} for k, v in _voices.items()]}
+
+
 def _forget_conditioning() -> None:
     """Drop the speaker conditioning held in memory by every loaded model.
 
@@ -1184,6 +1198,7 @@ METHODS = {
     "register_voice": m_register_voice,
     "list_voices": m_list_voices,
     "delete_voice": m_delete_voice,
+    "rename_voice": m_rename_voice,
     "synthesize": m_synthesize,
     "prepare_voice": m_prepare_voice,
     "list_clips": m_list_clips,

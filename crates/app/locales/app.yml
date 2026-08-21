@@ -130,6 +130,9 @@ voice:
   confirm_delete:
     en: Delete?
     sk: Vymazať?
+  preparing:
+    en: Getting your new voice ready — you can carry on.
+    sk: Pripravujem váš nový hlas — môžete pokračovať.
   model_cannot_clone:
     en: This model speaks in its own voice only. Choose another model to use a voice of your own.
     sk: Tento model hovorí iba vlastným hlasom. Ak chcete použiť vlastný hlas, vyberte iný model.
@@ -227,6 +230,12 @@ settings:
   voices_line:
     en: "%{count} voices · %{time} of reference audio"
     sk: "%{count} hlasov · %{time} referenčného zvuku"
+  add_voice:
+    en: Record a voice
+    sk: Nahrať hlas
+  rename:
+    en: Rename
+    sk: Premenovať
   voices_where:
     en: Recordings live here. Deleting a voice removes its recording and everything derived from it.
     sk: Nahrávky sú tu. Vymazaním hlasu sa odstráni nahrávka aj všetko z nej odvodené.
@@ -586,15 +595,6 @@ enrol:
   good:
     en: "Sounds good — %{summary}"
     sk: "Znie dobre — %{summary}"
-  learning_title:
-    en: Getting to know your voice…
-    sk: Spoznávam váš hlas…
-  learning_detail:
-    en: Working out how you sound. About 40 seconds, once. After this it is quick.
-    sk: Zisťujem, ako znie váš hlas. Približne 40 sekúnd, jednorazovo. Potom to už ide rýchlo.
-  learning_status:
-    en: Getting to know your voice — about 40 seconds, once.
-    sk: Spoznávam váš hlas — približne 40 sekúnd, jednorazovo.
   consent:
     en: I have permission to use this voice. The recording and the voice stay on this machine. I can delete them whenever I want.
     sk: Mám povolenie použiť tento hlas. Nahrávka aj hlas zostávajú v tomto počítači. Kedykoľvek ich môžem vymazať.
