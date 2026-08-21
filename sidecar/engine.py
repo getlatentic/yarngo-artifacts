@@ -544,18 +544,13 @@ WORDS_PER_SECOND = 3.2
 # Target well under the ceiling: the estimate is rough, and running into the cap
 # mid-sentence is far worse than using one extra chunk.
 #
-# 40 rather than 110, and the difference is the whole product. Measured on one
-# reference, one text, one seed, changing only this number: at 110 words the
-# speaker similarity of the result was 0.866 against the reference; at 40 it is
-# 0.985. Uniform across the clip in both cases — this is not drift that
-# accumulates, it is conditioning that is weaker throughout a long generation,
-# so it resets at every chunk boundary and never recovers within one. The
-# reference measured against itself scores 0.999, so 0.985 is near the ceiling
-# and 0.866 is audibly not the same person.
-#
-# It costs time: the same text took 95s at 110 words and 162s at 40, because
-# each chunk pays its own overhead. Identity is what the product is for.
-CHUNK_TARGET_WORDS = 40
+# 40 was tried and reverted. The measurement that suggested it — 0.866 speaker
+# similarity at 110 words against 0.985 at 40 — compared a clip generated with
+# the model's *default* voice against one generated with the user's, so it
+# measured the wrong thing entirely. Controlled properly, same voice and text
+# and seed: 110 words scores 0.985/0.980/0.985/0.980 and 40 scores 0.985 four
+# times, which is the same answer, and 40 takes 162s where 110 takes 127s.
+CHUNK_TARGET_WORDS = 110
 
 
 def _split_into_chunks(text: str, target_words: int = CHUNK_TARGET_WORDS) -> list[str]:
