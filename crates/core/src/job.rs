@@ -24,6 +24,19 @@ pub enum DurableJobKind {
     VoiceDelete,
 }
 
+impl DurableJobKind {
+    /// Whether the engine finishing this is the whole of it.
+    ///
+    /// Synthesis is the case where it is not. The engine writes a file; whether
+    /// that file becomes a take the person has is decided afterwards, by
+    /// something that looks at the file and at what has happened to the voice
+    /// since the work started. Answering that here — treating the engine's
+    /// success as the job's — is the collapse this exists to prevent.
+    pub fn completes_with_execution(self) -> bool {
+        !matches!(self, Self::Synthesis)
+    }
+}
+
 /// What became of what the person asked for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -58,6 +71,12 @@ impl JobStatus {
                 | (Running, CancelRequested)
                 | (Running, Completed)
                 | (Running, Failed)
+                // The application looked at what the engine produced and would
+                // not have it — the voice was deleted while this was running.
+                // No cancellation was ever asked for: the deletion can happen
+                // entirely between the engine finishing and anything checking,
+                // and refusing to publish is that deletion taking effect.
+                | (Running, Cancelled)
                 // The engine went while this was running. Nobody is doing the
                 // work and nobody decided it should not be done, so it waits
                 // for an engine that can.
@@ -136,6 +155,7 @@ mod tests {
         (Running, CancelRequested),
         (Running, Completed),
         (Running, Failed),
+        (Running, Cancelled),
         (Running, Queued),
         (CancelRequested, Completed),
         (CancelRequested, Cancelled),

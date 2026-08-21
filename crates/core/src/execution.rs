@@ -17,9 +17,38 @@
 
 use crate::job::{DurableJobKind, ExecutionStatus, JobStatus};
 
-/// What the engine has reported about an attempt.
+/// Why the application would not publish what the engine produced.
+///
+/// Where the job lands depends on it: work stopped because the person removed
+/// the voice was cancelled, and work whose output cannot be used failed. Both
+/// end the job, and calling them the same thing would tell the person their
+/// deletion broke something.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Observation {
+pub enum Rejection {
+    /// The voice was deleted while this was generating. Refusing to publish is
+    /// the deletion taking effect, not a failure.
+    VoiceDeleted,
+    /// The file is not there, is empty, or is not the audio it claimed to be.
+    Unusable,
+}
+
+impl Rejection {
+    fn job_target(self) -> JobStatus {
+        match self {
+            Self::VoiceDeleted => JobStatus::Cancelled,
+            Self::Unusable => JobStatus::Failed,
+        }
+    }
+}
+
+/// What the engine has reported about an attempt.
+///
+/// Internal, because on its own it is not enough to settle anything: what it
+/// means for the job depends on the kind of work. Callers say which event
+/// happened — [`Job::execution_completed`] and the rest — and this is how that
+/// is carried the short distance to the two records.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Observation {
     Completed,
     Failed,
     Cancelled,
@@ -56,6 +85,11 @@ pub enum Applied {
     AlreadyFinished { state: JobStatus },
     /// Not a move this job can make from where it is.
     NotPermitted { from: JobStatus, to: JobStatus },
+    /// The attempt finished and the job did not. What the engine produced is
+    /// waiting to be checked, and until something checks it nothing has been
+    /// decided — reporting this as a move would be the answer to a question
+    /// nobody has asked yet.
+    Awaiting { job: JobStatus },
 }
 
 /// One engine's attempt at a job.
@@ -97,7 +131,7 @@ impl Execution {
 
     /// The engine running this stopped. Terminal for the attempt, and a claim
     /// about nothing else.
-    pub fn interrupt(&mut self) -> bool {
+    fn interrupt(&mut self) -> bool {
         self.settle(ExecutionStatus::Interrupted)
     }
 
@@ -108,7 +142,7 @@ impl Execution {
     /// file; whether that file becomes something the person has is for the
     /// application to say, after it has looked at the file and at what has
     /// happened since the work started.
-    pub fn finished(&mut self, observation: Observation) -> bool {
+    fn finished(&mut self, observation: Observation) -> bool {
         self.settle(observation.execution_target())
     }
 }
@@ -215,7 +249,11 @@ impl Job {
     }
 
     /// Take what the engine said, if it is still the engine we are listening to.
-    pub fn observe(&mut self, execution_id: &str, observation: Observation) -> Applied {
+    /// Deliberately not public. Moving a job straight from what the engine
+    /// said is right only where the engine's outcome is the job's, and a
+    /// caller free to do it for synthesis could complete a job on the strength
+    /// of a file nothing had read.
+    fn observe(&mut self, execution_id: &str, observation: Observation) -> Applied {
         if self.current_execution.as_deref() != Some(execution_id) {
             return Applied::Stale {
                 saw: execution_id.to_string(),
@@ -272,33 +310,118 @@ impl Job {
         Applied::Moved { to: target }
     }
 
-    /// Apply the observation to both records at once.
+    /// The engine finished this attempt successfully.
     ///
-    /// Right where the engine finishing is the whole job — forgetting a cache,
-    /// removing a file. Wrong where the application still has to decide, and
-    /// synthesis is the case: the engine produces audio, and the job is done
-    /// when that audio has been checked and committed, which may not happen.
-    /// Those use [`Execution::finished`] and settle the job separately.
-    pub fn settle(
-        &mut self,
-        execution: &mut Execution,
-        observation: Observation,
-    ) -> Applied {
+    /// Whether that finishes the job is the job kind's to say. For most kinds
+    /// the engine's success is the outcome; for synthesis it is a file nobody
+    /// has looked at, and the job waits for [`Job::take_published`] or
+    /// [`Job::take_rejected`].
+    pub fn execution_completed(&mut self, execution: &mut Execution) -> Applied {
+        self.engine_reported(execution, Observation::Completed)
+    }
+
+    /// The engine could not do it. Terminal for both: nothing was produced, so
+    /// there is nothing left to decide.
+    pub fn execution_failed(&mut self, execution: &mut Execution) -> Applied {
+        self.engine_reported(execution, Observation::Failed)
+    }
+
+    /// The engine stopped because it was asked to. Terminal for both, and for
+    /// the same reason: what it stopped short of making is not wanted.
+    pub fn execution_cancelled(&mut self, execution: &mut Execution) -> Applied {
+        self.engine_reported(execution, Observation::Cancelled)
+    }
+
+    /// The application checked what the engine produced and committed it. This
+    /// is what finishes a synthesis job — not the engine finishing.
+    pub fn take_published(&mut self, execution: &Execution) -> Applied {
+        self.publication(execution, JobStatus::Completed)
+    }
+
+    /// The application checked what the engine produced and would not have it.
+    pub fn take_rejected(&mut self, execution: &Execution, reason: Rejection) -> Applied {
+        self.publication(execution, reason.job_target())
+    }
+
+    /// Move both records for something the engine reported.
+    ///
+    /// Deliberately not public. It is the right shape only where the engine's
+    /// outcome is the job's, and a caller free to use it for synthesis could
+    /// complete a job on the strength of a file nothing had read.
+    fn engine_reported(&mut self, execution: &mut Execution, observation: Observation) -> Applied {
+        if observation == Observation::Completed && !self.kind.completes_with_execution() {
+            // Staleness before anything else: an abandoned attempt's success is
+            // not this job's, and must not even mark its own record finished
+            // under a job that has moved on.
+            if self.current_execution.as_deref() != Some(execution.id.as_str()) {
+                return Applied::Stale {
+                    saw: execution.id.clone(),
+                    current: self.current_execution.clone(),
+                };
+            }
+            if self.state.is_terminal() {
+                return Applied::AlreadyFinished { state: self.state };
+            }
+            execution.finished(observation);
+            return Applied::Awaiting { job: self.state };
+        }
         let outcome = self.observe(&execution.id.clone(), observation);
         if matches!(outcome, Applied::Moved { .. }) {
-            execution.settle(observation.execution_target());
+            execution.finished(observation);
         }
         outcome
+    }
+
+    /// Settle a job on what the application decided about the engine's output.
+    fn publication(&mut self, execution: &Execution, target: JobStatus) -> Applied {
+        if self.current_execution.as_deref() != Some(execution.id.as_str()) {
+            return Applied::Stale {
+                saw: execution.id.clone(),
+                current: self.current_execution.clone(),
+            };
+        }
+        if execution.state() != ExecutionStatus::Completed {
+            // Nothing was produced to publish or refuse. Publishing the output
+            // of an attempt that did not finish is how a partial file becomes a
+            // take.
+            return Applied::NotPermitted {
+                from: self.state,
+                to: target,
+            };
+        }
+        if self.state.is_terminal() {
+            return Applied::AlreadyFinished { state: self.state };
+        }
+        if !self.state.can_move_to(target) {
+            return Applied::NotPermitted {
+                from: self.state,
+                to: target,
+            };
+        }
+        self.state = target;
+        Applied::Moved { to: target }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Applied, Execution, Job, Observation};
+    use super::{Applied, Execution, Job, Rejection};
     use crate::job::{DurableJobKind, ExecutionStatus, JobStatus};
 
+    /// A dispatched job whose engine finishing is the whole of it, which is
+    /// what the lifecycle below is about. Synthesis has a decision after the
+    /// engine and gets its own tests.
     fn dispatched() -> (Job, Execution) {
-        let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
+        started(DurableJobKind::ModelInstall)
+    }
+
+    /// A dispatched job that produces something for the application to check.
+    fn synthesising() -> (Job, Execution) {
+        started(DurableJobKind::Synthesis)
+    }
+
+    fn started(kind: DurableJobKind) -> (Job, Execution) {
+        let mut job = Job::queued("job-1", kind);
         assert_eq!(job.dispatch("exec-1"), Applied::Moved { to: JobStatus::Running });
         (job, Execution::started("exec-1", "job-1", "session-1"))
     }
@@ -309,11 +432,11 @@ mod tests {
     fn a_repeated_completion_changes_nothing() {
         let (mut job, mut exec) = dispatched();
         assert_eq!(
-            job.settle(&mut exec, Observation::Completed),
+            job.execution_completed(&mut exec),
             Applied::Moved { to: JobStatus::Completed }
         );
         assert_eq!(
-            job.settle(&mut exec, Observation::Completed),
+            job.execution_completed(&mut exec),
             Applied::AlreadyFinished { state: JobStatus::Completed }
         );
         assert_eq!(job.state(), JobStatus::Completed);
@@ -323,9 +446,9 @@ mod tests {
     #[test]
     fn a_second_outcome_does_not_replace_the_first() {
         let (mut job, mut exec) = dispatched();
-        job.settle(&mut exec, Observation::Completed);
+        job.execution_completed(&mut exec);
         assert_eq!(
-            job.settle(&mut exec, Observation::Failed),
+            job.execution_failed(&mut exec),
             Applied::AlreadyFinished { state: JobStatus::Completed }
         );
         assert_eq!(job.state(), JobStatus::Completed);
@@ -336,10 +459,10 @@ mod tests {
     fn a_completion_cannot_undo_a_cancellation() {
         let (mut job, mut exec) = dispatched();
         job.request_cancel();
-        job.settle(&mut exec, Observation::Cancelled);
+        job.execution_cancelled(&mut exec);
         assert_eq!(job.state(), JobStatus::Cancelled);
         assert_eq!(
-            job.settle(&mut exec, Observation::Completed),
+            job.execution_completed(&mut exec),
             Applied::AlreadyFinished { state: JobStatus::Cancelled }
         );
         assert_eq!(job.state(), JobStatus::Cancelled);
@@ -352,7 +475,7 @@ mod tests {
         job.request_cancel();
         assert_eq!(job.state(), JobStatus::CancelRequested);
         assert_eq!(
-            job.settle(&mut exec, Observation::Completed),
+            job.execution_completed(&mut exec),
             Applied::Moved { to: JobStatus::Completed }
         );
     }
@@ -387,7 +510,7 @@ mod tests {
         job.execution_interrupted(&mut first);
         job.dispatch("exec-2");
         assert_eq!(
-            job.observe("exec-1", Observation::Completed),
+            job.execution_completed(&mut first),
             Applied::Stale {
                 saw: "exec-1".into(),
                 current: Some("exec-2".into())
@@ -404,7 +527,7 @@ mod tests {
         job.dispatch("exec-2");
         let mut second = Execution::started("exec-2", "job-1", "session-2");
         assert_eq!(
-            job.settle(&mut second, Observation::Completed),
+            job.execution_completed(&mut second),
             Applied::Moved { to: JobStatus::Completed }
         );
         assert_eq!(job.state(), JobStatus::Completed);
@@ -433,7 +556,7 @@ mod tests {
     fn a_cancelled_attempt_and_an_abandoned_one_are_told_apart() {
         let (mut observed, mut stopped) = dispatched();
         observed.request_cancel();
-        observed.settle(&mut stopped, Observation::Cancelled);
+        observed.execution_cancelled(&mut stopped);
         assert_eq!(observed.state(), JobStatus::Cancelled);
         assert_eq!(stopped.state(), ExecutionStatus::Cancelled);
 
@@ -462,7 +585,7 @@ mod tests {
     #[test]
     fn retrying_a_failure_is_a_new_job_that_remembers_the_old_one() {
         let (mut job, mut exec) = dispatched();
-        job.settle(&mut exec, Observation::Failed);
+        job.execution_failed(&mut exec);
         assert_eq!(job.state(), JobStatus::Failed);
 
         let retry = Job::retrying("job-2", &job);
@@ -477,16 +600,19 @@ mod tests {
     /// disagree.
     #[test]
     fn work_can_finish_while_the_job_it_was_for_is_cancelled() {
-        let (mut job, mut exec) = dispatched();
+        let (mut job, mut exec) = synthesising();
         // Something happened that means this must not be published — a voice
         // being deleted — so stopping was asked for.
         job.request_cancel();
         // The engine got there first, which cooperative cancellation permits.
-        assert!(exec.finished(Observation::Completed));
+        assert_eq!(
+            job.execution_completed(&mut exec),
+            Applied::Awaiting { job: JobStatus::CancelRequested }
+        );
         assert_eq!(exec.state(), ExecutionStatus::Completed);
         // The application looks at what it has and declines to keep it.
         assert_eq!(
-            job.observe("exec-1", Observation::Cancelled),
+            job.take_rejected(&exec, Rejection::VoiceDeleted),
             Applied::Moved { to: JobStatus::Cancelled }
         );
 
@@ -498,12 +624,12 @@ mod tests {
     /// cannot be applied to it afterwards.
     #[test]
     fn a_finished_attempt_cannot_complete_a_cancelled_job() {
-        let (mut job, mut exec) = dispatched();
+        let (mut job, mut exec) = synthesising();
         job.request_cancel();
-        exec.finished(Observation::Completed);
-        job.observe("exec-1", Observation::Cancelled);
+        job.execution_completed(&mut exec);
+        job.take_rejected(&exec, Rejection::VoiceDeleted);
         assert_eq!(
-            job.observe("exec-1", Observation::Completed),
+            job.take_published(&exec),
             Applied::AlreadyFinished { state: JobStatus::Cancelled }
         );
     }
@@ -512,8 +638,9 @@ mod tests {
     fn staleness_is_decided_before_the_transition_is() {
         let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
         job.dispatch("exec-2");
+        let mut abandoned = Execution::started("exec-1", "job-1", "session-1");
         assert!(matches!(
-            job.observe("exec-1", Observation::Completed),
+            job.execution_completed(&mut abandoned),
             Applied::Stale { .. }
         ));
         assert_eq!(job.state(), JobStatus::Running);
@@ -522,8 +649,9 @@ mod tests {
     #[test]
     fn an_event_for_an_undispatched_job_is_stale() {
         let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
+        let mut never_dispatched = Execution::started("exec-1", "job-1", "session-1");
         assert_eq!(
-            job.observe("exec-1", Observation::Completed),
+            job.execution_completed(&mut never_dispatched),
             Applied::Stale {
                 saw: "exec-1".into(),
                 current: None
@@ -538,10 +666,105 @@ mod tests {
         assert_eq!(job.request_cancel(), Applied::Moved { to: JobStatus::Cancelled });
     }
 
+    // Synthesis, where the engine finishing and the job finishing are two
+    // events with a decision between them.
+
+    /// The whole point of the split: a file exists, and nothing has decided
+    /// what it is yet.
+    #[test]
+    fn an_engine_completion_does_not_complete_a_synthesis_job() {
+        let (mut job, mut exec) = synthesising();
+        assert_eq!(
+            job.execution_completed(&mut exec),
+            Applied::Awaiting { job: JobStatus::Running }
+        );
+        assert_eq!(exec.state(), ExecutionStatus::Completed);
+        assert_eq!(job.state(), JobStatus::Running, "a file nobody read finished the job");
+    }
+
+    #[test]
+    fn publishing_the_take_is_what_completes_it() {
+        let (mut job, mut exec) = synthesising();
+        job.execution_completed(&mut exec);
+        assert_eq!(job.take_published(&exec), Applied::Moved { to: JobStatus::Completed });
+        assert_eq!(job.state(), JobStatus::Completed);
+    }
+
+    /// Where the rejection lands says why it was rejected, and the person can
+    /// tell their own deletion from something going wrong.
+    #[test]
+    fn a_refusal_lands_where_its_reason_says() {
+        let (mut deleted, mut one) = synthesising();
+        deleted.execution_completed(&mut one);
+        assert_eq!(
+            deleted.take_rejected(&one, Rejection::VoiceDeleted),
+            Applied::Moved { to: JobStatus::Cancelled }
+        );
+
+        let (mut broken, mut two) = synthesising();
+        broken.execution_completed(&mut two);
+        assert_eq!(
+            broken.take_rejected(&two, Rejection::Unusable),
+            Applied::Moved { to: JobStatus::Failed }
+        );
+    }
+
+    /// An abandoned attempt's file is still on the disk, and publishing it
+    /// would give the person the output of work they never saw finish.
+    #[test]
+    fn a_stale_attempts_output_is_not_published() {
+        let (mut job, mut first) = synthesising();
+        job.execution_interrupted(&mut first);
+        job.dispatch("exec-2");
+        // The lost engine's process was still alive and finished after all.
+        assert!(matches!(job.execution_completed(&mut first), Applied::Stale { .. }));
+        assert_eq!(
+            first.state(),
+            ExecutionStatus::Interrupted,
+            "a ghost rewrote its own record"
+        );
+        assert!(matches!(job.take_published(&first), Applied::Stale { .. }));
+        assert_eq!(job.state(), JobStatus::Running);
+    }
+
+    /// Publication needs something that finished. Otherwise a partial file
+    /// becomes a take.
+    #[test]
+    fn an_unfinished_attempt_cannot_be_published() {
+        let (mut job, exec) = synthesising();
+        assert_eq!(
+            job.take_published(&exec),
+            Applied::NotPermitted { from: JobStatus::Running, to: JobStatus::Completed }
+        );
+        assert_eq!(job.state(), JobStatus::Running);
+    }
+
+    /// Publication happens once. A second one is the same crash-and-repeat case
+    /// the engine's terminal events have.
+    #[test]
+    fn a_take_is_published_once() {
+        let (mut job, mut exec) = synthesising();
+        job.execution_completed(&mut exec);
+        job.take_published(&exec);
+        assert_eq!(
+            job.take_published(&exec),
+            Applied::AlreadyFinished { state: JobStatus::Completed }
+        );
+    }
+
+    /// A synthesis that failed in the engine produced nothing, so there is no
+    /// decision left and the job fails with it.
+    #[test]
+    fn a_synthesis_that_failed_in_the_engine_needs_no_publication() {
+        let (mut job, mut exec) = synthesising();
+        assert_eq!(job.execution_failed(&mut exec), Applied::Moved { to: JobStatus::Failed });
+        assert_eq!(exec.state(), ExecutionStatus::Failed);
+    }
+
     #[test]
     fn a_finished_job_cannot_be_dispatched_again() {
         let (mut job, mut exec) = dispatched();
-        job.settle(&mut exec, Observation::Completed);
+        job.execution_completed(&mut exec);
         assert_eq!(
             job.dispatch("exec-2"),
             Applied::AlreadyFinished { state: JobStatus::Completed }

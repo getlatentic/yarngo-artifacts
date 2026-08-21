@@ -11,7 +11,7 @@
 //! the data covered either way by the fixture below.
 
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use yarngo_store::import::{Legacy, LegacyClip, LegacyConsent, LegacyTake, LegacyVoice};
 use yarngo_store::{Store, VoiceProvenance};

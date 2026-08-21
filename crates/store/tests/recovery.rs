@@ -7,7 +7,7 @@
 
 use std::path::PathBuf;
 
-use yarngo_core::{DurableJobKind, Execution, ExecutionStatus, Job, JobStatus, Observation};
+use yarngo_core::{DurableJobKind, Execution, ExecutionStatus, Job, JobStatus};
 use yarngo_store::Store;
 
 fn at(seconds: u32) -> String {
@@ -30,7 +30,7 @@ fn a_job_running_when_its_engine_died_comes_back_and_is_finished_by_another() {
     let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
     store.insert_job(&job, Some("clip-1"), &at(0)).expect("insert");
     job.dispatch("exec-1");
-    let execution = Execution::started("exec-1", "job-1", "session-1");
+    let mut execution = Execution::started("exec-1", "job-1", "session-1");
     store.save_progress(&job, Some(&execution), &at(1)).expect("dispatch");
 
     // The engine goes, and so does the application: nothing tidies up.
@@ -59,11 +59,16 @@ fn a_job_running_when_its_engine_died_comes_back_and_is_finished_by_another() {
     store.save_progress(&job, Some(&second), &at(5)).expect("redispatch");
 
     // The abandoned attempt is still talking, and is refused for whose it is.
-    let stale = job.observe("exec-1", Observation::Completed);
+    let stale = job.execution_completed(&mut execution);
     assert!(matches!(stale, yarngo_core::Applied::Stale { .. }), "{stale:?}");
     assert_eq!(job.state(), JobStatus::Running);
 
-    job.settle(&mut second, Observation::Completed);
+    // The engine finished; the application then looked at what it produced and
+    // committed it. Two steps, because a synthesis job is finished by the
+    // second one.
+    job.execution_completed(&mut second);
+    assert_eq!(job.state(), JobStatus::Running, "the engine finished the job itself");
+    job.take_published(&second);
     store.save_progress(&job, Some(&second), &at(6)).expect("complete");
 
     // And that is what survives a second restart.
@@ -175,7 +180,8 @@ fn a_completed_job_survives_its_session_ending() {
     store.insert_job(&job, None, &at(0)).expect("insert");
     job.dispatch("exec-1");
     let mut execution = Execution::started("exec-1", "job-1", "session-1");
-    job.settle(&mut execution, Observation::Completed);
+    job.execution_completed(&mut execution);
+    job.take_published(&execution);
     store.save_progress(&job, Some(&execution), &at(1)).expect("save");
     assert_eq!(execution.state(), ExecutionStatus::Completed);
 

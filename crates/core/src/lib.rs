@@ -17,7 +17,7 @@ pub mod execution;
 pub mod job;
 pub mod voice;
 
-pub use execution::{Applied, Execution, Job, Observation};
+pub use execution::{Applied, Execution, Job, Rejection};
 pub use job::{DurableJobKind, ExecutionStatus, JobStatus};
 pub use voice::VoiceStatus;
 
