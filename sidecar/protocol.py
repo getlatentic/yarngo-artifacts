@@ -37,6 +37,7 @@ import os
 import queue
 import sys
 import threading
+import time
 import traceback
 from collections import deque
 from dataclasses import dataclass, field
@@ -307,6 +308,21 @@ class ModelActor:
     def depth(self) -> int:
         return self._work.qsize()
 
+    def drain(self, timeout: float = 30.0) -> None:
+        """Wait for what has been accepted to finish.
+
+        Input ending does not end the work already taken from it. Closing the
+        writer first would lose the answer to a request that was accepted, which
+        is the one kind of silence a caller cannot recover from.
+        """
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self._lock:
+                idle = self._running is None
+            if idle and self._work.empty():
+                return
+            time.sleep(0.01)
+
     def _run(self) -> None:
         while True:
             request_id, method, params, is_notification = self._work.get()
@@ -521,8 +537,9 @@ def serve(
         if not is_notification:
             writer.error(request_id, METHOD_NOT_FOUND, f"unknown method {method!r}")
 
-    # The input has ended, so nothing more will be asked. What has already been
-    # answered still has to arrive.
+    # The input has ended, so nothing more will be asked. What was already
+    # accepted still has to finish, and what it answers still has to arrive.
+    actor.drain()
     writer.close()
 
 
