@@ -1666,7 +1666,7 @@ impl Render for VoiceStudio {
                     .flex_1()
                     .min_h(px(0.0))
                     .child(self.sidebar(cx))
-                    .child(self.composer(window, cx))
+                    .child(self.composer(cx))
                     .child(self.inspector_panel(cx))
                     // Inside the body, so the title bar stays lit and the sheet
                     // sits centred on the work rather than on the window.
@@ -2309,7 +2309,14 @@ fn main() {
                         // render it twice.
                         title: None,
                         appears_transparent: true,
-                        traffic_light_position: Some(point(px(12.0), px(16.0))),
+                        // Centred against the bar rather than hung from the
+                        // top edge: everything else in the bar is centred in
+                        // `TITLE_BAR_HEIGHT`, and lights on a different line
+                        // read as the title sitting crooked next to them.
+                        traffic_light_position: Some(point(
+                            px(12.0),
+                            px((workspace::TITLE_BAR_HEIGHT - workspace::TRAFFIC_LIGHT_SIZE) / 2.0),
+                        )),
                     }),
                     ..Default::default()
                 },

@@ -40,6 +40,56 @@ fn line_sliver(distance: f32) -> f32 {
     if sliver > TEXT_LINE - 0.5 { 0.0 } else { sliver }
 }
 
+/// The card-coloured cover over whatever sliver of a line the text's scroll
+/// viewport cuts through.
+///
+/// Painted rather than laid out. How much to cover depends on the scroll
+/// offset, and gpui settles that in prepaint — after the render that would have
+/// sized a `div`. Sized in render, the cover hides where the cut was one frame
+/// ago, which reads as the last line blinking in and out at the end of a
+/// scroll. Painted, it is drawn against the geometry it is drawn with.
+fn text_cover(
+    scroll: &ScrollHandle,
+    slack: f32,
+    cx: &mut Context<VoiceStudio>,
+) -> impl IntoElement {
+    let measured = scroll.bounds().size.height.as_f32();
+    let view = cx.entity().downgrade();
+    let scroll = scroll.clone();
+    canvas(
+        move |bounds, _, cx| {
+            // `slack` was worked out from the height this region had a frame
+            // ago. When that is no longer its height — nothing laid out yet, or
+            // a window resized since — one more frame puts the text back on the
+            // grid. `cx.notify` cannot be called from the render itself: the
+            // dirty flag it sets is cleared by the render it is already in.
+            if (bounds.size.height.as_f32() - measured).abs() > 0.5 {
+                view.update(cx, |_, cx| cx.notify()).ok();
+            }
+        },
+        move |bounds, _, window, _| {
+            let scrolled = scroll.offset().y.as_f32().abs();
+            let sliver = line_sliver(bounds.size.height.as_f32() + scrolled - slack);
+            if sliver > 0.0 {
+                window.paint_quad(fill(
+                    Bounds::from_corners(
+                        point(bounds.origin.x, bounds.bottom_right().y - px(sliver)),
+                        bounds.bottom_right(),
+                    ),
+                    theme::surface(false),
+                ));
+            }
+        },
+    )
+    // Pinned, not merely absolute: with the insets left to `auto` the cover is
+    // laid out where it would have fallen in flow — under the text rather than
+    // over it.
+    .absolute()
+    .top_0()
+    .left_0()
+    .size_full()
+}
+
 /// Words per second used to estimate spoken length before generating, so the
 /// composer can say what it will cost in time. Measured, not guessed: the
 /// Nigerian sanity run averaged about 190 wpm.
@@ -55,6 +105,10 @@ const GEAR_SIZE: f32 = 19.0;
 const PILL_GEAR_GAP: f32 = 12.0;
 /// Tall enough that the lights sit centred rather than crowding the top edge.
 pub(crate) const TITLE_BAR_HEIGHT: f32 = 40.0;
+/// Diameter of one of the macOS window buttons, measured off the rendered bar.
+/// macOS puts them where it is told and centres nothing, so the app has to know
+/// how big they are to put them on the same line as everything else.
+pub(crate) const TRAFFIC_LIGHT_SIZE: f32 = 14.0;
 
 pub(crate) fn clock(created: &str) -> String {
     // "2026-08-18T15:39:00" -> "15:39"
@@ -987,8 +1041,13 @@ impl VoiceStudio {
                             ))
                             .child({
                                 let track = self.track.clone();
+                                // Pinned, not merely absolute: insets left to
+                                // `auto` place it where it would have fallen in
+                                // flow, which is under the bars it is measuring.
                                 canvas(move |bounds, _, _| track.set(bounds), |_, _, _, _| {})
                                     .absolute()
+                                    .top_0()
+                                    .left_0()
                                     .size_full()
                             })
                             .id("seek")
@@ -1133,7 +1192,7 @@ impl VoiceStudio {
 
     /// The words: a field while writing, the record of what was said once the
     /// clip exists, and locked while it runs.
-    fn card_body(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {
+    fn card_body(&self, cx: &mut Context<Self>) -> Div {
         let body = div()
             .v_flex()
             .flex_1()
@@ -1217,18 +1276,7 @@ impl VoiceStudio {
                     // the grid, and the gap above the footer the padding alone.
                     // Scrolling then walks the cut back off the grid, and that
                     // much of a line is covered over.
-                    let viewport = self.text_scroll.bounds().size.height.as_f32();
-                    let scrolled = self.text_scroll.offset().y.as_f32().abs();
-                    if viewport <= 0.0 {
-                        // The geometry above is last frame's, and there was no
-                        // last frame: this region has never been laid out. Ask
-                        // for another, which will have one. `cx.notify` cannot
-                        // do this from inside a render — the dirty flag it sets
-                        // is cleared by the render it is already in.
-                        window.request_animation_frame();
-                    }
-                    let slack = line_sliver(viewport);
-                    let sliver = line_sliver(scrolled);
+                    let slack = line_sliver(self.text_scroll.bounds().size.height.as_f32());
 
                     div()
                         .relative()
@@ -1246,17 +1294,7 @@ impl VoiceStudio {
                                 .text_color(theme::hex(0x171717))
                                 .child(clip.text.clone()),
                         )
-                        // No id and no occlude, so it never takes the scroll it
-                        // is drawn over.
-                        .child(
-                            div()
-                                .absolute()
-                                .bottom_0()
-                                .left_0()
-                                .right_0()
-                                .h(px(sliver))
-                                .bg(theme::surface(false)),
-                        )
+                        .child(text_cover(&self.text_scroll, slack, cx))
                 }),
             None => body.child(
                 div()
@@ -1454,7 +1492,7 @@ impl VoiceStudio {
             .into_any_element()
     }
 
-    pub(crate) fn composer(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    pub(crate) fn composer(&self, cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .v_flex()
             .flex_1()
@@ -1473,7 +1511,7 @@ impl VoiceStudio {
                     .min_h(px(0.0))
                     .w_full()
                     .child(self.card_strip(cx))
-                    .child(self.card_body(window, cx))
+                    .child(self.card_body(cx))
                     .child(self.card_footer(cx)),
             )
             .child(self.card_actions(cx))
@@ -1499,7 +1537,8 @@ mod tests {
             for scrolled in [0.0, 1.0, 13.2, 25.5, 99.9, 510.0, 1234.5] {
                 // Where the bottom edge falls, measured in the text's own grid
                 // — which starts `slack` below the top of the content.
-                let cut = viewport + scrolled - slack - line_sliver(scrolled);
+                let reach = viewport + scrolled - slack;
+                let cut = reach - line_sliver(reach);
                 let into_line = cut.rem_euclid(TEXT_LINE);
                 assert!(
                     into_line < 0.01 || into_line > TEXT_LINE - 0.51,
