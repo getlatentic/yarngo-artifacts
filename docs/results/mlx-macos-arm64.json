@@ -1,0 +1,139 @@
+{
+  "what": "python control-thread scheduling lag during blocking backend calls",
+  "proves": "schedulability of a protocol reader thread on this configuration only",
+  "does_not_prove": [
+    "MLX thread safety",
+    "that the real stdin reader and stdout writer keep up",
+    "end-to-end cancellation acknowledgement",
+    "any other backend, model, machine or MLX version"
+  ],
+  "host": {
+    "machine": "Apple M1 Max",
+    "memory_gb": 34.4,
+    "platform": "darwin-arm64",
+    "python": "3.13.5",
+    "mlx": "0.31.1",
+    "packages": [
+      "mlx=0.31.1",
+      "mlx-speech=0.5.2"
+    ]
+  },
+  "model": {
+    "id": "dots-tts-mf",
+    "repo": "appautomaton/dots-tts-mlx",
+    "revision": "6aaa85ffaf2c119fd30514c95c3b6ab474aa53d3"
+  },
+  "input_text_chars": 44,
+  "tick_interval_s": 0.05,
+  "idle_lag_ms_max": 5.0,
+  "results": [
+    {
+      "operation": "model_load",
+      "runs": [
+        {
+          "call_s": 5.048,
+          "materialise_s": 0.0,
+          "ticks_seen": 83,
+          "ticks_expected": 101,
+          "lag_ms": {
+            "p50": 3.5,
+            "p95": 21.7,
+            "max": 459.8
+          }
+        }
+      ]
+    },
+    {
+      "operation": "voice_conditioning_first_use",
+      "runs": [
+        {
+          "call_s": 36.804,
+          "materialise_s": 0.0,
+          "ticks_seen": 684,
+          "ticks_expected": 736,
+          "lag_ms": {
+            "p50": 4.3,
+            "p95": 5.1,
+            "max": 24.8
+          }
+        }
+      ]
+    },
+    {
+      "operation": "synthesis_default_voice",
+      "runs": [
+        {
+          "call_s": 3.861,
+          "materialise_s": 0.0,
+          "ticks_seen": 71,
+          "ticks_expected": 77,
+          "lag_ms": {
+            "p50": 5.0,
+            "p95": 7.7,
+            "max": 28.8
+          }
+        },
+        {
+          "call_s": 4.438,
+          "materialise_s": 0.0,
+          "ticks_seen": 80,
+          "ticks_expected": 89,
+          "lag_ms": {
+            "p50": 5.0,
+            "p95": 11.4,
+            "max": 66.4
+          }
+        },
+        {
+          "call_s": 4.217,
+          "materialise_s": 0.0,
+          "ticks_seen": 78,
+          "ticks_expected": 84,
+          "lag_ms": {
+            "p50": 5.0,
+            "p95": 9.9,
+            "max": 11.9
+          }
+        }
+      ]
+    },
+    {
+      "operation": "synthesis_cloned_voice",
+      "runs": [
+        {
+          "call_s": 14.176,
+          "materialise_s": 0.0,
+          "ticks_seen": 263,
+          "ticks_expected": 284,
+          "lag_ms": {
+            "p50": 4.4,
+            "p95": 5.2,
+            "max": 9.3
+          }
+        },
+        {
+          "call_s": 14.172,
+          "materialise_s": 0.0,
+          "ticks_seen": 262,
+          "ticks_expected": 283,
+          "lag_ms": {
+            "p50": 4.8,
+            "p95": 5.6,
+            "max": 13.0
+          }
+        },
+        {
+          "call_s": 16.159,
+          "materialise_s": 0.0,
+          "ticks_seen": 288,
+          "ticks_expected": 323,
+          "lag_ms": {
+            "p50": 5.0,
+            "p95": 12.3,
+            "max": 89.1
+          }
+        }
+      ]
+    }
+  ]
+}
