@@ -96,6 +96,23 @@ MODEL_NOT_INSTALLED = -32003
 JOB_ALREADY_TERMINAL = -32004
 
 
+# What a model operation is: parameters, and the context it reports against.
+Handler = Callable[[dict, "Context"], "dict | None"]
+# What a broker operation is: parameters alone. Nothing it answers runs long
+# enough to have progress to report or a cancellation to honour.
+BrokerHandler = Callable[[dict], "dict | None"]
+
+
+class Cancelled(Exception):
+    """Raised by a handler that stopped because it was asked to.
+
+    Not a failure: the work did not finish, and that is the outcome the caller
+    asked for. Reported as a cancellation with its own terminal event, because a
+    job sitting in `cancel_requested` is waiting to be told how it ended and an
+    error would tell it the wrong thing.
+    """
+
+
 class Emit(Protocol):
     def __call__(self, method: str, params: dict) -> None: ...
 
@@ -264,7 +281,7 @@ class ModelActor:
     behind them are not written to be shared.
     """
 
-    def __init__(self, handlers: dict[str, Callable], writer: Writer, cancellation: Cancellation) -> None:
+    def __init__(self, handlers: dict[str, Handler], writer: Writer, cancellation: Cancellation) -> None:
         self._handlers = handlers
         self._writer = writer
         self._cancellation = cancellation
@@ -276,6 +293,10 @@ class ModelActor:
         self._lock = threading.Lock()
         self._queued: set[str] = set()
         self._running: str | None = None
+        # Whether a handler is in progress, which is not the same question as
+        # which execution is in progress: most operations have no execution at
+        # all, and `_running is None` is their normal state while working.
+        self._busy = False
         self._finished: deque = deque(maxlen=FINISHED_MEMORY)
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -318,7 +339,7 @@ class ModelActor:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             with self._lock:
-                idle = self._running is None
+                idle = not self._busy
             if idle and self._work.empty():
                 return
             time.sleep(0.01)
@@ -332,12 +353,14 @@ class ModelActor:
             with self._lock:
                 self._queued.discard(execution_id)
                 self._running = execution_id
+                self._busy = True
             # Checked before the handler is entered, not only inside it: an
             # execution cancelled while it waited its turn should never start.
             if execution_id and self._cancellation.is_requested(execution_id):
                 self._cancellation.forget(execution_id)
                 with self._lock:
                     self._running = None
+                    self._busy = False
                     self._finished.append(execution_id)
                 # The terminal event, not only the reply. The caller's job is
                 # sitting in `cancel_requested` waiting to be told how it ended,
@@ -360,6 +383,21 @@ class ModelActor:
                 result = self._handlers[method](params, context)
                 if not is_notification:
                     self._writer.reply(request_id, result if result is not None else {})
+            except Cancelled as stopped:
+                # Started and then stopped, which is a different fact from
+                # stopped before starting: work was done and any partial output
+                # exists. Both say `started` so the caller can tell them apart.
+                self._writer.event(
+                    "job.cancelled",
+                    {
+                        "job_id": job_id,
+                        "execution_id": execution_id,
+                        "started": True,
+                        "detail": str(stopped),
+                    },
+                )
+                if not is_notification:
+                    self._writer.reply(request_id, {"state": "cancelled", "started": True})
             except Exception as exc:  # noqa: BLE001
                 # Reported as a reply, never as a stack trace on stdout: the
                 # caller is waiting on this id and gets an error rather than a
@@ -372,6 +410,7 @@ class ModelActor:
             finally:
                 with self._lock:
                     self._running = None
+                    self._busy = False
                     if execution_id:
                         self._finished.append(execution_id)
                 if execution_id:
@@ -400,8 +439,8 @@ def _progress_key(message: dict) -> str | None:
 
 def serve(
     *,
-    broker: dict[str, Callable],
-    model: dict[str, Callable],
+    broker: dict[str, BrokerHandler],
+    model: dict[str, Handler],
     capabilities: dict | None = None,
     stdin=None,
     stdout=None,

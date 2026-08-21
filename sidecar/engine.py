@@ -32,6 +32,8 @@ import threading
 import numpy as np
 import soundfile as sf
 
+import protocol
+
 # Voices live on disk so they survive a restart. Preparing a voice costs about
 # 40 seconds, and asking the user to repeat that every launch is not an option.
 # The app passes YARNGO_DATA when it spawns this process, so both sides agree
@@ -457,8 +459,21 @@ def m_register_voice(params: dict) -> dict:
 
 
 def _prepare_voice(voice_id: str, model_id: str | None = None) -> float:
-    """Materialise speaker conditioning so later generations skip that cost."""
+    """Condition a voice this engine has a record of. The legacy path only."""
     voice = _voices[voice_id]
+    return _condition(voice["reference_audio"], voice["reference_text"] or None, model_id)
+
+
+def _condition(
+    reference_audio: str, reference_text: str | None, model_id: str | None = None
+) -> float:
+    """Materialise speaker conditioning so later generations skip that cost.
+
+    Takes the recording itself rather than an identifier to look up. Which
+    voices exist is the application's to know, and an engine that had to be told
+    about a voice before it could speak with it would be keeping a second
+    register of them.
+    """
     model_id = model_id or _default_model()
     model = _load(model_id)
     gen = MODELS[model_id].get("gen") or {}
@@ -468,16 +483,16 @@ def _prepare_voice(voice_id: str, model_id: str | None = None) -> float:
     if prepare is not None:
         # The direct path: no waveform is synthesised, only the conditioning.
         prepare(
-            voice["reference_audio"],
-            reference_text=voice["reference_text"] or None,
+            reference_audio,
+            reference_text=reference_text or None,
             speaker_scale=gen.get("speaker_scale", 1.5),
         )
     else:
         # Backends without prepare_prompt warm the same cache by generating.
         kwargs = dict(gen)
-        kwargs["reference_audio"] = voice["reference_audio"]
-        if voice["reference_text"]:
-            kwargs["reference_text"] = voice["reference_text"]
+        kwargs["reference_audio"] = reference_audio
+        if reference_text:
+            kwargs["reference_text"] = reference_text
         model.generate("Ready.", **kwargs)
     return round(time.perf_counter() - started, 2)
 
@@ -771,8 +786,9 @@ _PROGRESS = VOICE_DIR.parent / "generating.json"
 _CANCEL = VOICE_DIR.parent / "cancel"
 
 
-class Cancelled(Exception):
-    """The user stopped this generation between chunks."""
+# The protocol's, not a second one: a stop is the same fact whichever front end
+# heard it, and the serving layer recognises this class specifically.
+Cancelled = protocol.Cancelled
 
 
 def _clear_signals() -> None:
@@ -1285,9 +1301,6 @@ METHODS = {
 # Which methods may be answered without touching the model or anything derived
 # from it. Sorted by what they own rather than by how long they take: reading
 # the voice table while a registration writes it is a torn read, however quick.
-BROKER_METHODS = ("ping", "system_info", "install_status")
-
-
 def _capabilities() -> dict:
     """What this engine is, stated once at the handshake."""
     return {
@@ -1300,30 +1313,169 @@ def _capabilities() -> dict:
     }
 
 
-def m_conditioning_invalidate(_params: dict) -> dict:
+def m_conditioning_invalidate(_params: dict, _ctx: protocol.Context) -> dict:
     """Forget every voice this engine has derived conditioning for."""
     return _forget_conditioning().as_reply()
 
 
-def _serve_jsonrpc() -> None:
-    """The same operations, answered over JSON-RPC.
-
-    One engine underneath both front ends. Two implementations of synthesis
-    would drift, and the one that drifted would be the one nobody was running.
-    """
-    import protocol
-
-    broker = {name: METHODS[name] for name in BROKER_METHODS if name in METHODS}
-    model = {
-        name: (lambda handler: lambda params, _ctx: handler(params))(handler)
-        for name, handler in METHODS.items()
-        if name not in BROKER_METHODS
+def m_conditioning_prepare(params: dict, _ctx: protocol.Context) -> dict:
+    """Warm the conditioning for a recording the caller supplies."""
+    return {
+        "prepared_s": _condition(
+            _recording(params["reference_audio"]),
+            params.get("reference_text"),
+            params.get("model"),
+        )
     }
-    # Named for what they are rather than for the function that does them, since
-    # these are the ones the application's own workflows call by name.
-    model["conditioning.prepare"] = lambda params, _ctx: m_prepare_voice(params)
-    model["conditioning.invalidate"] = lambda params, _ctx: m_conditioning_invalidate(params)
-    protocol.serve(broker=broker, model=model, capabilities=_capabilities())
+
+
+def _recording(path: str) -> str:
+    """A reference recording that is actually there.
+
+    Checked before the model is asked for it so a deleted voice is a plain
+    answer rather than whatever the backend does with a missing file.
+    """
+    if not Path(path).exists():
+        raise FileNotFoundError(f"no recording at {path}")
+    return path
+
+
+def m_synthesis_generate(params: dict, ctx: protocol.Context) -> dict:
+    """Speak the text into the file the caller named, and record nothing.
+
+    One file, at the path it was given. Whether that audio is kept, where it
+    belongs, and what it becomes are decided after someone has looked at it —
+    an engine that filed its own output would be settling that here, before
+    anything had checked the result.
+    """
+    model_id = params.get("model") or _default_model()
+    model = _load(model_id)
+
+    kwargs = dict(MODELS[model_id].get("gen") or {})
+    kwargs.update(params.get("options") or {})
+    # Random unless the caller pins one, so "generate again" gives a different
+    # take. The seed used is returned, which is what makes a take repeatable.
+    seed = params.get("seed")
+    if seed is None:
+        seed = random.randint(1000, 9999)
+    kwargs["seed"] = int(seed)
+    # Absent means the model's own voice. There is no identifier to look up:
+    # which voices exist is the application's to know.
+    if params.get("reference_audio"):
+        kwargs["reference_audio"] = _recording(params["reference_audio"])
+        if params.get("reference_text"):
+            kwargs["reference_text"] = params["reference_text"]
+
+    chunks = _split_into_chunks(params["text"])
+    if not chunks:
+        raise ValueError("nothing to say")
+    out = Path(params["output_path"])
+
+    started = time.perf_counter()
+    pieces = []
+    sample_rate = None
+    written_s = 0.0
+    for index, chunk in enumerate(chunks):
+        # Between chunks rather than mid-utterance: a chunk boundary is a
+        # sentence end, and stopping inside one leaves half a sentence.
+        if ctx.cancelled():
+            raise protocol.Cancelled(f"stopped before chunk {index + 1} of {len(chunks)}")
+        result = model.generate(chunk, **kwargs)
+        sample_rate = result.sample_rate
+        piece = np.asarray(result.waveform, dtype=np.float32).squeeze()
+        pieces.append(piece)
+        written_s += piece.shape[0] / sample_rate
+        ctx.emit(
+            "job.progress",
+            {
+                "chunks_done": index + 1,
+                "chunks": len(chunks),
+                "written_s": round(written_s, 2),
+                "elapsed_s": round(time.perf_counter() - started, 2),
+            },
+        )
+        if index + 1 < len(chunks):
+            # A short gap between chunks reads as a breath rather than a join.
+            pieces.append(np.zeros(int(0.18 * sample_rate), dtype=np.float32))
+    gen_s = time.perf_counter() - started
+
+    wav = np.concatenate(pieces) if len(pieces) > 1 else pieces[0]
+    # Normalise once over the whole utterance: per-chunk normalisation would
+    # make the volume step at every join.
+    peak = float(np.max(np.abs(wav)))
+    if peak > 0:
+        wav = wav * (0.95 / peak)
+
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(out, wav, sample_rate)
+    audio_s = wav.shape[0] / sample_rate
+    return {
+        "output_path": str(out),
+        "model": model_id,
+        "audio_s": round(audio_s, 2),
+        "gen_s": round(gen_s, 2),
+        "rtf": round(gen_s / audio_s, 2) if audio_s else None,
+        "seed": int(seed),
+        "sample_rate": sample_rate,
+        "chunks": len(chunks),
+    }
+
+
+def _plain(handler) -> protocol.Handler:
+    """An older handler, which takes parameters and nothing else."""
+    return lambda params, _ctx: handler(params)
+
+
+# Answered on the reader, because none of these touch the model: they stay
+# available while it is loading a model or speaking for a minute.
+JSONRPC_BROKER: dict[str, protocol.BrokerHandler] = {
+    "ping": m_ping,
+    "system_info": m_system_info,
+    "model.install_status": m_install_status,
+}
+
+# Queued on the thread that owns the model. Sorted by what they touch rather
+# than by how long they take: a fast call that reads the model still has to
+# wait for the slow one that is writing it.
+JSONRPC_MODEL: dict[str, protocol.Handler] = {
+    "model.list": _plain(m_list_models),
+    "model.load": _plain(m_load_model),
+    "model.install": _plain(m_install_model),
+    "model.delete": _plain(m_delete_model),
+    "conditioning.prepare": m_conditioning_prepare,
+    "conditioning.invalidate": m_conditioning_invalidate,
+    "synthesis.generate": m_synthesis_generate,
+}
+
+# What the JSON-RPC engine deliberately cannot do. Listing clips, renaming a
+# voice and the rest are the application's records, kept in its database, and an
+# engine method that answered for them would make this process a second place
+# they live — the one the application would then have to agree with. They stay
+# on the legacy front end until it goes, and they do not come with it.
+LEGACY_ONLY = (
+    "list_clips",
+    "rename_clip",
+    "duplicate_clip",
+    "delete_clip",
+    "list_voices",
+    "rename_voice",
+    "register_voice",
+    "delete_voice",
+    "prepare_voice",
+    "synthesize",
+    "disk_free",
+)
+
+
+def _serve_jsonrpc() -> None:
+    """The runtime, over JSON-RPC. One engine underneath both front ends.
+
+    Two implementations of synthesis would drift, and the one that drifted would
+    be the one nobody was running. What differs is the surface, not the work.
+    """
+    protocol.serve(
+        broker=JSONRPC_BROKER, model=JSONRPC_MODEL, capabilities=_capabilities()
+    )
 
 
 def _serve_legacy() -> None:

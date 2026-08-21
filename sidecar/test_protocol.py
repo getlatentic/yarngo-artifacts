@@ -502,9 +502,66 @@ def main() -> int:
         failures,
     )
 
+    # Most operations carry no execution_id, so "which execution is running"
+    # is None for them while they work. Shutdown must not read that as idle:
+    # closing the writer under an accepted request loses its reply, which is
+    # the one silence a caller cannot tell from a hang.
+    def unhurried(_params, _ctx):
+        time.sleep(0.3)
+        return {"finished": True}
+
+    replies = exchange(
+        [frame(id=1, method="work")], expect=1, model={"work": unhurried}, settle=3.0
+    )
+    check(
+        "a request with no execution_id is answered, not dropped at shutdown",
+        any(m.get("id") == 1 and (m.get("result") or {}).get("finished") for m in replies),
+        failures,
+    )
+
+    # Stopping because you were asked to is an outcome, not a failure. The job
+    # is sitting in cancel_requested waiting to be told how it ended, and an
+    # error would answer a different question.
+    running = threading.Event()
+
+    def cooperative(_params, ctx):
+        running.set()
+        while not ctx.cancelled():
+            time.sleep(0.01)
+        raise protocol.Cancelled("stopped between chunks")
+
+    source, out = paced(model={"long": cooperative})
+    source.push(
+        frame(id=1, method="long", params={"job_id": "j-coop", "execution_id": "e-coop"})
+    )
+    running.wait(timeout=3)
+    source.push(frame(id=2, method="job.cancel", params={"execution_id": "e-coop"}))
+    check(
+        "a handler that honours a cancellation reports one, not a fault",
+        wait_for(
+            out,
+            lambda ms: any(
+                m.get("method") == "job.cancelled"
+                and (m.get("params") or {}).get("execution_id") == "e-coop"
+                and (m.get("params") or {}).get("started") is True
+                for m in ms
+            ),
+        ),
+        failures,
+    )
+    check(
+        "and it is distinguished from one that never started",
+        any(
+            m.get("id") == 1 and (m.get("result") or {}) == {"state": "cancelled", "started": True}
+            for m in out.messages()
+        ),
+        failures,
+    )
+    source.close()
+
     for failure in failures:
         print(f"FAIL: {failure}", file=sys.stderr)
-    total = 53
+    total = 56
     print(f"{total - len(failures)}/{total} protocol checks passed")
     return 1 if failures else 0
 

@@ -59,17 +59,32 @@ fn start() -> (Connection, Events) {
     Connection::attach(child, stdin, stdout, stderr)
 }
 
-/// A voice this machine has, if it has one.
-fn a_voice(engine: &Connection) -> Option<String> {
-    let voices = engine
-        .request("list_voices", json!({}), PATIENCE)
-        .expect("list_voices");
-    voices["voices"]
-        .as_array()?
-        .first()?
-        .get("voice_id")?
-        .as_str()
-        .map(Into::into)
+fn data_dir() -> PathBuf {
+    PathBuf::from("/Users/dev/Library/Application Support/Yarngo Studio")
+}
+
+/// A recording this machine can speak with, if it has one.
+///
+/// Read from the store rather than asked for: the engine has no voice table on
+/// this path, which is the point of it. Which voices exist is the application's
+/// to know, and a request either carries the recording or asks for the model's
+/// own voice.
+fn a_recording() -> Option<serde_json::Value> {
+    let raw = std::fs::read_to_string(data_dir().join("voices/voices.json")).ok()?;
+    let voices: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let voice = voices.as_object()?.values().next()?;
+    Some(json!({
+        "reference_audio": voice.get("reference_audio")?.as_str()?,
+        "reference_text": voice.get("reference_text").and_then(|t| t.as_str()),
+    }))
+}
+
+/// The same, with a job and execution attached, as real work always has.
+fn against(recording: &serde_json::Value, job: &str, execution: &str) -> serde_json::Value {
+    let mut params = recording.clone();
+    params["job_id"] = json!(job);
+    params["execution_id"] = json!(execution);
+    params
 }
 
 #[test]
@@ -97,19 +112,16 @@ fn the_engine_answers_while_it_conditions_a_voice() {
     }
     let (engine, _events) = start();
     engine.initialize(PATIENCE).expect("initialize");
-    let Some(voice) = a_voice(&engine) else {
+    let Some(recording) = a_recording() else {
         eprintln!("no voice enrolled on this machine");
         return;
     };
+    let warming = against(&recording, "j1", "j1/1");
 
     std::thread::scope(|scope| {
         let conditioning = scope.spawn(|| {
             engine
-                .request(
-                    "conditioning.prepare",
-                    json!({ "voice_id": voice, "job_id": "j1", "execution_id": "j1/1" }),
-                    PATIENCE,
-                )
+                .request("conditioning.prepare", warming, PATIENCE)
                 .expect("conditioning")
         });
 
@@ -140,10 +152,10 @@ fn conditioning_is_really_cleared() {
     }
     let (engine, _events) = start();
     engine.initialize(PATIENCE).expect("initialize");
-    let Some(voice) = a_voice(&engine) else { return };
+    let Some(recording) = a_recording() else { return };
 
     engine
-        .request("conditioning.prepare", json!({ "voice_id": voice }), PATIENCE)
+        .request("conditioning.prepare", recording, PATIENCE)
         .expect("prepare");
 
     let cleared = engine
@@ -186,14 +198,14 @@ fn nothing_but_protocol_reaches_the_channel() {
     }
     let (engine, _events) = start();
     engine.initialize(PATIENCE).expect("initialize");
-    let Some(voice) = a_voice(&engine) else { return };
+    let Some(recording) = a_recording() else { return };
 
     // The noisiest paths: model discovery, loading, and conditioning, which is
     // where huggingface prints and the model stack warns.
-    engine.request("list_models", json!({}), PATIENCE).expect("models");
+    engine.request("model.list", json!({}), PATIENCE).expect("models");
     engine.request("system_info", json!({}), PATIENCE).expect("system");
     engine
-        .request("conditioning.prepare", json!({ "voice_id": voice }), PATIENCE)
+        .request("conditioning.prepare", recording, PATIENCE)
         .expect("prepare");
 
     assert_eq!(
@@ -201,6 +213,22 @@ fn nothing_but_protocol_reaches_the_channel() {
         0,
         "something wrote to the protocol channel that was not a frame"
     );
+}
+
+/// The engine answers for what it can make, never for what the application
+/// keeps. A storage method reaching it here would mean the records live in two
+/// places, and the second one would be the one nothing else agreed with.
+#[test]
+fn the_engine_will_not_answer_for_stored_records() {
+    if !wanted() {
+        return;
+    }
+    let (engine, _events) = start();
+    engine.initialize(PATIENCE).expect("initialize");
+    for method in ["list_clips", "rename_clip", "delete_clip", "list_voices", "rename_voice"] {
+        let refused = engine.request(method, json!({}), PATIENCE);
+        assert!(refused.is_err(), "{method} was answered on the JSON-RPC path");
+    }
 }
 
 /// A request outstanding when the engine goes is failed rather than left.
@@ -216,19 +244,13 @@ fn losing_the_engine_fails_what_was_waiting() {
     // A second engine, killed under a request that cannot finish quickly.
     let (engine, _events) = start();
     engine.initialize(PATIENCE).expect("initialize");
-    let Some(voice) = a_voice(&engine) else { return };
+    let Some(recording) = a_recording() else { return };
     std::thread::scope(|scope| {
-        let working = scope.spawn(|| {
-            engine.request(
-                "conditioning.prepare",
-                json!({ "voice_id": voice }),
-                PATIENCE,
-            )
-        });
+        let working = scope.spawn(|| engine.request("conditioning.prepare", recording, PATIENCE));
         std::thread::sleep(Duration::from_secs(8));
-        engine.request("engine.stop", json!({}), Duration::from_millis(200)).ok();
         // Dropping the connection kills the child, which is what a forced
-        // termination does.
+        // termination does. What matters is that the waiting request is
+        // answered at all rather than left on a channel nothing will write to.
         let outcome = working.join().unwrap();
         assert!(outcome.is_ok() || outcome.is_err(), "the request neither finished nor failed");
     });
