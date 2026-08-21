@@ -625,8 +625,8 @@ storage:
     en: All of it is in one folder. Deleting that folder removes everything the app has stored; your saved WAVs stay where you put them.
     sk: Všetko je v jednom priečinku. Jeho vymazaním sa odstráni všetko uložené aplikáciou; vaše uložené WAV súbory zostanú tam, kam ste ich dali.
   recount:
-    en: Count again
-    sk: Prepočítať
+    en: Measure again
+    sk: Zmerať znova
 
 about:
   build:

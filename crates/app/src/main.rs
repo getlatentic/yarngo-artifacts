@@ -812,6 +812,15 @@ impl VoiceStudio {
     /// rebuilt from disk on the way back — models, voices, and the conditioning
     /// for the selected voice — so the only visible cost is the wait.
     pub(crate) fn engine_failed(&mut self, err: speech_engine::EngineError, cx: &mut Context<Self>) {
+        // Whatever went wrong, nothing is generating any more. This used to be
+        // missed on the NotRunning path — the engine restarted and the draft
+        // stayed flagged as running, so the sidebar counted a clip that was not
+        // being made and the title bar said generating with nothing to show.
+        self.generating_row = None;
+        self.progress = None;
+        for draft in self.drafts.iter_mut() {
+            draft.generating = false;
+        }
         if matches!(err, speech_engine::EngineError::NotRunning) {
             self.engine = None;
             self.progress = None;

@@ -1183,7 +1183,18 @@ impl VoiceStudio {
                         ),
                 )
                 .child(
+                    // Bounded and scrollable. Unbounded, a long clip's words
+                    // ran past the card and painted over the line beneath it —
+                    // the composer had the same fault and this branch was
+                    // missed, because only the editable one was fixed.
                     div()
+                        .flex_1()
+                        .min_h(px(0.0))
+                        .id("clip-text")
+                        .overflow_y_scroll()
+                        // Room at the end, so scrolling to the bottom finishes
+                        // on whitespace rather than through the last line.
+                        .pb(px(12.0))
                         .text_size(px(15.0))
                         .line_height(px(25.5))
                         .text_color(theme::hex(0x171717))
@@ -1197,6 +1208,7 @@ impl VoiceStudio {
                     // border beneath it once the text is longer than the box:
                     // gpui does not clip to the box on its own.
                     .overflow_hidden()
+                    .pb(px(12.0))
                     .text_size(px(15.0))
                     .line_height(px(25.5))
                     .child(Textarea::new(&self.text).appearance(false).h_full()),
