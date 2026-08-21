@@ -106,6 +106,11 @@ pub struct Connection {
     /// Events dropped because the subscriber was too slow. Progress is the only
     /// kind that may be dropped, and this is how often it happened.
     dropped: Arc<AtomicU64>,
+    /// Lines that were not frames. On this channel that means something is
+    /// writing where the protocol lives — a library's progress bar, a stray
+    /// print — and one such line is enough to break a reply. Counted so the
+    /// condition is observable rather than merely survivable.
+    malformed: Arc<AtomicU64>,
 }
 
 impl Connection {
@@ -123,6 +128,7 @@ impl Connection {
         let pending: Pending = Arc::default();
         let ended = Arc::new(AtomicBool::new(false));
         let dropped = Arc::new(AtomicU64::new(0));
+        let malformed = Arc::new(AtomicU64::new(0));
         let (outgoing, to_write) = sync_channel::<String>(QUEUE_DEPTH);
         let (event_tx, incoming) = channel::<Event>();
         let queued = Arc::new(AtomicUsize::new(0));
@@ -135,6 +141,7 @@ impl Connection {
             queued.clone(),
             ended.clone(),
             dropped.clone(),
+            malformed.clone(),
         );
         // Drained rather than merely piped: a child that fills an unread stderr
         // pipe blocks on its own logging, which looks like a hung engine.
@@ -150,6 +157,7 @@ impl Connection {
             next_id: AtomicU64::new(1),
             ended,
             dropped,
+            malformed,
         };
         (connection, Events { incoming, queued })
     }
@@ -209,6 +217,11 @@ impl Connection {
         self.dropped.load(Ordering::SeqCst)
     }
 
+    /// Lines received that were not protocol frames.
+    pub fn malformed_lines(&self) -> u64 {
+        self.malformed.load(Ordering::SeqCst)
+    }
+
     pub fn has_ended(&self) -> bool {
         self.ended.load(Ordering::SeqCst)
     }
@@ -248,6 +261,7 @@ fn spawn_reader(
     queued: Arc<AtomicUsize>,
     ended: Arc<AtomicBool>,
     dropped: Arc<AtomicU64>,
+    malformed: Arc<AtomicU64>,
 ) {
     std::thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(std::result::Result::ok) {
@@ -258,6 +272,7 @@ fn spawn_reader(
             let Ok(message) = serde_json::from_str::<Value>(line) else {
                 // Not a frame. Reported rather than ignored: on this channel it
                 // means something is writing where the protocol lives.
+                malformed.fetch_add(1, Ordering::SeqCst);
                 eprintln!("sidecar: unparseable protocol line: {line}");
                 continue;
             };
