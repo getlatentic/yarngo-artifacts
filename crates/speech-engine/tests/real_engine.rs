@@ -13,10 +13,12 @@
 
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
 use serde_json::json;
 use speech_engine::protocol::{Connection, Events, PROTOCOL_NAME};
+use yarngo_testing::Sandbox;
 
 /// Conditioning a voice takes about forty seconds on a quiet machine and twice
 /// that under load, so nothing here is impatient.
@@ -38,21 +40,28 @@ fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+/// A copy of the installed store, made once. The engine writes nothing on this
+/// path, and it is still a copy: proving that is what the tests are for, and a
+/// test that assumes its own conclusion has no way to fail.
+fn store() -> Option<&'static Sandbox> {
+    static STORE: OnceLock<Option<Sandbox>> = OnceLock::new();
+    STORE
+        .get_or_init(|| Sandbox::copying(&speech_engine::paths::installed_data_dir()))
+        .as_ref()
+}
+
 fn start() -> (Connection, Events) {
-    let mut child = Command::new(python())
+    let mut command = Command::new(python());
+    command
         .arg(repo().join("sidecar/engine.py"))
         .arg("--protocol")
         .arg("jsonrpc")
         .current_dir(repo())
-        .env(
-            "YARNGO_DATA",
-            "/Users/dev/Library/Application Support/Yarngo Studio",
-        )
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn the engine");
+        .stderr(Stdio::piped());
+    store().expect("a store to copy").apply(&mut command);
+    let mut child = command.spawn().expect("spawn the engine");
     let stdin = child.stdin.take().expect("stdin");
     let stdout = child.stdout.take().expect("stdout");
     let stderr = child.stderr.take();
@@ -60,7 +69,7 @@ fn start() -> (Connection, Events) {
 }
 
 fn data_dir() -> PathBuf {
-    PathBuf::from("/Users/dev/Library/Application Support/Yarngo Studio")
+    store().map(|s| s.root().to_path_buf()).unwrap_or_default()
 }
 
 /// A recording this machine can speak with, if it has one.

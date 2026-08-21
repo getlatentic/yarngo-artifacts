@@ -13,6 +13,7 @@ sha2 = "0.10"
 
 [dev-dependencies]
 tempfile = "3"
+yarngo-testing = { path = "../testing" }
 
 [[example]]
 name = "runtime_install"

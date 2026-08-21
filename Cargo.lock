@@ -6561,6 +6561,7 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "thiserror 2.0.20",
+ "yarngo-testing",
 ]
 
 [[package]]
@@ -9145,6 +9146,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.20",
  "yarngo-core",
+ "yarngo-testing",
 ]
 
 [[package]]
@@ -9159,6 +9161,15 @@ dependencies = [
  "thiserror 2.0.20",
  "yarngo-core",
  "yarngo-store",
+ "yarngo-testing",
+]
+
+[[package]]
+name = "yarngo-testing"
+version = "0.1.0-alpha.1"
+dependencies = [
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]

@@ -11,12 +11,14 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use speech_engine::protocol::{Connection, Events};
 use yarngo_core::{JobStatus, Rejection};
 use yarngo_store::import::Legacy;
 use yarngo_store::Store;
+use yarngo_testing::Sandbox;
 use yarngo_synthesis::{Layout, Outcome, Reference, Request, Synthesis};
 
 /// Loading the model and conditioning a voice is a minute or two on a quiet
@@ -27,8 +29,18 @@ fn wanted() -> bool {
     std::env::var_os("YARNGO_TEST_ENGINE").is_some()
 }
 
+/// One copy of the installed store per test binary, shared because nothing
+/// here is supposed to change it — and made a copy because the one time this
+/// pointed at the real directory, a generation landed in it.
+fn store() -> Option<&'static Sandbox> {
+    static STORE: OnceLock<Option<Sandbox>> = OnceLock::new();
+    STORE
+        .get_or_init(|| Sandbox::copying(&speech_engine::paths::installed_data_dir()))
+        .as_ref()
+}
+
 fn data_dir() -> PathBuf {
-    PathBuf::from("/Users/dev/Library/Application Support/Yarngo Studio")
+    store().map(|s| s.root().to_path_buf()).unwrap_or_default()
 }
 
 fn python() -> PathBuf {
@@ -42,17 +54,17 @@ fn repo() -> PathBuf {
 }
 
 fn engine() -> (Connection, Events) {
-    let mut child = Command::new(python())
+    let mut command = Command::new(python());
+    command
         .arg(repo().join("sidecar/engine.py"))
         .arg("--protocol")
         .arg("jsonrpc")
         .current_dir(repo())
-        .env("YARNGO_DATA", data_dir())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn the engine");
+        .stderr(Stdio::piped());
+    store().expect("a store to copy").apply(&mut command);
+    let mut child = command.spawn().expect("spawn the engine");
     let stdin = child.stdin.take().expect("stdin");
     let stdout = child.stdout.take().expect("stdout");
     let stderr = child.stderr.take();
@@ -64,7 +76,7 @@ fn engine() -> (Connection, Events) {
 /// A copy of this machine's own store, in a temporary database, so a test can
 /// generate against a real enrolled voice without touching anything.
 fn shadowed(dir: &Path) -> Option<(Store, Legacy)> {
-    let legacy = Legacy::read(&data_dir())?;
+    let legacy = Legacy::read(store()?.root())?;
     if legacy.voices.is_empty() || legacy.clips.is_empty() {
         return None;
     }

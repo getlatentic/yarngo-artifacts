@@ -12,12 +12,26 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use yarngo_store::import::{Legacy, LegacyClip, LegacyConsent, LegacyTake, LegacyVoice};
 use yarngo_store::{Store, VoiceProvenance};
+use yarngo_testing::Sandbox;
+
+/// A copy of the installed store. The importer never writes to what it reads,
+/// and the test still reads a copy: that claim is one of the things under test.
+fn store() -> Option<&'static Sandbox> {
+    static STORE: OnceLock<Option<Sandbox>> = OnceLock::new();
+    STORE.get_or_init(|| Sandbox::copying(&installed())).as_ref()
+}
+
+fn installed() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    PathBuf::from(home).join("Library/Application Support/Yarngo Studio")
+}
 
 fn data_dir() -> PathBuf {
-    PathBuf::from("/Users/dev/Library/Application Support/Yarngo Studio")
+    store().map(|s| s.root().to_path_buf()).unwrap_or_default()
 }
 
 /// A snapshot with the shapes that matter: a built-in clip, a custom one, one
