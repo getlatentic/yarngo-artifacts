@@ -189,6 +189,7 @@ impl DurableEngine {
         store.reconcile_ended_sessions(&at).map_err(store_error)?;
         adopt_legacy(&mut store, data_dir)?;
         fill_gaps_from_legacy(&store, data_dir)?;
+        write_consent_log(&store, data_dir);
 
         let (connection, events) = spawn.start()?;
         let progress = Reported::default();
@@ -583,7 +584,9 @@ impl SpeechEngine for DurableEngine {
             seconds: prepared["seconds"].as_f64().unwrap_or(0.0) as f32,
             ..voice.clone()
         };
-        library::register_voice(&mut self.store, &enrolled, &now()).map_err(store_error)
+        library::register_voice(&mut self.store, &enrolled, &now()).map_err(store_error)?;
+        write_consent_log(&self.store, &self.spawn.data_dir);
+        Ok(())
     }
 
     fn rename_voice(&mut self, voice_id: &str, label: &str) -> Result<Vec<Voice>, EngineError> {
@@ -818,6 +821,61 @@ fn adopt_legacy(store: &mut Store, data_dir: &Path) -> Result<(), EngineError> {
         eprintln!("  a record points at a file that is not there: {missing}");
     }
     Ok(())
+}
+
+/// Write out every permission the store holds, for a person to read.
+///
+/// The database is the record; this is a copy of it in one file, which is what
+/// the application points at when it says where permissions live. Rewritten
+/// whole rather than appended to, so it is always the complete account and
+/// never a partial one that a crash left short — and written beside itself and
+/// renamed, so a reader never sees half of it.
+///
+/// Best effort. A consent record that could not be copied out is still in the
+/// database, and refusing to enrol a voice over it would be the wrong trade.
+fn write_consent_log(store: &Store, data_dir: &Path) {
+    let Ok(records) = store.consent_records() else {
+        return;
+    };
+    let path = data_dir.join("consent.log");
+    let mut written = std::collections::HashSet::new();
+    let mut out = String::new();
+    for record in &records {
+        written.insert((record.voice_id.clone(), record.granted_at.clone()));
+        out.push_str(&serde_json::json!({
+            "voice_id": record.voice_id,
+            "label": record.label,
+            "granted_at": record.granted_at,
+            "app_version": record.app_version,
+            "statement": record.statement,
+            "source": record.source,
+            "reference_sha256": record.reference_sha256,
+            "classification": record.classification,
+        }).to_string());
+        out.push('\n');
+    }
+    // Anything already in the file that this does not account for is kept.
+    // The application calls this an append-only record, and a permission it had
+    // written down must not disappear because the database has not heard of it
+    // — an older build's, or one imported before a column existed.
+    for line in std::fs::read_to_string(&path).unwrap_or_default().lines() {
+        let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        let key = (
+            entry["voice_id"].as_str().unwrap_or_default().to_string(),
+            entry["granted_at"].as_str().unwrap_or_default().to_string(),
+        );
+        if written.insert(key) {
+            out.push_str(line);
+            out.push('\n');
+        }
+    }
+
+    let beside = data_dir.join("consent.log.writing");
+    if std::fs::write(&beside, out).is_ok() {
+        let _ = std::fs::rename(&beside, &path);
+    }
 }
 
 /// Fill in what a store brought across before a column existed.

@@ -9156,6 +9156,7 @@ dependencies = [
  "chrono",
  "rusqlite",
  "serde_json",
+ "sha2 0.10.9",
  "speech-engine",
  "tempfile",
  "thiserror 2.0.20",

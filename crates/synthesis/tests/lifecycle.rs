@@ -227,3 +227,69 @@ fn what_a_voice_was_recorded_reading_is_filled_in_later() {
         "a value that was already there was overwritten"
     );
 }
+
+/// Permission is written where the application says it is written.
+///
+/// The database is the record; the log is the copy a person can read, and the
+/// interface points at it. It has to hold everything — including a permission
+/// whose voice is gone, and one this build has never heard of.
+#[test]
+fn every_permission_reaches_the_log() {
+    let (sandbox, recording) = seeded();
+    let log = sandbox.root().join("consent.log");
+
+    // A line from somewhere else: an older build, or a store imported before
+    // this one existed. It must survive whatever is written next.
+    std::fs::write(
+        &log,
+        b"{\"voice_id\": \"someone-else\", \"granted_at\": \"t-old\", \"statement\": \"I agree\"}\n",
+    )
+    .expect("seed the log");
+
+    let handle = engine(&sandbox, "", Duration::from_secs(30));
+    handle
+        .register_voice(speech_engine::Voice {
+            voice_id: "bea".into(),
+            label: "Bea".into(),
+            reference_audio: recording,
+            reference_text: "A sentence.".into(),
+            seconds: 0.0,
+            consent: speech_engine::Consent {
+                statement: "I have permission to use this voice.".into(),
+                app_version: "test".into(),
+                source: "recording".into(),
+            },
+        })
+        .expect("register");
+
+    let lines: Vec<serde_json::Value> = std::fs::read_to_string(&log)
+        .expect("the log was not written")
+        .lines()
+        .map(|line| serde_json::from_str(line).expect("each line is a record"))
+        .collect();
+
+    let bea = lines
+        .iter()
+        .find(|l| l["voice_id"] == "bea")
+        .expect("the new permission is not in the log");
+    assert_eq!(bea["statement"], "I have permission to use this voice.");
+    assert_eq!(bea["source"], "recording");
+    assert_eq!(
+        bea["reference_sha256"].as_str().unwrap_or_default().len(),
+        64,
+        "no fingerprint of the recording it was given about"
+    );
+    assert!(
+        lines.iter().any(|l| l["voice_id"] == "alice"),
+        "the permission that came across with the store is missing"
+    );
+    assert!(
+        lines.iter().any(|l| l["voice_id"] == "someone-else"),
+        "a permission this build did not write was lost"
+    );
+
+    // Deleting the voice leaves its permission, which is the point of keeping it.
+    handle.delete_voice("bea").expect("delete");
+    let after = std::fs::read_to_string(&log).expect("log");
+    assert!(after.contains("\"bea\""), "deleting a voice took its permission with it");
+}

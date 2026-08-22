@@ -10,6 +10,7 @@ speech-engine = { path = "../speech-engine" }
 serde_json.workspace = true
 thiserror.workspace = true
 chrono = "0.4"
+sha2 = "0.10"
 rusqlite = { version = "0.32", features = ["bundled"] }
 
 [dev-dependencies]

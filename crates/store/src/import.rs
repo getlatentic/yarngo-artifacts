@@ -86,6 +86,8 @@ pub struct LegacyConsent {
     pub statement: Option<String>,
     pub app_version: Option<String>,
     pub source: Option<String>,
+    /// A fingerprint of the recording it was given about.
+    pub reference_sha256: Option<String>,
     pub granted_at: String,
 }
 
@@ -163,6 +165,10 @@ impl Legacy {
                         statement: entry["statement"].as_str().map(Into::into),
                         app_version: entry["app_version"].as_str().map(Into::into),
                         source: entry["source"].as_str().map(Into::into),
+                        reference_sha256: entry["reference_sha256"]
+                            .as_str()
+                            .filter(|hash| !hash.is_empty())
+                            .map(Into::into),
                         granted_at: entry["granted_at"].as_str().unwrap_or_default().into(),
                     })
                     .collect()
@@ -336,6 +342,7 @@ impl Store {
                     ("statement", maybe(consent.statement.as_deref())),
                     ("app_version", maybe(consent.app_version.as_deref())),
                     ("source", maybe(consent.source.as_deref())),
+                    ("reference_sha256", maybe(consent.reference_sha256.as_deref())),
                     ("occurred_at", text(&consent.granted_at)),
                 ],
                 &mut report,

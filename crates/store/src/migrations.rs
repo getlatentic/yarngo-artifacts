@@ -15,6 +15,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0002_execution_outputs.sql"),
     include_str!("../migrations/0003_voice_duration.sql"),
     include_str!("../migrations/0004_reference_text.sql"),
+    include_str!("../migrations/0005_consent_fingerprint.sql"),
 ];
 
 pub fn apply(connection: &mut Connection) -> Result<()> {

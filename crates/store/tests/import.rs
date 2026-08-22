@@ -66,6 +66,7 @@ fn fixture() -> Legacy {
                 statement: Some("I have permission to use this voice.".into()),
                 app_version: Some("0.1.0".into()),
                 source: Some("recording".into()),
+                reference_sha256: None,
                 granted_at: "2026-08-19T08:00:00".into(),
             },
             // From a development probe: names a voice that does not exist.
@@ -74,6 +75,7 @@ fn fixture() -> Legacy {
                 statement: Some("probe".into()),
                 app_version: Some("0.1.0".into()),
                 source: Some("imported".into()),
+                reference_sha256: None,
                 granted_at: "2026-08-18T22:21:05".into(),
             },
         ],

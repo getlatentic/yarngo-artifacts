@@ -265,6 +265,10 @@ pub fn duplicate_clip(store: &Store, clip_id: &str, new_id: &str, at: &str) -> R
 /// Enrol a voice: the recording, the profile, the revision that names it, and
 /// the consent it was given under, together or not at all.
 pub fn register_voice(store: &mut Store, voice: &Voice, at: &str) -> Result<()> {
+    // Taken from the recording as it will actually be used, after the silence
+    // has been cut off it — the point of a fingerprint in a consent record is
+    // to name the audio the voice was made from, not a file that was replaced.
+    let fingerprint = fingerprint(&voice.reference_audio);
     let asset = format!("voice_reference:{}", voice.voice_id);
     let revision = format!("{}/r1", voice.voice_id);
     let transaction = store.raw_mut().transaction()?;
@@ -298,14 +302,16 @@ pub fn register_voice(store: &mut Store, voice: &Voice, at: &str) -> Result<()> 
     // for, and the one order that can produce it is two transactions.
     transaction.execute(
         "INSERT INTO consent_events (id, voice_revision_id, classification, event_type,
-                                     statement, app_version, source, occurred_at)
-         VALUES (?1, ?2, 'linked', 'granted', ?3, ?4, ?5, ?6)",
+                                     statement, app_version, source, reference_sha256,
+                                     occurred_at)
+         VALUES (?1, ?2, 'linked', 'granted', ?3, ?4, ?5, ?6, ?7)",
         params![
             format!("consent:{}:0", voice.voice_id),
             revision,
             voice.consent.statement,
             voice.consent.app_version,
             voice.consent.source,
+            fingerprint,
             at
         ],
     )?;
@@ -321,4 +327,15 @@ pub fn rename_voice(store: &Store, voice_id: &str, label: &str) -> Result<()> {
         params![voice_id, label],
     )?;
     Ok(())
+}
+
+/// A recording's fingerprint, or nothing if it cannot be read.
+///
+/// Absent rather than wrong: a consent record with no fingerprint says the
+/// audio could not be read, and one with a fingerprint of nothing says it was
+/// empty. They are different, and only one of them is true.
+fn fingerprint(path: &std::path::Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let bytes = std::fs::read(path).ok()?;
+    Some(format!("{:x}", Sha256::digest(&bytes)))
 }

@@ -21,7 +21,52 @@ pub enum VoiceProvenance {
     Deleted { label_at_generation: Option<String> },
 }
 
+/// One recorded permission, as it is written out for a person to read.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConsentRecord {
+    pub voice_id: String,
+    pub label: String,
+    pub granted_at: String,
+    pub app_version: String,
+    pub statement: String,
+    pub source: String,
+    pub reference_sha256: String,
+    pub classification: String,
+}
+
 impl Store {
+    /// Every permission this store holds, oldest first.
+    ///
+    /// Including the ones that name a subject this store has no voice for: a
+    /// consent record outliving the voice it was given for is a reason to keep
+    /// it, not to drop it, and an account of permissions that quietly omitted
+    /// some would be worse than none.
+    pub fn consent_records(&self) -> Result<Vec<ConsentRecord>> {
+        let mut statement = self.raw().prepare(
+            "SELECT COALESCE(r.voice_id, e.legacy_subject_id, ''),
+                    COALESCE(p.display_name, ''),
+                    e.occurred_at, e.app_version, e.statement, e.source,
+                    e.reference_sha256, e.classification
+               FROM consent_events e
+               LEFT JOIN voice_revisions r ON r.id = e.voice_revision_id
+               LEFT JOIN voice_profiles p  ON p.id = r.voice_id
+              ORDER BY e.occurred_at, e.id",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(ConsentRecord {
+                voice_id: row.get(0)?,
+                label: row.get(1)?,
+                granted_at: row.get(2)?,
+                app_version: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+                statement: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+                source: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+                reference_sha256: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
+                classification: row.get(7)?,
+            })
+        })?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
+
     /// Fill in a reference transcript that is not there.
     ///
     /// A column added after a store was brought across stays empty for whoever

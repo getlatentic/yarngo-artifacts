@@ -66,6 +66,7 @@ pub fn seeded() -> (Sandbox, PathBuf) {
                 statement: Some("I agree".into()),
                 app_version: None,
                 source: None,
+                reference_sha256: None,
                 granted_at: "t0".into(),
             }],
         })
