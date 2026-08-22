@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 pub struct Layout {
     staging: PathBuf,
     clips: PathBuf,
+    voices: PathBuf,
 }
 
 impl Layout {
@@ -21,6 +22,7 @@ impl Layout {
         Self {
             staging: root.join("staging"),
             clips: root.join("clips"),
+            voices: root.join("voices"),
         }
     }
 
@@ -38,12 +40,21 @@ impl Layout {
         self.clips.join(format!("{}-{}.wav", safe(clip_id), safe(take_id)))
     }
 
+    /// Where an enrolled voice's recording lives.
+    ///
+    /// Named from the voice, so the recording a deletion has to find is the one
+    /// the records point at and there is only ever one of it.
+    pub fn reference(&self, voice_id: &str) -> PathBuf {
+        self.voices.join(format!("{}.wav", safe(voice_id)))
+    }
+
     pub fn staging_dir(&self) -> &Path {
         &self.staging
     }
 
     pub fn prepare(&self) -> std::io::Result<()> {
         std::fs::create_dir_all(&self.staging)?;
+        std::fs::create_dir_all(&self.voices)?;
         std::fs::create_dir_all(&self.clips)
     }
 }

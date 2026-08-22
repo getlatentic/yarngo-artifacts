@@ -112,47 +112,6 @@ pub const VERSION: &str = pack().python;
 pub const APPROX_BYTES: u64 = pack().approx_bytes;
 pub const ARCHIVE_BYTES: u64 = pack().archive_bytes;
 
-/// Where a running generation reports what it has written, and where a stop is
-/// signalled. Files rather than messages: the sidecar is blocking on one
-/// request while it generates, so nothing it is reading would arrive.
-pub fn progress_path() -> PathBuf {
-    paths::data_dir().join("generating.json")
-}
-
-pub fn cancel_path() -> PathBuf {
-    paths::data_dir().join("cancel")
-}
-
-/// Ask the running generation to stop at the next chunk boundary.
-pub fn request_cancel() {
-    let path = cancel_path();
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    let _ = std::fs::write(path, b"1");
-}
-
-/// What the generation currently running has produced so far.
-#[derive(Debug, Clone, Default, serde::Deserialize)]
-pub struct Generating {
-    // Defaulted rather than required: a report that arrives without one of
-    // these is still a report, and refusing to read it turns a partial answer
-    // into no answer at all — which looks exactly like nothing running.
-    #[serde(default)]
-    pub written_s: f32,
-    #[serde(default)]
-    pub elapsed_s: f32,
-    #[serde(default)]
-    pub chunks_done: u32,
-    #[serde(default)]
-    pub chunks: u32,
-}
-
-pub fn read_progress() -> Option<Generating> {
-    let raw = std::fs::read_to_string(progress_path()).ok()?;
-    serde_json::from_str(&raw).ok()
-}
-
 /// The exact archive the installer fetches, so a machine with no connection can
 /// be given the real URL rather than a branded one that redirects.
 pub fn download_url() -> Option<String> {

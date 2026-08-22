@@ -16,13 +16,11 @@
 //! wants an answer. What no longer blocks is the engine.
 
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
-use crate::sidecar::MlxSidecar;
 use crate::protocol::Outstanding;
 use crate::{
     Clip, DiskSpace, EngineError, InstallStatus, ModelSpec, Result, SpeechEngine, Started,
@@ -76,7 +74,7 @@ enum Command {
     SystemInfo(Sender<Result<SystemInfo>>),
     Ping(Sender<Result<()>>),
     CancelGeneration(Sender<Result<()>>),
-    Progress(Sender<Result<Option<crate::runtime::Generating>>>),
+    Progress(Sender<Result<Option<crate::Generating>>>),
     /// A deferred operation's reply, put back on this channel by the thread
     /// that was waiting for it. Handled in turn, which is what lets everything
     /// sent in the meantime have been handled already.
@@ -92,21 +90,10 @@ pub struct EngineHandle {
 }
 
 impl EngineHandle {
-    /// Start the engine thread. Returns once the backend has answered a ping,
-    /// so a broken environment surfaces here rather than at first synthesis.
-    pub fn spawn(python: &Path, script: &Path, work_dir: &Path) -> Result<Self> {
-        let (python, script, work_dir) =
-            (python.to_path_buf(), script.to_path_buf(), work_dir.to_path_buf());
-        Self::spawn_backend(move || {
-            Ok(Box::new(MlxSidecar::spawn(&python, &script, &work_dir)?) as Box<dyn SpeechEngine + Send>)
-        })
-    }
-
-    /// The same thread and the same channel, over whichever backend the caller
-    /// builds.
+    /// Start the engine thread over the backend the caller builds.
     ///
-    /// Built on the engine thread rather than handed in, because a backend owns
-    /// pipes and a child process and belongs to the one thread that will use it.
+    /// Built on that thread rather than handed in, because a backend owns pipes
+    /// and a child process and belongs to the one thread that will use it.
     pub fn spawn_backend(
         build: impl FnOnce() -> Result<Box<dyn SpeechEngine + Send>> + Send + 'static,
     ) -> Result<Self> {
@@ -355,7 +342,7 @@ impl EngineHandle {
     }
 
     /// Where the running generation has got to.
-    pub fn progress(&self) -> Option<crate::runtime::Generating> {
+    pub fn progress(&self) -> Option<crate::Generating> {
         self.dispatch(Command::Progress).ok().flatten()
     }
 

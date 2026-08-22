@@ -189,6 +189,41 @@ impl Store {
         Ok(true)
     }
 
+    /// How fast this model has been on this machine, from the person's own
+    /// takes rather than a benchmark from someone else's.
+    ///
+    /// The median, not the mean. A cold first run costs the same fixed overhead
+    /// whether it produces two seconds of audio or two minutes, so short takes
+    /// record enormous rates — and one of those drags a mean far enough to tell
+    /// someone a one-minute clip will take forty.
+    ///
+    /// Takes below a few seconds are left out entirely: they are mostly that
+    /// fixed cost, and their rate says nothing about how long a real clip will
+    /// take. One such take here was 1.4 seconds of audio in 416 seconds.
+    pub fn measured_rate(&self, model_id: &str, shortest: f64) -> Result<Option<f64>> {
+        let mut statement = self.raw().prepare(
+            "SELECT t.generated_seconds / t.audio_seconds
+               FROM clip_takes t
+               JOIN clips c ON c.id = t.clip_id
+              WHERE c.model_id = ?1
+                AND t.audio_seconds >= ?2
+                AND t.generated_seconds IS NOT NULL
+              ORDER BY t.generated_seconds / t.audio_seconds",
+        )?;
+        let rates: Vec<f64> = statement
+            .query_map(params![model_id, shortest], |row| row.get(0))?
+            .collect::<std::result::Result<_, _>>()?;
+        if rates.is_empty() {
+            return Ok(None);
+        }
+        let middle = rates.len() / 2;
+        Ok(Some(if rates.len() % 2 == 1 {
+            rates[middle]
+        } else {
+            (rates[middle - 1] + rates[middle]) / 2.0
+        }))
+    }
+
     /// Whether this attempt's take is already the person's.
     pub fn take_exists(&self, execution_id: &str) -> Result<bool> {
         let take = format!("take-{execution_id}");

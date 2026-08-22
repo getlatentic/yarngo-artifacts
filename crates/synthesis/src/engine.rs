@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use serde_json::json;
 use speech_engine::protocol::{Connection, Events};
-use speech_engine::runtime::Generating;
+use speech_engine::Generating;
 use speech_engine::{
     Capabilities, Clip, DiskSpace, EngineError, InstallStatus, ModelSpec, SpeechEngine, Started,
     Synthesis, SynthesisRequest, SystemInfo, Voice,
@@ -24,12 +24,13 @@ use yarngo_store::Store;
 
 use crate::{library, Layout, Outcome, Reference, Request};
 
-/// Long enough for a cold model load and a minute of speech; short enough that
-/// a wedged engine is eventually reported rather than waited on for ever.
-const PATIENCE: Duration = Duration::from_secs(900);
 /// Anything that is not inference. A model that cannot answer these has stopped
 /// being an engine.
 const PROMPT: Duration = Duration::from_secs(60);
+/// For work that is not inference but waits behind it: the engine runs one
+/// thing at a time, so a short operation asked for during a generation waits
+/// for that generation.
+const BEHIND_THE_MODEL: Duration = Duration::from_secs(900);
 /// How long a generation asked to stop is given to stop.
 ///
 /// Short, because the person asked for the voice to go and whatever is being
@@ -38,6 +39,10 @@ const PROMPT: Duration = Duration::from_secs(60);
 /// that is worth a little and not much: cancellation is checked between
 /// chunks, so a chunk already running has to finish first.
 const GRACE: Duration = Duration::from_secs(30);
+/// Below this, a take is mostly fixed cost — warming caches, the first pass
+/// through the model — and its rate says nothing about how long a real clip
+/// will take.
+const RATE_FROM_TAKES_LONGER_THAN: f64 = 3.0;
 
 /// How to start a sidecar, kept because deleting a voice may have to end one
 /// and put another in its place.
@@ -54,8 +59,6 @@ impl Spawn {
         let mut command = Command::new(&self.python);
         command
             .arg(&self.script)
-            .arg("--protocol")
-            .arg("jsonrpc")
             .current_dir(&self.work_dir);
         #[cfg(windows)]
         {
@@ -413,7 +416,19 @@ impl SpeechEngine for DurableEngine {
 
     fn models(&mut self, refresh: bool) -> Result<Vec<ModelSpec>, EngineError> {
         let reply = self.call("model.list", json!({ "refresh": refresh }), PROMPT)?;
-        Ok(serde_json::from_value(reply["models"].clone()).unwrap_or_default())
+        let mut models: Vec<ModelSpec> =
+            serde_json::from_value(reply["models"].clone()).unwrap_or_default();
+        // How fast a model has been is a fact about the person's own takes, so
+        // it is answered from where those are kept. The engine knowing it would
+        // mean the engine reading them.
+        for model in &mut models {
+            model.measured_rtf = self
+                .store
+                .measured_rate(&model.id, RATE_FROM_TAKES_LONGER_THAN)
+                .map_err(store_error)?
+                .map(|rate| rate as f32);
+        }
+        Ok(models)
     }
 
     fn delete_model(&mut self, model: &str) -> Result<u64, EngineError> {
@@ -508,17 +523,6 @@ impl SpeechEngine for DurableEngine {
         serde_json::from_value(reply).map_err(|e| EngineError::Transport(e.to_string()))
     }
 
-    fn prepare_voice(&mut self, voice_id: &str, model: Option<&str>) -> Result<f32, EngineError> {
-        match self.start_preparation(voice_id, model)? {
-            Started::Done(answer) => answer,
-            Started::Awaiting(sent) => {
-                let id = sent.id();
-                let reply = sent.wait(PATIENCE);
-                self.finish_preparation(id, reply)
-            }
-        }
-    }
-
     /// Conditioning takes about forty seconds, which is long enough that a
     /// deletion arriving during it must not queue behind it.
     fn start_preparation(
@@ -550,8 +554,29 @@ impl SpeechEngine for DurableEngine {
         library::voices(&self.store).map_err(store_error)
     }
 
+    /// Enrol a voice: put the recording where it belongs, then record it.
+    ///
+    /// The recorder leaves its take in a temporary file, and a saved voice
+    /// cannot depend on one. Where it goes is decided here; the engine cuts the
+    /// silence off it and says how long what is left runs, because that needs
+    /// an audio stack and nothing else here has one.
     fn register_voice(&mut self, voice: &Voice) -> Result<(), EngineError> {
-        library::register_voice(&mut self.store, voice, &now()).map_err(store_error)
+        self.layout.prepare().map_err(|e| EngineError::Transport(e.to_string()))?;
+        let stored = self.layout.reference(&voice.voice_id);
+        let prepared = self.call(
+            "audio.prepare_reference",
+            json!({
+                "source": voice.reference_audio.to_string_lossy(),
+                "output_path": stored.to_string_lossy(),
+            }),
+            BEHIND_THE_MODEL,
+        )?;
+        let enrolled = Voice {
+            reference_audio: stored,
+            seconds: prepared["seconds"].as_f64().unwrap_or(0.0) as f32,
+            ..voice.clone()
+        };
+        library::register_voice(&mut self.store, &enrolled, &now()).map_err(store_error)
     }
 
     fn rename_voice(&mut self, voice_id: &str, label: &str) -> Result<Vec<Voice>, EngineError> {
@@ -612,19 +637,6 @@ impl SpeechEngine for DurableEngine {
         self.clips()
     }
 
-    /// Kept because the trait has it, and used by nothing here: a caller that
-    /// waits for a synthesis holds the engine thread for the length of one, and
-    /// then a cancellation cannot reach the engine that is doing the work.
-    fn synthesize(&mut self, request: &SynthesisRequest) -> Result<Synthesis, EngineError> {
-        match self.start_synthesis(request)? {
-            Started::Done(answer) => answer,
-            Started::Awaiting(sent) => {
-                let id = sent.id();
-                let reply = sent.wait(PATIENCE);
-                self.finish_synthesis(id, reply)
-            }
-        }
-    }
 
     fn start_synthesis(
         &mut self,

@@ -57,8 +57,6 @@ fn engine() -> (Connection, Events) {
     let mut command = Command::new(python());
     command
         .arg(repo().join("sidecar/engine.py"))
-        .arg("--protocol")
-        .arg("jsonrpc")
         .current_dir(repo())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

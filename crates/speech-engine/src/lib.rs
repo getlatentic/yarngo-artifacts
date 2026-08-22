@@ -13,7 +13,6 @@ pub mod handle;
 pub mod paths;
 pub mod protocol;
 pub mod runtime;
-pub mod sidecar;
 
 pub use handle::EngineHandle;
 pub use paths::EnginePaths;
@@ -114,6 +113,26 @@ impl Take {
     pub fn rtf(&self) -> Option<f32> {
         (self.audio_s > 0.0).then(|| self.gen_s / self.audio_s)
     }
+}
+
+/// Where a generation has got to, as the engine last reported it.
+///
+/// Sent while it works rather than written to a file for someone to poll: the
+/// engine can speak while it is speaking, and the file was only ever there
+/// because an older one could not.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Generating {
+    // Defaulted rather than required: a report that arrives without one of
+    // these is still a report, and refusing to read it turns a partial answer
+    // into no answer at all — which looks exactly like nothing running.
+    #[serde(default)]
+    pub written_s: f32,
+    #[serde(default)]
+    pub elapsed_s: f32,
+    #[serde(default)]
+    pub chunks_done: u32,
+    #[serde(default)]
+    pub chunks: u32,
 }
 
 /// A generated clip, kept until the user deletes it.
@@ -262,12 +281,13 @@ pub type Result<T> = std::result::Result<T, EngineError>;
 /// between calls: loading dominates cost, and a desktop app should pay it once.
 /// What became of an operation that was begun.
 ///
-/// The distinction is whether the backend can do anything else while this runs.
-/// One request and one reply over a pipe cannot, so it answers outright; a
-/// connection that carries ids can, so it hands back the reply to come and
-/// stays available in the meantime.
+/// Refused before it started, or handed over with the reply still to come. The
+/// second is the ordinary case: the engine has the work and this thread is free
+/// for whatever is asked next.
 pub enum Started<T> {
+    /// Answered outright, without the engine being asked.
     Done(Result<T>),
+    /// The engine has it. The reply finishes it.
     Awaiting(protocol::Outstanding),
 }
 
@@ -294,45 +314,21 @@ pub trait SpeechEngine {
     /// given under are untouched, and so are the clips already made with it.
     fn rename_voice(&mut self, voice_id: &str, label: &str) -> Result<Vec<Voice>>;
 
-    /// Materialise a voice's conditioning ahead of time. Optional to call and
-    /// safe to repeat; it only moves work earlier. Returns seconds spent.
-    fn prepare_voice(&mut self, voice_id: &str, model: Option<&str>) -> Result<f32>;
-
-    fn synthesize(&mut self, request: &SynthesisRequest) -> Result<Synthesis>;
-
-    /// Begin a synthesis without waiting for it.
+    /// Begin a synthesis, and return as soon as the engine has it.
     ///
-    /// Overridden by a backend that can be spoken to while it works. The
-    /// default answers outright, which is the honest thing for a transport that
-    /// has nowhere to put a second request.
-    fn start_synthesis(&mut self, request: &SynthesisRequest) -> Result<Started<Synthesis>> {
-        Ok(Started::Done(self.synthesize(request)))
-    }
+    /// Not a blocking call, because the thread that owns the backend has to
+    /// stay free: a cancellation arriving while this runs is the whole reason
+    /// the connection carries request ids.
+    fn start_synthesis(&mut self, request: &SynthesisRequest) -> Result<Started<Synthesis>>;
 
-    /// Finish one that was deferred. `id` is the request whose reply arrived.
-    fn finish_synthesis(&mut self, id: u64, reply: Result<serde_json::Value>) -> Result<Synthesis> {
-        let _ = (id, reply);
-        Err(EngineError::Transport(
-            "this engine answers a synthesis outright and has none outstanding".into(),
-        ))
-    }
+    /// Finish one. `id` is the request whose reply arrived.
+    fn finish_synthesis(&mut self, id: u64, reply: Result<serde_json::Value>) -> Result<Synthesis>;
 
     /// The same, for conditioning, which is the other operation long enough
-    /// that everything else waiting on it would be a fault.
-    fn start_preparation(
-        &mut self,
-        voice_id: &str,
-        model: Option<&str>,
-    ) -> Result<Started<f32>> {
-        Ok(Started::Done(self.prepare_voice(voice_id, model)))
-    }
+    /// that everything behind it would be a fault.
+    fn start_preparation(&mut self, voice_id: &str, model: Option<&str>) -> Result<Started<f32>>;
 
-    fn finish_preparation(&mut self, id: u64, reply: Result<serde_json::Value>) -> Result<f32> {
-        let _ = (id, reply);
-        Err(EngineError::Transport(
-            "this engine answers conditioning outright and has none outstanding".into(),
-        ))
-    }
+    fn finish_preparation(&mut self, id: u64, reply: Result<serde_json::Value>) -> Result<f32>;
 
     /// Begin downloading a model. Returns immediately; poll `install_status`.
     fn install_model(&mut self, model: &str) -> Result<InstallStatus>;
@@ -376,5 +372,5 @@ pub trait SpeechEngine {
     /// On the engine rather than read from a fixed file, because how it is
     /// known depends on the backend: one writes it to disk because it cannot
     /// speak while it works, and the other sends it.
-    fn progress(&mut self) -> Option<crate::runtime::Generating>;
+    fn progress(&mut self) -> Option<crate::Generating>;
 }

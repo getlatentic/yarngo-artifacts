@@ -39,22 +39,12 @@ use speech_engine::{
     SynthesisRequest, SystemInfo, Voice,
 };
 
-/// Which engine the application runs on, chosen at start.
+/// Start the engine the application runs on.
 ///
-/// The legacy sidecar keeps the clips and voices in JSON files of its own; the
-/// durable one keeps them in this application's database and uses the sidecar
-/// only to make audio. The second is where this is going and the first is what
-/// has been running, so the switch stays until the new path has been lived with
-/// and the old one can be deleted rather than kept as an option.
-///
-///     YARNGO_ENGINE_PROTOCOL=jsonrpc cargo run
+/// One engine, and one arrangement: this database holds the clips, the voices
+/// and the consent, and the sidecar makes audio. Nothing asks the sidecar what
+/// the person has.
 fn start_engine(paths: &EnginePaths) -> Result<EngineHandle, speech_engine::EngineError> {
-    let durable = std::env::var("YARNGO_ENGINE_PROTOCOL")
-        .map(|value| value.eq_ignore_ascii_case("jsonrpc"))
-        .unwrap_or(false);
-    if !durable {
-        return EngineHandle::spawn(&paths.python, &paths.script, &paths.work_dir);
-    }
     let data_dir = speech_engine::paths::data_dir();
     let spawn = yarngo_synthesis::engine::Spawn {
         python: paths.python.clone(),
@@ -178,7 +168,7 @@ pub struct VoiceStudio {
     pub(crate) text_scroll: ScrollHandle,
     /// What the running generation has written so far, polled from the engine
     /// while it works. `None` between generations.
-    pub(crate) progress: Option<runtime::Generating>,
+    pub(crate) progress: Option<speech_engine::Generating>,
     /// A stop has been asked for and the generation has not ended yet.
     ///
     /// Worth showing, because asking is not stopping: the engine stops where a

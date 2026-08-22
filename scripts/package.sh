@@ -83,6 +83,15 @@ sign "$APP/Contents/MacOS/voicestudio"
 sign "$APP"
 
 codesign --verify --strict --verbose=2 "$APP" 2>&1 | tail -2
+
+# The bundle carries its own copy of the sidecar, and a copy can be old. An
+# installed build was once found running one that had never heard of this
+# protocol, which the app reported as an unknown method at start-up and nothing
+# caught until somebody opened it. Checked here, against the copy that shipped.
+echo "--- bundled sidecar ---"
+YARNGO_TEST_BUNDLE="$APP" cargo test -p speech-engine --test packaged_sidecar -- --nocapture \
+  || { echo "the sidecar inside the bundle does not speak this protocol" >&2; exit 1; }
+
 echo "packaged: $APP"
 
 # Now the image, around the signed app — built here rather than by
