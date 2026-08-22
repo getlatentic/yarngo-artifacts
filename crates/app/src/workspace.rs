@@ -1143,18 +1143,26 @@ impl VoiceStudio {
                             .font_family(theme::FONT_DISPLAY)
                             .text_size(px(13.5))
                             .font_semibold()
-                            .child(match self.seconds_left() {
-                                Some(left) => t!(
+                            .child(match (self.stopping, self.seconds_left()) {
+                                (true, _) => t!("compose.stopping").to_string(),
+                                (false, Some(left)) => t!(
                                     "compose.generating_left",
                                     seconds = format!("{left:.0}")
                                 )
                                 .to_string(),
-                                None => t!("compose.generating").to_string(),
+                                (false, None) => t!("compose.generating").to_string(),
                             }),
                     )
                     .child(
                         crate::ui::mono(
                             match rtf {
+                                // Asking is not stopping. Said plainly, because
+                                // a generation speaking its last part finishes
+                                // it, and a button that looks like it did
+                                // nothing is worse than the wait.
+                                _ if self.stopping => {
+                                    t!("compose.stopping_detail").to_string()
+                                }
                                 // Chunks done, and seconds actually written.
                                 // Both are counted. The old line divided by a
                                 // word-count estimate and so could read "163
@@ -1167,6 +1175,22 @@ impl VoiceStudio {
                                         chunks = p.map(|p| p.chunks).unwrap_or(0).to_string(),
                                         written = format!("{written:.0}"),
                                         rtf = realtime(rtf)
+                                    )
+                                    .to_string()
+                                }
+                                // Nothing written yet, so there is no rate to
+                                // report — but the clock the engine is sending
+                                // is moving, and saying so is the difference
+                                // between working and stuck. A single-chunk
+                                // clip is otherwise silent for its whole
+                                // length and then simply finishes.
+                                None if elapsed > 0.0 => {
+                                    let p = self.progress.as_ref();
+                                    t!(
+                                        "compose.working_on",
+                                        part = p.map(|p| p.chunks_done + 1).unwrap_or(1).to_string(),
+                                        chunks = p.map(|p| p.chunks).unwrap_or(1).to_string(),
+                                        elapsed = format!("{elapsed:.0}")
                                     )
                                     .to_string()
                                 }

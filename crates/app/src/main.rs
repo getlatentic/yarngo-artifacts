@@ -179,6 +179,12 @@ pub struct VoiceStudio {
     /// What the running generation has written so far, polled from the engine
     /// while it works. `None` between generations.
     pub(crate) progress: Option<runtime::Generating>,
+    /// A stop has been asked for and the generation has not ended yet.
+    ///
+    /// Worth showing, because asking is not stopping: the engine stops where a
+    /// sentence ends, so one already speaking its last part finishes it. Left
+    /// unsaid, the button looks broken for as long as that takes.
+    pub(crate) stopping: bool,
     /// Seconds of speech this generation is expected to produce, from the word
     /// count. An estimate, and labelled as one — the exact length is not known
     /// until the model has finished.
@@ -298,6 +304,7 @@ impl VoiceStudio {
             progress: None,
             expected_s: 0.0,
             generating_row: None,
+            stopping: false,
             imported: None,
             queued: None,
             confirming_voice: None,
@@ -773,6 +780,7 @@ impl VoiceStudio {
             let result = cx.background_spawn(async move { engine.synthesize(request) }).await;
             this.update(cx, |this, cx| {
                 this.progress = None;
+                this.stopping = false;
                 if let Err(err) = &result {
                     if matches!(err, speech_engine::EngineError::NotRunning) {
                         this.engine_failed(speech_engine::EngineError::NotRunning, cx);
@@ -895,6 +903,7 @@ impl VoiceStudio {
         // engine's business: one is not listening while it works and has to be
         // told by file, the other is and can simply be asked.
         let Some(engine) = self.engine.clone() else { return };
+        self.stopping = true;
         cx.background_spawn(async move { engine.cancel_generation() }).detach();
         cx.notify();
     }
