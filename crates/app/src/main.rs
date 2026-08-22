@@ -360,6 +360,9 @@ impl VoiceStudio {
     fn start_engine(&mut self, cx: &mut Context<Self>) {
         // Which runtimes are here is now a question about what is on disk,
         // rather than about one interpreter at one path.
+        // A runtime installed before descriptors existed is still a runtime;
+        // this is what makes it visible where every other one is.
+        runtime::describe_installed();
         let places = speech_engine::paths::places();
         let available = speech_engine::runtimes::discover(&places)
             .iter()
@@ -1525,13 +1528,18 @@ impl VoiceStudio {
     }
 
     /// Download and install the speech runtime, then start the engine.
-    fn install_runtime(&mut self, archive: Option<PathBuf>, cx: &mut Context<Self>) {
+    fn install_runtime(
+        &mut self,
+        pack: &'static runtime::Pack,
+        archive: Option<PathBuf>,
+        cx: &mut Context<Self>,
+    ) {
         self.status = Status::Installing { step: "Starting…".into(), fraction: 0.0 };
         cx.notify();
 
         let (tx, rx) = std::sync::mpsc::channel::<runtime::Progress>();
         std::thread::spawn(move || {
-            runtime::install_from(archive, |p| {
+            runtime::install_pack(pack, archive, |p| {
                 let _ = tx.send(p);
             })
         });
@@ -1921,9 +1929,120 @@ impl VoiceStudio {
         cx.spawn(async move |this, cx| {
             let Ok(Ok(Some(paths))) = chosen.await else { return };
             let Some(path) = paths.into_iter().next() else { return };
-            this.update(cx, |this, cx| this.install_runtime(Some(path), cx)).ok();
+            this.update(cx, |this, cx| this.install_runtime(runtime::pack(), Some(path), cx))
+                .ok();
         })
         .detach();
+    }
+
+    /// One runtime somebody could install, and the button that gets it.
+    ///
+    /// Nothing about a runtime ships with the application — the interpreter and
+    /// the speech packages are hundreds of megabytes and update on their own
+    /// cadence — so a new installation is shown what is available for this
+    /// machine rather than told that something is missing.
+    fn runtime_offer(
+        &self,
+        pack: &'static runtime::Pack,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let here = pack.installed();
+        let busy = matches!(self.status, Status::Installing { .. });
+        let interrupted = matches!(self.status, Status::Failed(_));
+
+        div()
+            .h_flex()
+            .w_full()
+            .items_center()
+            .gap(px(12.0))
+            .px(px(18.0))
+            .py(px(15.0))
+            .border_b_1()
+            .border_color(theme::hex(0xF1EBE1))
+            .child(
+                div()
+                    .size(px(34.0))
+                    .flex_none()
+                    .rounded(px(9.0))
+                    .bg(theme::bg_subtle(false))
+                    .border_1()
+                    .border_color(theme::hex(0xE4DCD0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(icon::icon(icon::name::MEMORY, 19.0, theme::hex(0x5F594F))),
+            )
+            .child(
+                div()
+                    .v_flex()
+                    .flex_1()
+                    .min_w(px(0.0))
+                    .child(
+                        div()
+                            .text_size(px(13.5))
+                            .font_semibold()
+                            .child(format!("{} {}", pack.name, pack.python)),
+                    )
+                    .child(
+                        div()
+                            .text_size(px(12.0))
+                            .text_color(theme::hex(0x6B645A))
+                            .mt(px(2.0))
+                            .child(
+                                t!(
+                                    "setup.runtime_detail",
+                                    size = format!("{:.0} MB", pack.approx_bytes as f32 / 1e6)
+                                )
+                                .to_string(),
+                            ),
+                    ),
+            )
+            // Done, and saying so: this is the end of a wait someone sat
+            // through.
+            .when(here, |d| {
+                d.child(
+                    div()
+                        .h_flex()
+                        .flex_none()
+                        .items_center()
+                        .gap(px(6.0))
+                        .text_size(px(12.5))
+                        .text_color(theme::hex(0x2E7D32))
+                        .child(icon::filled(icon::name::CHECK_CIRCLE, 16.0, theme::hex(0x2E7D32)))
+                        .child(t!("setup.runtime_ready").to_string()),
+                )
+            })
+            .when(!here && !busy && runtime::host_supported().is_ok(), |d| {
+                d.child(
+                    div()
+                        .h(px(36.0))
+                        .px(px(16.0))
+                        .flex_none()
+                        .h_flex()
+                        .items_center()
+                        .gap(px(7.0))
+                        .rounded(px(8.0))
+                        .bg(theme::hex(0xFF6E08))
+                        .text_size(px(13.0))
+                        .font_semibold()
+                        .text_color(theme::hex(0xFFFEFD))
+                        .child(icon::icon(
+                            if interrupted { icon::name::REFRESH } else { icon::name::DOWNLOAD },
+                            17.0,
+                            theme::hex(0xFFFEFD),
+                        ))
+                        .child(if interrupted {
+                            t!("setup.resume").to_string()
+                        } else {
+                            t!("setup.install").to_string()
+                        })
+                        .id(SharedString::from(format!("install-{}", pack.id)))
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.install_runtime(pack, None, cx)
+                        })),
+                )
+            })
+            .into_any_element()
     }
 
     fn setup_screen(&self, cx: &mut Context<Self>) -> impl IntoElement {
@@ -2064,120 +2183,14 @@ impl VoiceStudio {
                     .child(
                         ui::card()
                             .w_full()
-                            .child(
-                                div()
-                                    .h_flex()
-                                    .w_full()
-                                    .items_center()
-                                    .gap(px(12.0))
-                                    .px(px(18.0))
-                                    .py(px(15.0))
-                                    .border_b_1()
-                                    .border_color(theme::hex(0xF1EBE1))
-                                    .child(
-                                        div()
-                                            .size(px(34.0))
-                                            .flex_none()
-                                            .rounded(px(9.0))
-                                            .bg(theme::bg_subtle(false))
-                                            .border_1()
-                                            .border_color(theme::hex(0xE4DCD0))
-                                            .flex()
-                                            .items_center()
-                                            .justify_center()
-                                            .child(icon::icon(
-                                                icon::name::MEMORY,
-                                                19.0,
-                                                theme::hex(0x5F594F),
-                                            )),
-                                    )
-                                    .child(
-                                        div()
-                                            .v_flex()
-                                            .flex_1()
-                                            .min_w(px(0.0))
-                                            .child(
-                                                div()
-                                                    .text_size(px(13.5))
-                                                    .font_semibold()
-                                                    .child(format!(
-                                                        "{} {}",
-                                                        runtime::NAME,
-                                                        runtime::VERSION
-                                                    )),
-                                            )
-                                            .child(
-                                                div()
-                                                    .text_size(px(12.0))
-                                                    .text_color(theme::hex(0x6B645A))
-                                                    .mt(px(2.0))
-                                                    .child(
-                                                        t!(
-                                                            "setup.runtime_detail",
-                                                            size = format!(
-                                                                "{:.0} MB",
-                                                                runtime::APPROX_BYTES as f32 / 1e6
-                                                            )
-                                                        )
-                                                        .to_string(),
-                                                    ),
-                                            ),
-                                    )
-                                    // Done, and saying so: this is the end of a
-                                    // wait someone sat through.
-                                    .when(self.runtime_done, |d| {
-                                        d.child(
-                                            div()
-                                                .h_flex()
-                                                .flex_none()
-                                                .items_center()
-                                                .gap(px(7.0))
-                                                .text_size(px(12.5))
-                                                .font_semibold()
-                                                .text_color(theme::hex(0x1B5C41))
-                                                .child(icon::filled(
-                                                    icon::name::CHECK_CIRCLE,
-                                                    17.0,
-                                                    theme::hex(0x287A57),
-                                                ))
-                                                .child(t!("setup.runtime_ready").to_string()),
-                                        )
-                                    })
-                                    .when(!started && !self.runtime_done
-                                        && runtime::host_supported().is_ok(), |d| {
-                                        d.child(
-                                            div()
-                                                .h(px(36.0))
-                                                .px(px(16.0))
-                                                .flex_none()
-                                                .h_flex()
-                                                .items_center()
-                                                .gap(px(7.0))
-                                                .rounded(px(8.0))
-                                                .bg(theme::hex(0xFF6E08))
-                                                .text_size(px(13.0))
-                                                .font_semibold()
-                                                .text_color(theme::hex(0xFFFEFD))
-                                                .child(icon::icon(
-                                                    if interrupted {
-                                                        icon::name::REFRESH
-                                                    } else {
-                                                        icon::name::DOWNLOAD
-                                                    },
-                                                    17.0,
-                                                    theme::hex(0xFFFEFD),
-                                                ))
-                                                .child(if interrupted {
-                                                    t!("setup.resume").to_string()
-                                                } else {
-                                                    t!("setup.install").to_string()
-                                                })
-                                                .id("install-runtime")
-                                                .on_click(cx.listener(|this, _, _, cx| {
-                                                    this.install_runtime(None, cx)
-                                                })),
-                                        )
-                                    }),
+                            // One row per runtime this machine can run.
+                            // Nothing is bundled: a new installation has no
+                            // runtime at all, so the first thing it needs is to
+                            // be shown what it can get.
+                            .children(
+                                runtime::offered()
+                                    .into_iter()
+                                    .map(|pack| self.runtime_offer(pack, cx)),
                             )
                             .child(
                                 div()

@@ -38,6 +38,8 @@ use crate::paths;
 pub struct Pack {
     /// Which backend this pack exists to run.
     pub id: &'static str,
+    /// What it is called where somebody has to choose one.
+    pub name: &'static str,
     /// Pinned so an install is reproducible; bumping is a deliberate act.
     pub python: &'static str,
     /// python-build-standalone release the interpreter comes from.
@@ -64,6 +66,7 @@ pub struct Pack {
 /// Apple silicon. Measured: interpreter plus MLX and its dependencies.
 pub const MLX: Pack = Pack {
     id: "mlx",
+    name: "Apple silicon",
     python: "3.13.15",
     release: "20260814",
     manifest: "mlx",
@@ -87,6 +90,7 @@ pub const MLX: Pack = Pack {
 /// imports `tn.*` at module scope, so the import has to be made lazy first.
 pub const TORCH: Pack = Pack {
     id: "torch",
+    name: "Windows and Linux",
     python: "3.12.14",
     release: "20260814",
     manifest: "torch",
@@ -96,6 +100,98 @@ pub const TORCH: Pack = Pack {
     // Unmeasured: nothing has installed this pack from an archive yet.
     archive_bytes: 0,
 };
+
+/// Every runtime the application knows how to fetch.
+///
+/// A catalogue rather than a constant, because nothing here is bundled: a new
+/// installation has no runtime at all and has to be shown what it can get.
+pub const PACKS: &[&Pack] = &[&MLX, &TORCH];
+
+impl Pack {
+    /// Whether this machine can run it. A pack offered on a host it cannot
+    /// serve is a download that ends in an error after several hundred
+    /// megabytes.
+    pub fn runs_here(&self) -> bool {
+        self.runs_on(std::env::consts::OS, std::env::consts::ARCH)
+    }
+
+    /// The rule, stated for any host rather than only this one.
+    ///
+    /// Taking the target as arguments is what makes it checkable: a machine can
+    /// only ever tell you about itself, and "does this pack run on Windows" is
+    /// not a question a Mac can answer by running the code.
+    pub fn runs_on(&self, os: &str, arch: &str) -> bool {
+        let apple_silicon = os == "macos" && arch == "aarch64";
+        match self.id {
+            "mlx" => apple_silicon,
+            // Proven on macOS CPU, which is how parity is tested without CUDA
+            // hardware, but nothing selects it on a Mac that has MLX.
+            "torch" => !apple_silicon,
+            _ => false,
+        }
+    }
+
+    /// Where it installs to, and where its descriptor goes.
+    pub fn root(&self) -> PathBuf {
+        paths::runtime_dir().join(self.manifest)
+    }
+
+    pub fn interpreter(&self) -> PathBuf {
+        let venv = self.root().join(".venv");
+        if cfg!(windows) {
+            venv.join("Scripts").join("python.exe")
+        } else {
+            venv.join("bin").join("python3")
+        }
+    }
+
+    /// Whether it is here and can actually speak. An interpreter alone is a
+    /// half-finished install, which looks the same from the outside.
+    pub fn installed(&self) -> bool {
+        let python = self.interpreter();
+        python.exists() && can_speak(&python)
+    }
+
+    /// How to start it, written where a runtime is looked for.
+    ///
+    /// The installer writes this rather than the application shipping one, so
+    /// an installed runtime means the same thing however it arrived — a folder
+    /// with a descriptor in it.
+    pub fn describe(&self) -> Result<PathBuf, String> {
+        let folder = paths::data_dir().join("runtimes").join(self.id);
+        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        let path = folder.join("runtime.json");
+        let descriptor = serde_json::json!({
+            "id": self.id,
+            "name": self.name,
+            "command": self.interpreter().to_string_lossy(),
+            "args": ["{resources}/sidecar/engine.py"],
+            "env": { "YARNGO_DATA": "{data}" },
+        });
+        std::fs::write(&path, serde_json::to_string_pretty(&descriptor).unwrap_or_default())
+            .map_err(|e| e.to_string())?;
+        Ok(path)
+    }
+}
+
+/// The runtimes this machine could install, whether or not it has.
+pub fn offered() -> Vec<&'static Pack> {
+    PACKS.iter().copied().filter(|pack| pack.runs_here()).collect()
+}
+
+/// Write descriptors for packs that are installed and undescribed.
+///
+/// A runtime installed before descriptors existed is still a runtime. Called at
+/// start so it becomes visible where every other one is, rather than needing to
+/// be installed again to be found.
+pub fn describe_installed() -> usize {
+    offered()
+        .into_iter()
+        .filter(|pack| pack.installed())
+        .filter(|pack| !paths::data_dir().join("runtimes").join(pack.id).join("runtime.json").exists())
+        .filter(|pack| pack.describe().is_ok())
+        .count()
+}
 
 /// The pack this host runs. Only one is proven, and [`host_supported`] refuses
 /// every machine the other would serve, so this cannot silently pick an
@@ -612,7 +708,17 @@ pub fn install(report: impl FnMut(Progress)) {
 /// cannot reach the release host. `archive` is the `cpython-…install_only.tar.gz`
 /// the link on the setup screen points at; everything after unpacking it is
 /// the same path a normal install takes.
-pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) {
+pub fn install_from(archive: Option<PathBuf>, report: impl FnMut(Progress)) {
+    install_pack(pack(), archive, report)
+}
+
+/// Install one named runtime. Nothing is bundled, so this is how a new
+/// installation gets anything at all.
+pub fn install_pack(
+    pack: &'static Pack,
+    archive: Option<PathBuf>,
+    mut report: impl FnMut(Progress),
+) {
     // Before anything is downloaded, not after.
     if let Err(reason) = host_supported() {
         report(Progress::Failed(reason));
@@ -687,7 +793,7 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
     // The manifest is copied out of the bundle rather than synced in place:
     // `uv sync` writes a `.venv` beside it, and writing inside a signed bundle
     // would break its signature.
-    let project = runtime.join(pack().manifest);
+    let project = runtime.join(pack.manifest);
     // The bundled recipe is staged first and unconditionally: it is the floor,
     // and it is what a machine with no network installs from.
     if let Err(err) = stage_manifest(&project) {
@@ -740,8 +846,15 @@ pub fn install_from(archive: Option<PathBuf>, mut report: impl FnMut(Progress)) 
         return;
     }
 
-    if !is_installed() {
+    if !pack.installed() {
         report(Progress::Failed("install finished but the engine did not import".into()));
+        return;
+    }
+
+    // The last step, and the one that makes it a runtime rather than an
+    // interpreter in a folder: a descriptor where runtimes are looked for.
+    if let Err(reason) = pack.describe() {
+        report(Progress::Failed(format!("installed, but could not be described: {reason}")));
         return;
     }
 

@@ -632,3 +632,91 @@ fn the_download_url_names_the_pinned_version() {
         assert!(url.ends_with(".tar.gz"), "{url}");
     }
 }
+
+/// A runtime the application installed is found the same way as one somebody
+/// else put there: by its descriptor.
+///
+/// Nothing is bundled, so this is the step that turns a downloaded interpreter
+/// into a runtime. Without it an install finishes and the application still has
+/// nothing it can start.
+#[test]
+fn installing_a_runtime_leaves_a_descriptor_where_runtimes_are_looked_for() {
+    let sandbox = yarngo_testing::Sandbox::empty();
+    let previous = std::env::var_os("YARNGO_DATA");
+    std::env::set_var("YARNGO_DATA", sandbox.root());
+    std::env::set_var("YARNGO_RUNTIME_DIR", sandbox.root().join("runtime"));
+
+    let written = speech_engine::runtime::MLX.describe().expect("describe");
+    assert_eq!(
+        written,
+        sandbox.root().join("runtimes/mlx/runtime.json"),
+        "a descriptor was written somewhere runtimes are not looked for"
+    );
+
+    let places = speech_engine::runtimes::Places {
+        data: sandbox.root().to_path_buf(),
+        runtime: sandbox.root().join("runtime"),
+        resources: sandbox.root().join("resources"),
+        own: std::path::PathBuf::new(),
+    };
+    let found = speech_engine::runtimes::discover(&places);
+    assert_eq!(found.len(), 1, "the installed runtime was not discovered");
+    assert_eq!(found[0].id, "mlx");
+    assert_eq!(
+        found[0].program(),
+        speech_engine::runtime::MLX.interpreter(),
+        "the descriptor points somewhere other than what was installed"
+    );
+
+    match previous {
+        Some(value) => std::env::set_var("YARNGO_DATA", value),
+        None => std::env::remove_var("YARNGO_DATA"),
+    }
+    std::env::remove_var("YARNGO_RUNTIME_DIR");
+}
+
+/// Every host gets exactly one runtime, and it is the right one.
+///
+/// Checked for hosts this machine is not, because a machine can only tell you
+/// about itself and "does this pack run on Windows" is not a question a Mac can
+/// answer by running the code. A pack offered where it cannot run is a download
+/// of several hundred megabytes that ends in an error.
+#[test]
+fn each_host_is_offered_the_one_runtime_that_serves_it() {
+    use speech_engine::runtime::PACKS;
+    for (os, arch, expected) in [
+        ("macos", "aarch64", "mlx"),
+        ("macos", "x86_64", "torch"),
+        ("windows", "x86_64", "torch"),
+        ("linux", "x86_64", "torch"),
+        ("linux", "aarch64", "torch"),
+    ] {
+        let serving: Vec<&str> = PACKS
+            .iter()
+            .filter(|pack| pack.runs_on(os, arch))
+            .map(|pack| pack.id)
+            .collect();
+        assert_eq!(
+            serving,
+            [expected],
+            "{os}/{arch} is offered {serving:?}, which is not exactly the one that serves it"
+        );
+    }
+}
+
+/// Every runtime offered is one this machine can actually run.
+#[test]
+fn only_runtimes_this_machine_can_run_are_offered() {
+    let offered = speech_engine::runtime::offered();
+    assert!(!offered.is_empty(), "this machine is offered nothing at all");
+    assert!(
+        offered.iter().all(|pack| pack.runs_here()),
+        "a runtime was offered that this machine cannot run"
+    );
+    // A download of several hundred megabytes that ends in an error is the
+    // thing this prevents.
+    assert!(
+        speech_engine::runtime::host_supported().is_ok() == offered.iter().any(|p| p.id == "mlx"),
+        "what is offered disagrees with what the host check says"
+    );
+}

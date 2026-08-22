@@ -72,6 +72,13 @@ runtimes live, `{resources}` what shipped with the application, and `{self}` the
 descriptor's own directory — which is what lets a runtime carry its own
 interpreter without knowing where it will be installed.
 
+Nothing about a runtime ships with the application — an interpreter and its
+speech packages are hundreds of megabytes and update on their own cadence — so a
+new installation has none and is shown what it can fetch for this machine. The
+installer writes the descriptor as its last step, which is what turns a
+downloaded interpreter into a runtime; one installed before descriptors existed
+is described on the next start rather than needing to be installed again.
+
 Shipped runtimes are read first, and a name is not a claim on it: an installed
 runtime calling itself `mlx` does not quietly become the engine that starts. A
 descriptor names a program to run, which is the same trust as a language server
