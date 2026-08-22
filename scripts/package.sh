@@ -89,7 +89,7 @@ codesign --verify --strict --verbose=2 "$APP" 2>&1 | tail -2
 # protocol, which the app reported as an unknown method at start-up and nothing
 # caught until somebody opened it. Checked here, against the copy that shipped.
 echo "--- bundled sidecar ---"
-YARNGO_TEST_BUNDLE="$APP" cargo test -p speech-engine --test packaged_sidecar -- --nocapture \
+YARNGO_TEST_BUNDLE="$PWD/$APP" cargo test -p speech-engine --test packaged_sidecar -- --nocapture \
   || { echo "the sidecar inside the bundle does not speak this protocol" >&2; exit 1; }
 
 echo "packaged: $APP"

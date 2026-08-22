@@ -44,6 +44,11 @@ resources = [
   # Named rather than globbed, so a new file beside the sidecar — a test, a
   # scratch script — cannot ship by accident.
   { src = "../../sidecar/engine.py", target = "sidecar/engine.py" },
+  # engine.py imports this at module level, so a bundle without it has no
+  # engine at all. Named here for the same reason as the others, and missing
+  # here for the whole of the protocol's life until a packaged start-up check
+  # went looking for it.
+  { src = "../../sidecar/protocol.py", target = "sidecar/protocol.py" },
   { src = "../../sidecar/dots_torch.py", target = "sidecar/dots_torch.py" },
   { src = "locales/app.yml", target = "locales/app.yml" },
   { src = "../../packaging/catalog.json", target = "catalog.json" },

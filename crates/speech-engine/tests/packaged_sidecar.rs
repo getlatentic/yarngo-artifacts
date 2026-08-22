@@ -43,8 +43,18 @@ fn the_bundled_sidecar_speaks_this_protocol() {
         eprintln!("set YARNGO_TEST_BUNDLE to a packaged .app to check its sidecar");
         return;
     };
-    let script = script(&bundle)
-        .unwrap_or_else(|| panic!("no engine.py inside {}", bundle.display()));
+    // Said apart, because they are different faults and the messages were not:
+    // a path that resolves nowhere reads as an empty bundle, which sends you
+    // looking at the packager rather than at how it was called.
+    assert!(
+        bundle.is_dir(),
+        "no bundle at {} — YARNGO_TEST_BUNDLE must be an absolute path, since \
+         cargo runs this from its own package directory",
+        bundle.display()
+    );
+    let script = script(&bundle).unwrap_or_else(|| {
+        panic!("{} has no engine.py in Contents/Resources", bundle.display())
+    });
     let python = speech_engine::runtime::interpreter(&speech_engine::paths::runtime_dir());
     let python = if python.exists() {
         python
@@ -59,6 +69,10 @@ fn the_bundled_sidecar_speaks_this_protocol() {
     let mut command = Command::new(&python);
     command
         .arg(&script)
+        // Python writes compiled bytecode beside what it imports, and what it
+        // is importing here is a signed bundle. A file appearing inside one
+        // breaks its seal, so this check would fail the build it just passed.
+        .env("PYTHONDONTWRITEBYTECODE", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
