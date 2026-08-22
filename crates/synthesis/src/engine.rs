@@ -646,10 +646,12 @@ impl SpeechEngine for DurableEngine {
                 let Some((revision, audio, label)) =
                     library::reference(&self.store, voice).map_err(store_error)?
                 else {
-                    // Refused here rather than after a minute of inference.
-                    return Err(EngineError::Transport(format!(
-                        "the voice this clip was made with is no longer available"
-                    )));
+                    // Refused here rather than after a minute of inference —
+                    // and refused, not failed: the voice is gone because
+                    // somebody removed it, which is the deletion working.
+                    return Err(EngineError::Refused(
+                        "the voice this clip was made with was deleted".into(),
+                    ));
                 };
                 Some((revision, audio, label))
             }

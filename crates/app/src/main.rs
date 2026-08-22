@@ -1801,10 +1801,12 @@ impl Render for VoiceStudio {
                     .into_any_element(),
             })
             // The design gives the workspace no status strip — the composer
-            // says what is happening. A failure has nowhere else to go, so that
-            // is the one thing this row still carries.
+            // says what is happening. Something that did not happen has nowhere
+            // else to go: the composer is showing a finished clip by then, or
+            // no clip at all. So this row carries those two and nothing else.
             .when(
-                screen == Screen::Workspace && matches!(self.status, Status::Failed(_)),
+                screen == Screen::Workspace
+                    && matches!(self.status, Status::Failed(_) | Status::Refused(_)),
                 |this| this.child(self.status_row(cx)),
             )
             .child(self.model_menu(cx))
