@@ -293,3 +293,82 @@ fn every_permission_reaches_the_log() {
     let after = std::fs::read_to_string(&log).expect("log");
     assert!(after.contains("\"bea\""), "deleting a voice took its permission with it");
 }
+
+/// A runtime says what it can do, and the application believes it.
+///
+/// The point of a handshake that lists methods: a runtime that cannot learn a
+/// voice from a recording is not asked to, and the offer is withdrawn rather
+/// than taken and then refused after somebody has spoken into a microphone.
+#[test]
+fn a_runtime_that_cannot_learn_a_voice_is_not_asked_to() {
+    let (sandbox, recording) = seeded();
+    let handle = common::engine_without(
+        &sandbox,
+        "",
+        Duration::from_secs(30),
+        &["audio.prepare_reference"],
+    );
+
+    let can = handle.capabilities();
+    assert!(
+        can.methods().count() > 0,
+        "the runtime listed nothing it can do, so nothing here is negotiated"
+    );
+    assert!(!can.can("audio.prepare_reference"));
+    assert!(!can.enrolment(), "enrolment was offered by a runtime that cannot do it");
+    // It can still speak in a voice it is handed one for — the two are
+    // different capabilities and only one of them is missing.
+    assert!(can.cloning());
+    assert!(can.cancellation());
+
+    // And asking anyway is refused rather than half-done: no voice is left
+    // behind by a registration that could not finish.
+    let refused = handle.register_voice(speech_engine::Voice {
+        voice_id: "bea".into(),
+        label: "Bea".into(),
+        reference_audio: recording,
+        reference_text: "A sentence.".into(),
+        seconds: 0.0,
+        consent: speech_engine::Consent {
+            statement: "I agree".into(),
+            app_version: "test".into(),
+            source: "recording".into(),
+        },
+    });
+    assert!(refused.is_err(), "a voice was enrolled by a runtime that cannot prepare one");
+    assert!(
+        !handle.voices().expect("voices").iter().any(|v| v.voice_id == "bea"),
+        "a half-registered voice was left behind"
+    );
+}
+
+/// The runtime that does answer everything says so, and everything is offered.
+#[test]
+fn a_complete_runtime_offers_everything() {
+    let (sandbox, _) = seeded();
+    let can = engine(&sandbox, "", Duration::from_secs(30)).capabilities();
+    assert_eq!(can.protocol, "yarngo-engine");
+    assert_eq!(can.version, 1);
+    assert!(can.enrolment() && can.cloning() && can.cancellation());
+    assert!(can.conditioning_invalidation(), "a deletion would have to kill the process");
+}
+
+/// Which runtime to start is remembered between runs.
+#[test]
+fn the_chosen_runtime_is_remembered() {
+    use yarngo_store::preferences::RUNTIME;
+    let (sandbox, _) = seeded();
+    let store = yarngo_store::Store::open(&sandbox.database()).expect("open");
+
+    assert_eq!(store.preference(RUNTIME).expect("read"), None, "something was chosen already");
+    store.set_preference(RUNTIME, Some("piper"), "t1").expect("set");
+    drop(store);
+
+    let store = yarngo_store::Store::open(&sandbox.database()).expect("reopen");
+    assert_eq!(store.preference(RUNTIME).expect("read").as_deref(), Some("piper"));
+
+    // Clearing is not choosing nothing: it is going back to whatever the
+    // application would pick, which is a different thing to want.
+    store.set_preference(RUNTIME, None, "t2").expect("clear");
+    assert_eq!(store.preference(RUNTIME).expect("read"), None);
+}

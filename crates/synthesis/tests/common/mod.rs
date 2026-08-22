@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use speech_engine::{EngineError, EngineHandle, Synthesis, SynthesisRequest};
 use yarngo_store::import::{Legacy, LegacyClip, LegacyConsent, LegacyVoice};
 use yarngo_store::Store;
+use speech_engine::runtimes::Descriptor;
 use yarngo_synthesis::engine::{DurableEngine, Spawn};
 use yarngo_testing::{standin, Sandbox};
 
@@ -77,13 +78,26 @@ pub fn seeded() -> (Sandbox, PathBuf) {
 
 /// The application's engine, over a stand-in that behaves as the test needs.
 pub fn engine(sandbox: &Sandbox, behaviour: &str, grace: Duration) -> Arc<EngineHandle> {
-    let script = standin::script(sandbox.root(), behaviour);
-    let spawn = Spawn {
-        python: standin::python(),
-        script,
-        work_dir: sandbox.root().to_path_buf(),
-        data_dir: sandbox.root().to_path_buf(),
-    };
+    engine_without(sandbox, behaviour, grace, &[])
+}
+
+/// The same, over a runtime that does not answer everything.
+pub fn engine_without(
+    sandbox: &Sandbox,
+    behaviour: &str,
+    grace: Duration,
+    without: &[&str],
+) -> Arc<EngineHandle> {
+    let script = standin::limited(sandbox.root(), behaviour, without);
+    let runtime = Descriptor::running(
+        "stand-in",
+        "Stand-in",
+        standin::python(),
+        vec![script.to_string_lossy().into_owned()],
+    )
+    .with_env("YARNGO_DATA", sandbox.root().to_string_lossy())
+    .with_env("YARNGO_TEST_MODE", "1");
+    let spawn = Spawn { runtime, data_dir: sandbox.root().to_path_buf() };
     let database = sandbox.database();
     let data = sandbox.root().to_path_buf();
     Arc::new(

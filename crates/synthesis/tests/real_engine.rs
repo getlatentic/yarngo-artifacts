@@ -299,6 +299,7 @@ fn the_durable_engine_answers_for_the_library_and_the_machine() {
         return;
     }
     use speech_engine::SpeechEngine;
+    use speech_engine::runtimes::Descriptor;
     use yarngo_synthesis::engine::{DurableEngine, Spawn};
 
     let dir = tempfile::tempdir().expect("tempdir");
@@ -306,9 +307,14 @@ fn the_durable_engine_answers_for_the_library_and_the_machine() {
         &dir.path().join("app.db"),
         &data_dir(),
         Spawn {
-            python: python(),
-            script: repo().join("sidecar/engine.py"),
-            work_dir: repo(),
+            runtime: Descriptor::running(
+                "mlx",
+                "Apple silicon",
+                python(),
+                vec![repo().join("sidecar/engine.py").to_string_lossy().into_owned()],
+            )
+            .with_env("YARNGO_DATA", data_dir().to_string_lossy())
+            .with_env("YARNGO_TEST_MODE", "1"),
             data_dir: data_dir(),
         },
     )
@@ -360,6 +366,7 @@ fn the_engine_answers_through_the_handle_while_it_is_generating() {
     }
     use speech_engine::{EngineHandle, SynthesisRequest};
     use std::sync::Arc;
+    use speech_engine::runtimes::Descriptor;
     use yarngo_synthesis::engine::{DurableEngine, Spawn};
 
     let dir = tempfile::tempdir().expect("tempdir");
@@ -368,11 +375,16 @@ fn the_engine_answers_through_the_handle_while_it_is_generating() {
     let database = dir.path().join("app.db");
     let data = data_dir();
     let spawn = Spawn {
-        python: python(),
-        script: repo().join("sidecar/engine.py"),
-        work_dir: repo(),
-        data_dir: data.clone(),
-    };
+            runtime: Descriptor::running(
+                "mlx",
+                "Apple silicon",
+                python(),
+                vec![repo().join("sidecar/engine.py").to_string_lossy().into_owned()],
+            )
+            .with_env("YARNGO_DATA", data.clone().to_string_lossy())
+            .with_env("YARNGO_TEST_MODE", "1"),
+            data_dir: data.clone(),
+        };
     let handle = Arc::new(
         EngineHandle::spawn_backend(move || {
             Ok(Box::new(DurableEngine::open(&database, &data, spawn)?))
@@ -461,6 +473,7 @@ fn deleting_a_voice_during_real_inference_stops_it_and_removes_the_recording() {
     }
     use speech_engine::{EngineHandle, SynthesisRequest};
     use std::sync::Arc;
+    use speech_engine::runtimes::Descriptor;
     use yarngo_synthesis::engine::{DurableEngine, Spawn};
 
     let Some(sandbox) = Sandbox::copying(&speech_engine::paths::installed_data_dir()) else {
@@ -488,11 +501,16 @@ fn deleting_a_voice_during_real_inference_stops_it_and_removes_the_recording() {
     assert!(takes_before > 0, "no existing takes, so nothing to prove survives");
 
     let spawn = Spawn {
-        python: python(),
-        script: repo().join("sidecar/engine.py"),
-        work_dir: repo(),
-        data_dir: data.clone(),
-    };
+            runtime: Descriptor::running(
+                "mlx",
+                "Apple silicon",
+                python(),
+                vec![repo().join("sidecar/engine.py").to_string_lossy().into_owned()],
+            )
+            .with_env("YARNGO_DATA", data.clone().to_string_lossy())
+            .with_env("YARNGO_TEST_MODE", "1"),
+            data_dir: data.clone(),
+        };
     let opened = database.clone();
     let handle = Arc::new(
         EngineHandle::spawn_backend(move || {

@@ -35,29 +35,53 @@ use rust_i18n::t;
 use player::{format_time, AudioPlayer};
 use recorder::{Quality, Recorder, ENROLMENT_SCRIPT};
 use speech_engine::{
-    runtime, Clip, EngineHandle, EnginePaths, InstallStatus, ModelSpec, Synthesis,
-    SynthesisRequest, SystemInfo, Voice,
+    runtime, Clip, EngineHandle, InstallStatus, ModelSpec, Synthesis, SynthesisRequest,
+    SystemInfo, Voice,
 };
 
-/// Start the engine the application runs on.
+/// Start a runtime, and hold the application's side of it.
 ///
-/// One engine, and one arrangement: this database holds the clips, the voices
-/// and the consent, and the sidecar makes audio. Nothing asks the sidecar what
-/// the person has.
-fn start_engine(paths: &EnginePaths) -> Result<EngineHandle, speech_engine::EngineError> {
-    let data_dir = speech_engine::paths::data_dir();
-    let spawn = yarngo_synthesis::engine::Spawn {
-        python: paths.python.clone(),
-        script: paths.script.clone(),
-        work_dir: paths.work_dir.clone(),
-        data_dir: data_dir.clone(),
+/// Which runtime is a question with an answer on disk: each one describes how
+/// it starts, the shipped one included, and this picks the person's if it is
+/// there and the first that works otherwise. One arrangement either way — this
+/// database holds the clips, the voices and the consent, and the runtime makes
+/// audio.
+fn start_engine(preferred: Option<&str>) -> Result<EngineHandle, speech_engine::EngineError> {
+    let places = speech_engine::paths::places();
+    // Read before anything starts, because which runtime to start is the
+    // question being answered. A brief look at the database of its own, since
+    // the thing that usually holds it open is what this is about to build.
+    let chosen = preferred.map(str::to_string).or_else(|| remembered_runtime(&places.data));
+    let preferred = chosen.as_deref();
+    let installed = speech_engine::runtimes::discover(&places);
+    let Some(runtime) = speech_engine::runtimes::choose(&installed, preferred) else {
+        return Err(speech_engine::EngineError::Transport(match installed.len() {
+            0 => "no speech runtime is installed".into(),
+            n => format!("none of the {n} installed speech runtimes can start"),
+        }));
     };
+    let data_dir = places.data.clone();
+    let spawn = yarngo_synthesis::engine::Spawn { runtime, data_dir: data_dir.clone() };
     let database = data_dir.join("yarngo.db");
     EngineHandle::spawn_backend(move || {
         Ok(Box::new(yarngo_synthesis::engine::DurableEngine::open(
             &database, &data_dir, spawn,
         )?))
     })
+}
+
+/// Which runtime the person picked last time, if they picked one.
+fn remembered_runtime(data_dir: &std::path::Path) -> Option<String> {
+    let store = yarngo_store::Store::open(&data_dir.join("yarngo.db")).ok()?;
+    store.preference(yarngo_store::preferences::RUNTIME).ok().flatten()
+}
+
+/// Remember one, so the next start makes the same choice.
+pub(crate) fn remember_runtime(data_dir: &std::path::Path, id: Option<&str>) {
+    let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
+    if let Ok(store) = yarngo_store::Store::open(&data_dir.join("yarngo.db")) {
+        let _ = store.set_preference(yarngo_store::preferences::RUNTIME, id, &now);
+    }
 }
 
 rust_i18n::i18n!("locales", fallback = "en");
@@ -67,8 +91,6 @@ actions!(voicestudio, [Speak, CommitRename, CancelRename]);
 /// Key context for the inline name field, so Enter and Escape mean rename only
 /// while a name is open for editing.
 pub(crate) const RENAME_CONTEXT: &str = "Rename";
-
-const APP_ROOT: &str = "/Users/dev/workspace/voicestudio";
 
 /// Which full-window screen is showing. Exclusive by construction: the previous
 /// version derived three independent booleans in `render`, which meant "setting
@@ -169,6 +191,12 @@ pub struct VoiceStudio {
     /// What the running generation has written so far, polled from the engine
     /// while it works. `None` between generations.
     pub(crate) progress: Option<speech_engine::Generating>,
+    /// Which runtime to start, when more than one is installed. `None` takes
+    /// the first that works, which is what one runtime means.
+    pub(crate) preferred_runtime: Option<String>,
+    /// What the running runtime said it can do. Empty until one has answered,
+    /// which is also what it should look like when none has.
+    pub(crate) capabilities: speech_engine::Capabilities,
     /// A stop has been asked for and the generation has not ended yet.
     ///
     /// Worth showing, because asking is not stopping: the engine stops where a
@@ -294,6 +322,8 @@ impl VoiceStudio {
             progress: None,
             expected_s: 0.0,
             generating_row: None,
+            preferred_runtime: None,
+            capabilities: Default::default(),
             stopping: false,
             imported: None,
             queued: None,
@@ -328,40 +358,42 @@ impl VoiceStudio {
 
     /// Engine startup loads models from disk, so it happens off the main thread.
     fn start_engine(&mut self, cx: &mut Context<Self>) {
-        // A first run has no runtime. Offer to install it rather than failing.
-        if !runtime::is_installed() {
-            let paths = EnginePaths::resolve(std::path::Path::new(APP_ROOT));
-            if paths.missing().is_some() {
-                self.status = Status::Installing {
-                    step: "The speech engine is not installed yet.".into(),
-                    fraction: 0.0,
-                };
-                cx.notify();
-                return;
-            }
-        }
+        // Which runtimes are here is now a question about what is on disk,
+        // rather than about one interpreter at one path.
+        let places = speech_engine::paths::places();
+        let available = speech_engine::runtimes::discover(&places)
+            .iter()
+            .any(|runtime| runtime.available());
 
-        let paths = EnginePaths::resolve(std::path::Path::new(APP_ROOT));
-        if let Some(missing) = paths.missing() {
-            self.status = Status::Failed(missing);
+        // A first run has none. Offer to install rather than failing.
+        if !available && !runtime::is_installed() {
+            self.status = Status::Installing {
+                step: "The speech engine is not installed yet.".into(),
+                fraction: 0.0,
+            };
             cx.notify();
             return;
         }
+        let preferred = self.preferred_runtime.clone();
         cx.spawn(async move |this, cx| {
             let started = cx
                 .background_spawn(async move {
-                    let handle = start_engine(&paths)?;
+                    let handle = start_engine(preferred.as_deref())?;
+                    // Asked before anything is offered: what this runtime can
+                    // do decides what the interface puts in front of somebody.
+                    let can = handle.capabilities();
                     let models = handle.models()?;
-                    // Voices outlive the process — the sidecar keeps them on
+                    // Voices outlive the process — the runtime keeps them on
                     // disk precisely so a 40 second preparation is paid once.
                     let voices = handle.voices()?;
-                    Ok::<_, speech_engine::EngineError>((Arc::new(handle), models, voices))
+                    Ok::<_, speech_engine::EngineError>((Arc::new(handle), can, models, voices))
                 })
                 .await;
 
             this.update(cx, |this, cx| {
                 match started {
-                    Ok((handle, models, voices)) => {
+                    Ok((handle, can, models, voices)) => {
+                        this.capabilities = can;
                         this.selected_model = models
                             .iter()
                             .find(|m| m.default)
@@ -476,7 +508,42 @@ impl VoiceStudio {
     }
 
     /// Open the recorder and suggest a name for what it will produce.
+    /// Switch to another runtime, and start it.
+    ///
+    /// Remembered before anything is torn down, so a restart that fails leaves
+    /// the choice made rather than silently back where it was — and the person
+    /// can see which one they picked while it is failing to start.
+    pub(crate) fn choose_runtime(&mut self, id: Option<String>, cx: &mut Context<Self>) {
+        remember_runtime(&speech_engine::paths::data_dir(), id.as_deref());
+        self.preferred_runtime = id;
+        // Dropping the handle ends the old engine; the generation it was
+        // running, if any, becomes an interrupted attempt its job can retry.
+        self.engine = None;
+        self.capabilities = Default::default();
+        self.settings_open = false;
+        self.status = Status::Preparing(t!("runtime.switching").to_string());
+        cx.notify();
+        self.start_engine(cx);
+    }
+
+    /// Whether a voice can be recorded at all.
+    ///
+    /// A runtime that cannot turn a recording into conditioning has no use for
+    /// one, so the offer is withdrawn rather than taken and then refused after
+    /// somebody has spoken into a microphone.
+    pub(crate) fn can_enrol(&self) -> bool {
+        self.capabilities.enrolment()
+    }
+
     pub(crate) fn begin_enrolment(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if !self.can_enrol() {
+            // The offer should not have been there. Said rather than ignored,
+            // because a button that does nothing is worse than one that
+            // explains itself.
+            self.status = Status::Refused(t!("enrol.unsupported").to_string());
+            cx.notify();
+            return;
+        }
         self.in_setup = false;
         let suggested = self.next_voice_name();
         self.voice_name.update(cx, |state, cx| state.set_value(suggested, window, cx));

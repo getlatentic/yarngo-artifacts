@@ -345,7 +345,8 @@ impl VoiceStudio {
                                 this.choosing_model = false;
                                 // First run continues into enrolment; a later
                                 // visit returns to the workspace it came from.
-                                if this.voices.is_empty() && this.last.is_none() {
+                                if this.voices.is_empty() && this.last.is_none() && this.can_enrol()
+                                {
                                     this.begin_enrolment(window, cx);
                                     this.in_setup = true;
                                 }

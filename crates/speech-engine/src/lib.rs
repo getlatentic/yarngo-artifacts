@@ -13,6 +13,7 @@ pub mod handle;
 pub mod paths;
 pub mod protocol;
 pub mod runtime;
+pub mod runtimes;
 
 pub use handle::EngineHandle;
 pub use paths::EnginePaths;
@@ -250,10 +251,87 @@ pub struct SystemInfo {
     pub data_dir: String,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+/// What a runtime said it can do, at the handshake.
+///
+/// Asked once and kept, because the answer cannot change while the process
+/// lives — and acted on, which is the difference between a protocol that
+/// advertises capabilities and one that negotiates them. A feature the runtime
+/// did not claim is not offered, rather than offered and failing at the call.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Capabilities {
-    pub cloning: bool,
-    pub streaming: bool,
+    pub protocol: String,
+    pub version: u32,
+    /// Which inference stack is behind it. For saying so, not for branching on:
+    /// what a runtime can do is the method list, not its name.
+    pub backend: String,
+    /// Whether forgetting one voice's conditioning forgets every voice's.
+    /// Stated at the handshake rather than discovered when a deletion reports
+    /// it, because a deletion cannot ask afterwards.
+    pub conditioning_eviction: String,
+    methods: std::collections::BTreeSet<String>,
+}
+
+impl Capabilities {
+    /// What the other end said at the handshake.
+    ///
+    /// Absent fields are absent capabilities, not defaults: a runtime that did
+    /// not say it can do something is one this application will not ask.
+    pub fn from_handshake(reply: &serde_json::Value) -> Self {
+        Self {
+            protocol: reply["protocol"].as_str().unwrap_or_default().to_string(),
+            version: reply["version"].as_u64().unwrap_or_default() as u32,
+            backend: reply["backend"].as_str().unwrap_or_default().to_string(),
+            conditioning_eviction: reply["conditioning_eviction"]
+                .as_str()
+                .unwrap_or("unknown")
+                .to_string(),
+            methods: reply["methods"]
+                .as_array()
+                .map(|names| {
+                    names.iter().filter_map(|n| n.as_str().map(str::to_string)).collect()
+                })
+                .unwrap_or_default(),
+        }
+    }
+
+    pub fn can(&self, method: &str) -> bool {
+        self.methods.contains(method)
+    }
+
+    pub fn methods(&self) -> impl Iterator<Item = &str> {
+        self.methods.iter().map(String::as_str)
+    }
+
+    /// Whether it can speak in a person's own voice, which needs both halves:
+    /// something to turn a recording into conditioning, and a synthesis that
+    /// accepts a reference.
+    pub fn cloning(&self) -> bool {
+        self.can("conditioning.prepare") && self.can("synthesis.generate")
+    }
+
+    /// Whether a voice can be enrolled. A runtime that cannot prepare a
+    /// recording has no way to take one, so the offer is withdrawn rather than
+    /// failing after somebody has spoken into a microphone.
+    pub fn enrolment(&self) -> bool {
+        self.can("audio.prepare_reference") && self.cloning()
+    }
+
+    /// Whether a generation can be stopped once it has started.
+    pub fn cancellation(&self) -> bool {
+        self.can("job.cancel")
+    }
+
+    /// Whether models can be installed and removed from inside the application.
+    pub fn model_management(&self) -> bool {
+        self.can("model.install") && self.can("model.delete")
+    }
+
+    /// Whether deleting a voice can be made to take effect in memory, which is
+    /// what the privacy claim rests on. Without it a deletion has to end the
+    /// process instead.
+    pub fn conditioning_invalidation(&self) -> bool {
+        self.can("conditioning.invalidate")
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

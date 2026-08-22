@@ -90,6 +90,26 @@ fn bundle_resources() -> Option<PathBuf> {
     resources.is_dir().then_some(resources)
 }
 
+/// Where the placeholders in a runtime descriptor point.
+///
+/// Assembled here because this is what knows the two layouts — a bundle and a
+/// checkout — and a descriptor should not have to.
+pub fn places() -> crate::runtimes::Places {
+    crate::runtimes::Places {
+        data: data_dir(),
+        runtime: runtime_dir(),
+        resources: resource_root(),
+        own: PathBuf::new(),
+    }
+}
+
+/// The directory shipped resources live in, whichever layout this is.
+pub fn resource_root() -> PathBuf {
+    bundle_resources().unwrap_or_else(|| {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packaging")
+    })
+}
+
 /// A file shipped alongside the app: inside `Contents/Resources` in a bundle,
 /// or under `packaging/` in a checkout. `None` when it is not there, so the
 /// caller can fall back rather than build a path to nothing.

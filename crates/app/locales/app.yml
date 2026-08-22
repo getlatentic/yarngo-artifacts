@@ -26,6 +26,9 @@ model:
   download:
     en: Download
     sk: Stiahnuť
+  switching:
+    en: Starting the speech runtime…
+    sk: Spúšťam rečový modul…
   use:
     en: Use this
     sk: Použiť tento
@@ -454,6 +457,9 @@ status:
     sk: "Nepodarilo sa: %{reason}"
 
 enrol:
+  unsupported:
+    en: This speech runtime cannot learn a voice from a recording.
+    sk: Tento rečový modul sa nedokáže naučiť hlas z nahrávky.
   title:
     en: Add a reference voice
     sk: Pridať referenčný hlas
@@ -901,3 +907,26 @@ inspect:
   consent:
     en: Permission recorded
     sk: Zaznamenaný súhlas
+
+runtime:
+  count:
+    en: "%{count} installed"
+    sk: "%{count} nainštalovaných"
+  ready:
+    en: ready
+    sk: pripravený
+  missing:
+    en: "not here — %{path}"
+    sk: "chýba — %{path}"
+  answering:
+    en: answering
+    sk: odpovedá
+  switching:
+    en: Starting the speech runtime…
+    sk: Spúšťam rečový modul…
+  use:
+    en: Use this
+    sk: Použiť tento
+  what_they_are:
+    en: A speech runtime is what turns text into sound. Each one says how it starts, so another can be installed beside the one that ships. Changing this restarts the engine; clips already made are untouched.
+    sk: Rečový modul mení text na zvuk. Každý popisuje, ako sa spúšťa, takže vedľa dodávaného sa dá nainštalovať ďalší. Zmena reštartuje engine; už vytvorené nahrávky zostávajú.

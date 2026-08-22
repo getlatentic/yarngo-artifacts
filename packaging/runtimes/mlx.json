@@ -1,0 +1,7 @@
+{
+  "id": "mlx",
+  "name": "Apple silicon",
+  "command": "{runtime}/mlx/.venv/bin/python",
+  "args": ["{resources}/sidecar/engine.py"],
+  "env": { "YARNGO_DATA": "{data}" }
+}

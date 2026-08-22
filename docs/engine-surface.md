@@ -41,6 +41,42 @@ reads the model still waits for the slow one writing it.
 | `conditioning.invalidate` | forget every voice's conditioning |
 | `synthesis.generate` | speak text into a given file |
 
+## Saying what you can do
+
+`initialize` answers with the protocol, its version, and `methods` — every
+operation this runtime will answer, taken from the tables that answer them
+rather than written out beside them. The application offers what that list
+permits: a runtime without `audio.prepare_reference` is not asked to enrol a
+voice, and the offer is withdrawn rather than taken and then refused after
+somebody has spoken into a microphone.
+
+## Being installed
+
+A runtime is a directory with a `runtime.json` in it, under `runtimes/` in the
+application's data directory. The one that ships is described the same way, in
+`Resources/runtimes/`, so the path the application takes to its own engine is
+the path a third one takes.
+
+```json
+{
+  "id": "mlx",
+  "name": "Apple silicon",
+  "command": "{runtime}/mlx/.venv/bin/python",
+  "args": ["{resources}/sidecar/engine.py"],
+  "env": { "YARNGO_DATA": "{data}" }
+}
+```
+
+`{data}` is everything the application keeps, `{runtime}` where installed
+runtimes live, `{resources}` what shipped with the application, and `{self}` the
+descriptor's own directory — which is what lets a runtime carry its own
+interpreter without knowing where it will be installed.
+
+Shipped runtimes are read first, and a name is not a claim on it: an installed
+runtime calling itself `mlx` does not quietly become the engine that starts. A
+descriptor names a program to run, which is the same trust as a language server
+or an editor extension — what it can do is what the person running it can do.
+
 ## Two rules the surface follows
 
 **Nothing takes an identifier the engine would have to look up.** Conditioning

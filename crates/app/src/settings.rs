@@ -734,7 +734,9 @@ impl VoiceStudio {
                     )
                     // The recorder takes the whole window, so this closes the
                     // settings on the way rather than opening one over the other.
-                    .child(
+                    // Absent when the runtime cannot learn a voice at all.
+                    .when(self.can_enrol(), |d| d
+                        .child(
                         ui::secondary_button(
                             Some((icon::name::MIC, 15)),
                             t!("settings.add_voice").to_string(),
@@ -748,7 +750,7 @@ impl VoiceStudio {
                             this.settings_open = false;
                             this.renaming_voice = None;
                             this.begin_enrolment(window, cx);
-                        })),
+                        }))),
                     ),
             )
             .child(
@@ -778,6 +780,112 @@ impl VoiceStudio {
                             .text_size(px(12.0))
                             .text_color(theme::hex(0x5F594F))
                             .child(t!("settings.voices_where").to_string()),
+                    ),
+            )
+            .into_any_element()
+    }
+
+    /// The runtimes on this machine, and which one is answering.
+    ///
+    /// A runtime is a folder with a file in it saying how to start something
+    /// that speaks this protocol. The one that ships is described the same way,
+    /// so it appears here beside anything installed rather than above it.
+    fn runtime_pane(&self, cx: &mut Context<Self>) -> AnyElement {
+        let places = speech_engine::paths::places();
+        let installed = speech_engine::runtimes::discover(&places);
+        let running = self.capabilities.backend.clone();
+
+        div()
+            .v_flex()
+            .flex_1()
+            .h_full()
+            .min_w(px(0.0))
+            .gap(px(14.0))
+            .px(px(22.0))
+            .py(px(20.0))
+            .child(
+                div()
+                    .v_flex()
+                    .gap(px(3.0))
+                    .child(
+                        div()
+                            .font_family(theme::FONT_DISPLAY)
+                            .text_size(px(19.0))
+                            .font_semibold()
+                            .child(t!("settings.runtime").to_string()),
+                    )
+                    .child(ui::mono(
+                        t!("runtime.count", count = installed.len()).to_string(),
+                        12.0,
+                        theme::hex(0x857D72),
+                    )),
+            )
+            .children(installed.iter().map(|runtime| {
+                let id = runtime.id.clone();
+                let chosen = self.preferred_runtime.as_deref() == Some(id.as_str());
+                let here = runtime.available();
+                let facts = if here {
+                    t!("runtime.ready").to_string()
+                } else {
+                    t!("runtime.missing", path = runtime.program().display().to_string()).to_string()
+                };
+                div()
+                    .h_flex()
+                    .w_full()
+                    .items_center()
+                    .gap(px(12.0))
+                    .px(px(14.0))
+                    .py(px(12.0))
+                    .rounded(px(10.0))
+                    .bg(theme::surface(false))
+                    .border_1()
+                    .border_color(if chosen { theme::hex(0xC7862B) } else { theme::hex(0xEBE4D9) })
+                    .child(icon::icon(icon::name::MEMORY, 17.0, theme::hex(0x8F4406)))
+                    .child(
+                        div()
+                            .v_flex()
+                            .flex_1()
+                            .min_w(px(0.0))
+                            .child(
+                                div()
+                                    .text_size(px(13.5))
+                                    .font_semibold()
+                                    .child(runtime.name.clone()),
+                            )
+                            .child(ui::mono(facts, 11.5, theme::hex(0x6B645A))),
+                    )
+                    .when(!running.is_empty() && running == id, |d| {
+                        d.child(ui::mono(t!("runtime.answering").to_string(), 11.0, theme::hex(0x2E7D32)))
+                    })
+                    .when(here && !chosen, |d| {
+                        let id = id.clone();
+                        d.child(
+                            ui::secondary_button(None, t!("runtime.use").to_string())
+                                .h(px(30.0))
+                                .px(px(11.0))
+                                .rounded(px(7.0))
+                                .id(SharedString::from(format!("runtime-use-{id}")))
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.choose_runtime(Some(id.clone()), cx);
+                                })),
+                        )
+                    })
+                    .into_any_element()
+            }))
+            .child(
+                div()
+                    .v_flex()
+                    .w_full()
+                    .flex_none()
+                    .pt(px(14.0))
+                    .border_t_1()
+                    .border_color(theme::hex(0xEBE4D9))
+                    .child(
+                        div()
+                            .text_size(px(12.0))
+                            .line_height(px(18.0))
+                            .text_color(theme::hex(0x5F594F))
+                            .child(t!("runtime.what_they_are").to_string()),
                     ),
             )
             .into_any_element()
@@ -919,6 +1027,7 @@ impl VoiceStudio {
                                 Pane::Models => self.models_pane(cx),
                                 Pane::Voices => self.voices_pane(cx),
                                 Pane::Storage => self.storage_pane(cx),
+                                Pane::Runtime => self.runtime_pane(cx),
                                 Pane::About => self.about_pane(cx),
                                 other => self.placeholder_pane(other),
                             }),

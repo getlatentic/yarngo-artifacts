@@ -73,6 +73,7 @@ enum Command {
     DuplicateClip(String, Sender<Result<Vec<Clip>>>),
     SystemInfo(Sender<Result<SystemInfo>>),
     Ping(Sender<Result<()>>),
+    Capabilities(Sender<Result<crate::Capabilities>>),
     CancelGeneration(Sender<Result<()>>),
     Progress(Sender<Result<Option<crate::Generating>>>),
     /// A deferred operation's reply, put back on this channel by the thread
@@ -202,6 +203,9 @@ impl EngineHandle {
                         Command::Ping(reply) => {
                             let _ = reply.send(engine.ping());
                         }
+                        Command::Capabilities(reply) => {
+                            let _ = reply.send(Ok(engine.capabilities()));
+                        }
                         Command::CancelGeneration(reply) => {
                             let _ = reply.send(engine.cancel_generation());
                         }
@@ -328,6 +332,15 @@ impl EngineHandle {
     pub fn duplicate_clip(&self, clip_id: impl Into<String>) -> Result<Vec<Clip>> {
         let id = clip_id.into();
         self.dispatch(|reply| Command::DuplicateClip(id, reply))
+    }
+
+    /// What the running runtime said it can do.
+    ///
+    /// Asked rather than assumed, and asked once at start: the application
+    /// offers what this answer permits, so a runtime that cannot enrol a voice
+    /// does not put a microphone in front of somebody.
+    pub fn capabilities(&self) -> crate::Capabilities {
+        self.dispatch(Command::Capabilities).unwrap_or_default()
     }
 
     /// Whether the engine is there. Answerable while it is working, which is

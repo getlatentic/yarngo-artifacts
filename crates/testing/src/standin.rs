@@ -36,6 +36,13 @@ def wave(seconds, rate=24000):
 /// process and one test's engine must not refuse to start because another one
 /// is testing that.
 pub fn script(dir: &Path, behaviour: &str) -> PathBuf {
+    limited(dir, behaviour, &[])
+}
+
+/// The same, with some of it taken away — a runtime that does not do
+/// everything, which is the case capability negotiation exists for and the one
+/// a real engine cannot be asked to be.
+pub fn limited(dir: &Path, behaviour: &str, without: &[&str]) -> PathBuf {
     let program = format!(
         r#"
 import sys, os, time, json, struct, threading
@@ -101,11 +108,15 @@ MODEL = {{"synthesis.generate": generate,
          "conditioning.prepare": condition,
          "conditioning.invalidate": invalidate,
          "model.list": lambda params, ctx: {{"models": []}}}}
+for name in {without:?}:
+    MODEL.pop(name, None)
+    BROKER.pop(name, None)
 protocol.serve(broker=BROKER, model=MODEL, capabilities={{"backend": "stand-in"}})
 "#,
         dir = sidecar_dir().to_string_lossy(),
         wave = WAVE,
         behaviour = behaviour,
+        without = without,
     );
     let path = dir.join("standin_engine.py");
     std::fs::write(&path, program).expect("write the stand-in engine");

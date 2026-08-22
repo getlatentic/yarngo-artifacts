@@ -9,11 +9,12 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::Duration;
 
 use serde_json::json;
 use speech_engine::protocol::{Connection, Events};
+use speech_engine::runtimes::Descriptor;
 use speech_engine::Generating;
 use speech_engine::{
     Capabilities, Clip, DiskSpace, EngineError, InstallStatus, ModelSpec, SpeechEngine, Started,
@@ -44,22 +45,21 @@ const GRACE: Duration = Duration::from_secs(30);
 /// will take.
 const RATE_FROM_TAKES_LONGER_THAN: f64 = 3.0;
 
-/// How to start a sidecar, kept because deleting a voice may have to end one
+/// How to start a runtime, kept because deleting a voice may have to end one
 /// and put another in its place.
+///
+/// The runtime says how it starts; this holds what it said. The application no
+/// longer knows it is launching a Python interpreter over a script — only that
+/// something answers this protocol on the other end of a pipe.
 #[derive(Clone, Debug)]
 pub struct Spawn {
-    pub python: PathBuf,
-    pub script: PathBuf,
-    pub work_dir: PathBuf,
+    pub runtime: Descriptor,
     pub data_dir: PathBuf,
 }
 
 impl Spawn {
-    fn start(&self) -> Result<(Connection, Events), EngineError> {
-        let mut command = Command::new(&self.python);
-        command
-            .arg(&self.script)
-            .current_dir(&self.work_dir);
+    fn start(&self) -> Result<(Connection, Events, Capabilities), EngineError> {
+        let mut command = self.runtime.command();
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt as _;
@@ -67,19 +67,24 @@ impl Spawn {
             command.creation_flags(CREATE_NO_WINDOW);
         }
         let mut child = command
-            .env("YARNGO_DATA", &self.data_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
             .spawn()
-            .map_err(|e| EngineError::Transport(format!("could not start sidecar: {e}")))?;
+            .map_err(|e| {
+                EngineError::Transport(format!(
+                    "could not start the {} runtime ({}): {e}",
+                    self.runtime.name,
+                    self.runtime.program().display()
+                ))
+            })?;
         let stdin = child.stdin.take().ok_or(EngineError::NotRunning)?;
         let stdout = child.stdout.take().ok_or(EngineError::NotRunning)?;
         let (connection, events) = Connection::attach(child, stdin, stdout, None);
-        connection
+        let hello = connection
             .initialize(PROMPT)
             .map_err(|e| EngineError::Transport(format!("{e}")))?;
-        Ok((connection, events))
+        Ok((connection, events, Capabilities::from_handshake(&hello)))
     }
 }
 
@@ -154,6 +159,9 @@ pub struct DurableEngine {
     layout: Layout,
     running: Running,
     spawn: Spawn,
+    /// What the running runtime said it can do. Replaced when one is, because
+    /// a replacement is not obliged to be the same program.
+    capabilities: Capabilities,
     progress: Reported,
     /// What distinguishes this run's names from every other run's.
     ///
@@ -191,7 +199,7 @@ impl DurableEngine {
         fill_gaps_from_legacy(&store, data_dir)?;
         write_consent_log(&store, data_dir);
 
-        let (connection, events) = spawn.start()?;
+        let (connection, events, capabilities) = spawn.start()?;
         let progress = Reported::default();
         progress.follow(events);
         let run = stamp();
@@ -204,6 +212,7 @@ impl DurableEngine {
             layout,
             running: Running { connection, session },
             spawn,
+            capabilities,
             progress,
             run,
             jobs: 0,
@@ -242,6 +251,7 @@ impl DurableEngine {
             let mut conditioning = EngineConditioning {
                 running: &mut self.running,
                 spawn: &self.spawn,
+                capabilities: &mut self.capabilities,
                 progress: &self.progress,
             };
             self.store
@@ -329,6 +339,7 @@ impl DurableEngine {
         let mut conditioning = EngineConditioning {
             running: &mut self.running,
             spawn: &self.spawn,
+            capabilities: &mut self.capabilities,
             progress: &self.progress,
         };
         let outcome = self
@@ -413,7 +424,7 @@ fn working_name(text: &str) -> String {
 
 impl SpeechEngine for DurableEngine {
     fn capabilities(&self) -> Capabilities {
-        Capabilities { cloning: true, streaming: false }
+        self.capabilities.clone()
     }
 
     fn models(&mut self, refresh: bool) -> Result<Vec<ModelSpec>, EngineError> {
@@ -494,6 +505,7 @@ impl SpeechEngine for DurableEngine {
             let mut conditioning = EngineConditioning {
                 running: &mut self.running,
                 spawn: &self.spawn,
+                capabilities: &mut self.capabilities,
                 progress: &self.progress,
             };
             let ended = conditioning.terminate();
@@ -907,6 +919,7 @@ fn fill_gaps_from_legacy(store: &Store, data_dir: &Path) -> Result<(), EngineErr
 struct EngineConditioning<'a> {
     running: &'a mut Running,
     spawn: &'a Spawn,
+    capabilities: &'a mut Capabilities,
     progress: &'a Reported,
 }
 
@@ -932,8 +945,9 @@ impl Conditioning for EngineConditioning<'_> {
     }
 
     fn restart(&mut self) -> Result<(), String> {
-        let (connection, events) = self.spawn.start().map_err(|e| e.to_string())?;
+        let (connection, events, said) = self.spawn.start().map_err(|e| e.to_string())?;
         self.running.connection = connection;
+        *self.capabilities = said;
         // Whatever the old engine last said it was doing, it is not doing now.
         self.progress.clear();
         self.progress.follow(events);

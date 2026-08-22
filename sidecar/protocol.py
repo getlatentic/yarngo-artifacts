@@ -463,6 +463,8 @@ def serve(
     writer = Writer(protocol_out, on_fatal=on_fatal)
     cancellation = Cancellation()
     actor = ModelActor(model, writer, cancellation)
+    # The serving layer's own two, which no handler is mounted for.
+    answerable = sorted(set(broker) | set(model) | {"initialize", "job.cancel"})
 
     while True:
         # Read at most one frame's worth. A line longer than the limit comes
@@ -517,6 +519,13 @@ def serve(
                         "protocol": PROTOCOL_NAME,
                         "version": PROTOCOL_VERSION,
                         **(capabilities or {}),
+                        # Everything this engine will answer, listed by the
+                        # thing that will answer it. Taken from the tables
+                        # themselves rather than written out beside them: a list
+                        # maintained by hand is a list that eventually lies, and
+                        # a caller that believed it would fail at the call
+                        # instead of offering something else.
+                        "methods": answerable,
                     },
                 )
             continue

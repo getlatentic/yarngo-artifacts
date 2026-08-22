@@ -104,6 +104,11 @@ impl VoiceStudio {
         let chosen = self.clip_voice().map(str::to_owned);
         let voices: Vec<Voice> = self.voices.clone();
         let clone_ok = self.model_can_clone();
+        // Two different questions, and both have to be yes: whether the model
+        // speaks in a given voice, and whether the runtime can learn one from a
+        // recording. A runtime that cannot should not put a microphone in front
+        // of anybody.
+        let can_record = clone_ok && self.can_enrol();
 
         div()
             .v_flex()
@@ -137,7 +142,7 @@ impl VoiceStudio {
             }))
             // Adding a voice starts from the clip that wants it, which is what
             // makes "saved and selected for this clip" the natural next step.
-            .when(clone_ok, |d| {
+            .when(can_record, |d| {
                 d.child(
                     div()
                         .h_flex()

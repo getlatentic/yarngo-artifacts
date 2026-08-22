@@ -11,6 +11,8 @@ path = "src/main.rs"
 [dependencies]
 speech-engine = { path = "../speech-engine" }
 yarngo-synthesis = { path = "../synthesis" }
+yarngo-store = { path = "../store" }
+chrono = "0.4"
 serde.workspace = true
 serde_json.workspace = true
 gpui = { git = "https://github.com/zed-industries/zed" }
@@ -50,6 +52,10 @@ resources = [
   # went looking for it.
   { src = "../../sidecar/protocol.py", target = "sidecar/protocol.py" },
   { src = "../../sidecar/dots_torch.py", target = "sidecar/dots_torch.py" },
+  # How to start the engine that ships with the application, described the
+  # same way an installed one describes itself — so the path to its own runtime
+  # is the path a third one would take.
+  { src = "../../packaging/runtimes/mlx.json", target = "runtimes/mlx.json" },
   { src = "locales/app.yml", target = "locales/app.yml" },
   { src = "../../packaging/catalog.json", target = "catalog.json" },
   { src = "../../packaging/packs/mlx/*", target = "packs/mlx" },
