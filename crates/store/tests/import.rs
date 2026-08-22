@@ -43,6 +43,7 @@ fn fixture() -> Legacy {
         LegacyVoice {
             label: "Tosin's Voice".into(),
             reference_audio: "/tmp/voice-1.wav".into(),
+             reference_text: Some("A sentence read at enrolment.".into()),
             seconds: Some(21.0),
             created: "2026-08-19T08:00:00".into(),
         },
@@ -52,6 +53,7 @@ fn fixture() -> Legacy {
         LegacyVoice {
             label: "Blessing's Voice".into(),
             reference_audio: "/tmp/voice-3.wav".into(),
+             reference_text: Some("A sentence read at enrolment.".into()),
             seconds: Some(23.0),
             created: "2026-08-21T11:00:00".into(),
         },

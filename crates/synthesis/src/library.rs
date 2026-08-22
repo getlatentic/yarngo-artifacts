@@ -96,7 +96,7 @@ fn title_of(text: &str) -> String {
 /// gone, and offering it would be offering work that must be refused later.
 pub fn voices(store: &Store) -> Result<Vec<Voice>> {
     let mut statement = store.raw().prepare(
-        "SELECT p.id, p.display_name, a.path, r.duration_seconds,
+        "SELECT p.id, p.display_name, a.path, r.duration_seconds, r.reference_text,
                 e.statement, e.app_version, e.source
            FROM voice_profiles p
            JOIN voice_revisions r ON r.voice_id = p.id AND r.deleted_at IS NULL
@@ -112,31 +112,49 @@ pub fn voices(store: &Store) -> Result<Vec<Voice>> {
             voice_id: row.get(0)?,
             label: row.get(1)?,
             reference_audio: PathBuf::from(row.get::<_, String>(2)?),
-            reference_text: String::new(),
             seconds: row.get::<_, Option<f64>>(3)?.unwrap_or(0.0) as f32,
+            reference_text: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
             consent: Consent {
-                statement: row.get::<_, Option<String>>(4)?.unwrap_or_default(),
-                app_version: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
-                source: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
+                statement: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+                app_version: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
+                source: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
             },
         })
     })?;
     Ok(voices.collect::<std::result::Result<_, _>>()?)
 }
 
-/// The recording to speak with, and which revision of the voice it is.
-pub fn reference(store: &Store, voice_id: &str) -> Result<Option<(String, String, String)>> {
+/// What is needed to speak in a voice, if it is still one the person has.
+#[derive(Clone, Debug)]
+pub struct Reference {
+    pub revision: String,
+    pub audio: String,
+    /// What was read while it was recorded. The model conditions on it, so it
+    /// travels with the recording rather than being looked up separately and
+    /// forgotten.
+    pub text: Option<String>,
+    pub label: String,
+}
+
+pub fn reference(store: &Store, voice_id: &str) -> Result<Option<Reference>> {
     Ok(store
         .raw()
         .query_row(
-            "SELECT r.id, a.path, p.display_name
+            "SELECT r.id, a.path, r.reference_text, p.display_name
                FROM voice_profiles p
                JOIN voice_revisions r ON r.voice_id = p.id AND r.deleted_at IS NULL
                JOIN assets a          ON a.id = r.source_asset_id AND a.state = 'active'
               WHERE p.id = ?1 AND p.status = 'active'
               ORDER BY r.created_at DESC",
             params![voice_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            |row| {
+                Ok(Reference {
+                    revision: row.get(0)?,
+                    audio: row.get(1)?,
+                    text: row.get(2)?,
+                    label: row.get(3)?,
+                })
+            },
         )
         .optional()?)
 }
@@ -261,9 +279,19 @@ pub fn register_voice(store: &mut Store, voice: &Voice, at: &str) -> Result<()> 
         params![voice.voice_id, voice.label, at],
     )?;
     transaction.execute(
-        "INSERT INTO voice_revisions (id, voice_id, source_asset_id, duration_seconds, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![revision, voice.voice_id, asset, voice.seconds as f64, at],
+        "INSERT INTO voice_revisions
+            (id, voice_id, source_asset_id, duration_seconds, reference_text, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            revision,
+            voice.voice_id,
+            asset,
+            voice.seconds as f64,
+            // Empty is absent: a voice enrolled without a script was cloned
+            // from audio alone, and saying so is not the same as saying "".
+            Some(voice.reference_text.as_str()).filter(|text| !text.trim().is_empty()),
+            at
+        ],
     )?;
     // Written with the voice, in the same transaction. A voice that exists
     // without the record of what was agreed to is a voice nothing can account

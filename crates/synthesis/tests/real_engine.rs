@@ -459,7 +459,7 @@ fn deleting_a_voice_during_real_inference_stops_it_and_removes_the_recording() {
         eprintln!("set YARNGO_TEST_ENGINE=1 to run against the real engine");
         return;
     }
-    use speech_engine::{EngineHandle, SpeechEngine, SynthesisRequest};
+    use speech_engine::{EngineHandle, SynthesisRequest};
     use std::sync::Arc;
     use yarngo_synthesis::engine::{DurableEngine, Spawn};
 

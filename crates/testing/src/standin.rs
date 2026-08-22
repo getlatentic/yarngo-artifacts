@@ -38,8 +38,9 @@ def wave(seconds, rate=24000):
 pub fn script(dir: &Path, behaviour: &str) -> PathBuf {
     let program = format!(
         r#"
-import sys, os, time, struct, threading
-refuse = os.path.join(os.path.dirname(os.path.abspath(__file__)), "refuse")
+import sys, os, time, json, struct, threading
+HERE = os.path.dirname(os.path.abspath(__file__))
+refuse = os.path.join(HERE, "refuse")
 if os.path.exists(refuse):
     print("the stand-in was told not to start", file=sys.stderr)
     raise SystemExit(1)
@@ -58,12 +59,31 @@ def generate(params, ctx):
                               "written_s": round(seconds, 2), "elapsed_s": 0.1}})
     path = params["output_path"]
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    # What it was actually asked for, so a test can check what reached the
+    # engine rather than what the caller believed it sent. Beside the script and
+    # not beside the output: the staging directory holds what the application
+    # put there, and a test that leaves something in it is testing its own mess.
+    with open(os.path.join(HERE, "generate.asked.json"), "w") as asked:
+        json.dump(params, asked)
     with open(path, "wb") as handle:
         handle.write(wave(seconds))
     return {{"output_path": path, "audio_s": round(seconds, 2), "gen_s": 0.1,
              "seed": params.get("seed"), "sample_rate": 24000, "chunks": 1}}
 
+def prepare_reference(params, ctx):
+    source, out = params["source"], params["output_path"]
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    if os.path.abspath(source) != os.path.abspath(out):
+        with open(source, "rb") as reading, open(out, "wb") as writing:
+            writing.write(reading.read())
+    # Measured from the bytes rather than invented: a stand-in for the audio
+    # stack should still answer from the file it was given.
+    return {{"output_path": out, "seconds": round(os.path.getsize(out) / 48000.0, 2),
+             "trimmed_lead_s": 0.0, "trimmed_tail_s": 0.0}}
+
 def condition(params, ctx):
+    with open(os.path.join(HERE, "conditioning.asked.json"), "w") as asked:
+        json.dump(params, asked)
     return {{"prepared_s": 0.01}}
 
 def invalidate(params, ctx):
@@ -77,6 +97,7 @@ BROKER = {{"ping": lambda params: {{"pong": True}},
                                          "memory_bytes": 1, "free_bytes": 1,
                                          "total_bytes": 2, "data_dir": "."}}}}
 MODEL = {{"synthesis.generate": generate,
+         "audio.prepare_reference": prepare_reference,
          "conditioning.prepare": condition,
          "conditioning.invalidate": invalidate,
          "model.list": lambda params, ctx: {{"models": []}}}}

@@ -22,6 +22,21 @@ pub enum VoiceProvenance {
 }
 
 impl Store {
+    /// Fill in a reference transcript that is not there.
+    ///
+    /// A column added after a store was brought across stays empty for whoever
+    /// had already brought theirs. This fills absences only — a value that is
+    /// present is the person's, whatever it says, and is left alone. Reports
+    /// whether it had anything to do, so a start-up can say so once rather than
+    /// every time.
+    pub fn fill_reference_text(&self, voice_id: &str, text: &str) -> Result<bool> {
+        Ok(self.raw().execute(
+            "UPDATE voice_revisions SET reference_text = ?2
+              WHERE voice_id = ?1 AND reference_text IS NULL",
+            rusqlite::params![voice_id, text],
+        )? > 0)
+    }
+
     pub fn clip_voice(&self, clip_id: &str) -> Result<Option<VoiceProvenance>> {
         let row = self
             .raw()

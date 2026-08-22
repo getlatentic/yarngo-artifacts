@@ -90,6 +90,7 @@ fn seeded(dir: &Path) -> (Store, PathBuf) {
                 LegacyVoice {
                     label: "Alice".into(),
                     reference_audio: recording.to_string_lossy().into(),
+                     reference_text: Some("A sentence read at enrolment.".into()),
                     seconds: Some(12.0),
                     created: "t0".into(),
                 },

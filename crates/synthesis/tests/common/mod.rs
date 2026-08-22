@@ -22,6 +22,21 @@ pub fn seeded() -> (Sandbox, PathBuf) {
     let recording = voices.join("alice.wav");
     std::fs::write(&recording, vec![0u8; 4096]).expect("recording");
 
+    // The JSON store the application would have found, written as well as
+    // imported: a sandbox that has a database but no store it came from cannot
+    // exercise anything that reads back from one.
+    std::fs::write(
+        voices.join("voices.json"),
+        format!(
+            r#"{{"alice":{{"label":"Alice","reference_audio":"{}","reference_text":"A sentence Alice read.","seconds":12.0,"created":"t0"}}}}"#,
+            recording.to_string_lossy()
+        ),
+    )
+    .expect("voices.json");
+    let clips_dir = sandbox.root().join("clips");
+    std::fs::create_dir_all(&clips_dir).expect("clips");
+    std::fs::write(clips_dir.join("clips.json"), b"[]").expect("clips.json");
+
     let mut store = Store::open(&sandbox.database()).expect("open");
     store
         .import_legacy(&Legacy {
@@ -30,6 +45,7 @@ pub fn seeded() -> (Sandbox, PathBuf) {
                 LegacyVoice {
                     label: "Alice".into(),
                     reference_audio: recording.to_string_lossy().into(),
+                    reference_text: Some("A sentence Alice read.".into()),
                     seconds: Some(12.0),
                     created: "t0".into(),
                 },

@@ -73,6 +73,9 @@ pub struct LegacyTake {
 pub struct LegacyVoice {
     pub label: String,
     pub reference_audio: String,
+    /// What was read while it was recorded. The model conditions on it, so
+    /// losing it clones the voice from audio alone.
+    pub reference_text: Option<String>,
     pub seconds: Option<f64>,
     pub created: String,
 }
@@ -142,6 +145,7 @@ impl Legacy {
                     LegacyVoice {
                         label: voice["label"].as_str().unwrap_or_default().into(),
                         reference_audio: voice["reference_audio"].as_str().unwrap_or_default().into(),
+                        reference_text: voice["reference_text"].as_str().map(Into::into),
                         seconds: voice["seconds"].as_f64(),
                         created: voice["created"].as_str().unwrap_or_default().into(),
                     },
@@ -291,6 +295,7 @@ impl Store {
                     ("voice_id", text(voice_id)),
                     ("source_asset_id", text(&recording)),
                     ("duration_seconds", real(voice.seconds)),
+                    ("reference_text", maybe(voice.reference_text.as_deref())),
                     ("created_at", text(&voice.created)),
                 ],
                 &mut report,

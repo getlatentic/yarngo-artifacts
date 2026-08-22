@@ -95,6 +95,7 @@ fn seeded(dir: &tempfile::TempDir) -> (Store, PathBuf, PathBuf) {
         LegacyVoice {
             label: "Alice".into(),
             reference_audio: alice_recording.to_string_lossy().into(),
+            reference_text: Some("A sentence read at enrolment.".into()),
             seconds: Some(21.0),
             created: "2026-08-19T08:00:00".into(),
         },
@@ -104,6 +105,7 @@ fn seeded(dir: &tempfile::TempDir) -> (Store, PathBuf, PathBuf) {
         LegacyVoice {
             label: "Bob".into(),
             reference_audio: bob_recording.to_string_lossy().into(),
+            reference_text: Some("A sentence read at enrolment.".into()),
             seconds: Some(20.0),
             created: "2026-08-19T09:00:00".into(),
         },

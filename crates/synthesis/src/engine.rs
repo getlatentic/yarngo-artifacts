@@ -188,6 +188,7 @@ impl DurableEngine {
             .map_err(store_error)?;
         store.reconcile_ended_sessions(&at).map_err(store_error)?;
         adopt_legacy(&mut store, data_dir)?;
+        fill_gaps_from_legacy(&store, data_dir)?;
 
         let (connection, events) = spawn.start()?;
         let progress = Reported::default();
@@ -530,14 +531,20 @@ impl SpeechEngine for DurableEngine {
         voice_id: &str,
         model: Option<&str>,
     ) -> Result<Started<f32>, EngineError> {
-        let Some((_, audio, _)) = library::reference(&self.store, voice_id).map_err(store_error)?
-        else {
+        let Some(voice) = library::reference(&self.store, voice_id).map_err(store_error)? else {
             return Err(EngineError::Transport(format!("no such voice: {voice_id}")));
         };
         let sent = self
             .running
             .connection
-            .send("conditioning.prepare", json!({ "reference_audio": audio, "model": model }))
+            .send(
+                "conditioning.prepare",
+                json!({
+                    "reference_audio": voice.audio,
+                    "reference_text": voice.text,
+                    "model": model,
+                }),
+            )
             .map_err(|e| EngineError::Transport(format!("{e}")))?;
         Ok(Started::Awaiting(sent))
     }
@@ -655,8 +662,7 @@ impl SpeechEngine for DurableEngine {
         };
         let reference = match &voice_id {
             Some(voice) => {
-                let Some((revision, audio, label)) =
-                    library::reference(&self.store, voice).map_err(store_error)?
+                let Some(reference) = library::reference(&self.store, voice).map_err(store_error)?
                 else {
                     // Refused here rather than after a minute of inference —
                     // and refused, not failed: the voice is gone because
@@ -665,7 +671,7 @@ impl SpeechEngine for DurableEngine {
                         "the voice this clip was made with was deleted".into(),
                     ));
                 };
-                Some((revision, audio, label))
+                Some(reference)
             }
             None => None,
         };
@@ -679,7 +685,7 @@ impl SpeechEngine for DurableEngine {
                     &clip_id,
                     &request.name.clone().unwrap_or_else(|| working_name(&request.text)),
                     request.text.trim(),
-                    reference.as_ref().map(|(r, _, l)| (r.as_str(), l.as_str())),
+                    reference.as_ref().map(|r| (r.revision.as_str(), r.label.as_str())),
                     &model,
                     &at,
                 )
@@ -692,7 +698,10 @@ impl SpeechEngine for DurableEngine {
         let asked = Request {
             clip_id: clip_id.clone(),
             text: request.text.trim().to_string(),
-            reference: reference.map(|(_, audio, _)| Reference { audio, text: None }),
+            reference: reference.map(|found| Reference {
+                audio: found.audio,
+                text: found.text,
+            }),
             model: request.model.clone(),
             seed: request.seed.map(|s| s as i64),
         };
@@ -807,6 +816,31 @@ fn adopt_legacy(store: &mut Store, data_dir: &Path) -> Result<(), EngineError> {
     );
     for missing in &report.missing_files {
         eprintln!("  a record points at a file that is not there: {missing}");
+    }
+    Ok(())
+}
+
+/// Fill in what a store brought across before a column existed.
+///
+/// Adoption happens once, so anything learned later — the transcript a voice was
+/// recorded reading — is missing for whoever had already brought theirs across.
+/// Absences only: a value that is there is the person's, and re-importing
+/// wholesale would fail the moment they had renamed anything.
+fn fill_gaps_from_legacy(store: &Store, data_dir: &Path) -> Result<(), EngineError> {
+    let Some(legacy) = yarngo_store::import::Legacy::read(data_dir) else {
+        return Ok(());
+    };
+    let mut filled = 0;
+    for (voice_id, voice) in &legacy.voices {
+        let Some(text) = voice.reference_text.as_deref().filter(|t| !t.trim().is_empty()) else {
+            continue;
+        };
+        if store.fill_reference_text(voice_id, text).map_err(store_error)? {
+            filled += 1;
+        }
+    }
+    if filled > 0 {
+        eprintln!("filled in what {filled} voice(s) were recorded reading");
     }
     Ok(())
 }
