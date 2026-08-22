@@ -516,9 +516,13 @@ impl VoiceStudio {
             .into_any_element()
     }
 
-    /// One enrolled voice: what it was learned from, what it has made, and the
-    /// way to remove it. The sidebar's × is for tidying while you work; this is
-    /// where a voice is looked at before it is deleted.
+    /// One enrolled voice: what it was learned from and the way to remove it.
+    /// The sidebar's × is for tidying while you work; this is where a voice is
+    /// looked at before it is deleted.
+    ///
+    /// How many clips it made is left to the moment it decides something — the
+    /// confirmation, where that is the thing being weighed — rather than
+    /// sitting in every row as a number nobody acts on.
     fn voice_row(&self, voice: &speech_engine::Voice, cx: &mut Context<Self>) -> AnyElement {
         let id = voice.voice_id.clone();
         let current = self.speaking_voice() == Some(id.as_str());
@@ -533,11 +537,6 @@ impl VoiceStudio {
                     .to_string(),
             );
         }
-        facts.push(if clips == 0 {
-            t!("settings.unused").to_string()
-        } else {
-            t!("settings.used_by", count = clips).to_string()
-        });
 
         div()
             .h_flex()
@@ -763,13 +762,14 @@ impl VoiceStudio {
                     .overflow_y_scroll()
                     .children(voices.iter().map(|v| self.voice_row(v, cx))),
             )
-            // Where the recordings live, and what removing that folder means.
+            // What deleting a voice does. Not where the files are: that is the
+            // application's business, and a path on screen is a line nobody
+            // acts on and everybody has to read past.
             .child(
                 div()
                     .v_flex()
                     .w_full()
                     .flex_none()
-                    .gap(px(4.0))
                     .pt(px(14.0))
                     .border_t_1()
                     .border_color(theme::hex(0xEBE4D9))
@@ -778,12 +778,7 @@ impl VoiceStudio {
                             .text_size(px(12.0))
                             .text_color(theme::hex(0x5F594F))
                             .child(t!("settings.voices_where").to_string()),
-                    )
-                    .child(ui::mono(
-                        speech_engine::paths::data_dir().join("voices").display().to_string(),
-                        11.5,
-                        theme::hex(0x6B645A),
-                    )),
+                    ),
             )
             .into_any_element()
     }

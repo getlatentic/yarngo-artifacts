@@ -203,12 +203,6 @@ settings:
   default_in_memory:
     en: default · in memory
     sk: predvolený · v pamäti
-  used_by:
-    en: "made %{count} clips"
-    sk: "vytvoril %{count} nahrávok"
-  unused:
-    en: no clips yet
-    sk: zatiaľ žiadne nahrávky
   used_by_voices:
     en: "used by %{count} voices"
     sk: "používa ho %{count} hlasov"
@@ -240,8 +234,8 @@ settings:
     en: Rename
     sk: Premenovať
   voices_where:
-    en: Recordings live here. Deleting a voice removes its recording and everything derived from it.
-    sk: Nahrávky sú tu. Vymazaním hlasu sa odstráni nahrávka aj všetko z nej odvodené.
+    en: Deleting a voice removes its recording and everything derived from it.
+    sk: Vymazaním hlasu sa odstráni nahrávka aj všetko z nej odvodené.
   voice_delete_unused:
     en: Removes the recording and the voice. Nothing was made with it.
     sk: Odstráni nahrávku aj hlas. Nič s ním nevzniklo.
