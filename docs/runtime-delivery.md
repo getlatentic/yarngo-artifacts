@@ -79,17 +79,31 @@ loads the untouched copy first, so the refusal is the edit. Roles hold separate
 keys, so losing the timestamp key does not mean losing the ability to say which
 targets are ours.
 
+## Publishing
+
+`scripts/tuf-repo.sh init` produces the keys and the signed root role; run it
+once. The keys are the only thing that makes a runtime ours, so they belong
+somewhere nothing that builds the application can read — a hardware token or a
+KMS, which `tuftool` can sign from. Ship the root role as
+`packaging/tuf/root.json`; until one is shipped, nothing is published to this
+application and an install uses the recipe that shipped, which is what a machine
+with no network does anyway.
+
+`scripts/tuf-repo.sh build` publishes a targets directory as the next version.
+It builds a whole repository beside the old one and swaps, so republishing
+always repairs a served directory somebody has edited, and a failed publish
+leaves what was working where it was.
+
+Role expiries differ on purpose: root furthest out, because rotating it means
+shipping an application; timestamp soonest, because that is what freshness
+means — metadata nobody has re-signed lately stops being believed.
+
 ## What comes next
 
-1. Put the runtime archive behind TUF: the archive becomes a target, and its
-   metadata is what says the target is current and authentic. Yarngo's own
-   fields — runtime id, version, platform, engine API — travel beside the
-   target rather than carrying the security. Then the custom digest-in-a-manifest
-   machinery goes, rather than sitting alongside as a second answer.
-2. Install to a staging directory, complete the handshake from staging, and
+1. Install to a staging directory, complete the handshake from staging, and
    promote atomically. A failure anywhere leaves the runtime that was working
    in place, and keeping the previous version is then rollback for free.
-3. Record which runtime and which version made a clip, now that a release has
+2. Record which runtime and which version made a clip, now that a release has
    an identity to record.
 
 Only then is the archive path worth opening.
