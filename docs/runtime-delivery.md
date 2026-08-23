@@ -51,12 +51,32 @@ These are ours under any trust model, and are done:
   speaks version 1 is a claim; what the process answers at `initialize` is the
   fact, and the application offers only what that list permits.
 
+## The client, demonstrated
+
+`tough` is the Rust TUF client, and `crates/speech-engine/tests/runtime_trust.rs`
+shows it answering the two questions a digest cannot. Against repositories built
+by `scripts/make-tuf-fixture.sh` — one ours, one another publisher's, one signed
+correctly and long expired — loading refuses:
+
+- a target edited after signing, and metadata edited after signing;
+- **a correctly signed repository whose keys were never ours**, serving the very
+  same bytes we would have served;
+- metadata that has expired, which is how someone holds a machine on the version
+  they already know how to break.
+
+Each of those is asserted on the reason it was refused, not merely that it was,
+so a fixture that quietly went missing cannot satisfy them; and each tamper test
+loads the untouched copy first, so the refusal is the edit. Roles hold separate
+keys, so losing the timestamp key does not mean losing the ability to say which
+targets are ours.
+
 ## What comes next
 
 1. Put the runtime archive behind TUF: the archive becomes a target, and its
    metadata is what says the target is current and authentic. Yarngo's own
    fields — runtime id, version, platform, engine API — travel beside the
-   target rather than carrying the security.
+   target rather than carrying the security. Then the custom digest-in-a-manifest
+   machinery goes, rather than sitting alongside as a second answer.
 2. Install to a staging directory, complete the handshake from staging, and
    promote atomically. A failure anywhere leaves the runtime that was working
    in place, and keeping the previous version is then rollback for free.

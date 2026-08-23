@@ -17,13 +17,11 @@ tar = "0.4"
 flate2 = "1"
 
 [dev-dependencies]
-tempfile = "3"
-# Unpacking a runtime is a security boundary, so the rules are ours rather
-# than whichever tar the host happens to ship.
-tar = "0.4"
-flate2 = "1"
 yarngo-testing = { path = "../testing" }
+# Who published a runtime, and whether it is current, is The Update Framework's
+# question rather than one to answer here.
 tough = "0.24.0"
+url = "2"
 tokio = { version = "1.53.1", features = ["rt", "macros"] }
 
 [[example]]

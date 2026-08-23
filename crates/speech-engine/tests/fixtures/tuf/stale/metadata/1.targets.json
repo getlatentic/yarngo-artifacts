@@ -1,0 +1,26 @@
+{
+  "signed": {
+    "_type": "targets",
+    "spec_version": "1.0.0",
+    "version": 1,
+    "expires": "2020-01-01T00:00:00Z",
+    "targets": {
+      "yarngo-runtime-spike.tar.gz": {
+        "length": 51,
+        "hashes": {
+          "sha256": "d18a1b367b6862d384bbe9db81551d5cb1a3eeef6386a2a5e329a07fdf6d68d8"
+        }
+      }
+    },
+    "delegations": {
+      "keys": {},
+      "roles": []
+    }
+  },
+  "signatures": [
+    {
+      "keyid": "b05ada35107468da773b7f87f5b6552080c4611018d8260551d695d5ed4ea2c2",
+      "sig": "05f623929390ba05ca9200f5b348aa39c67dc1359c3677272d2c25f36c7bead508f529b1b7f5cbf199fcacd1d059f5d85655ab714a4717bbff4543b726b185980e8ba3e3170c8edf07ed1b9814470f1d21fc5c19c5c7550b88c58e19258da21a02060268d2e556ca3d1153dfde0281a43a8f8382547d23772466a8d742094d26598e1c36d3f7495e5fae70013791fd32f3bedc8ae9877e2fd841fb70c2e7d588dbf5c321170a5dee13b472a979c307e84f54d9d211d9fdbc97b1bc2bc88735fc8376920e3d74e0eb1caaa6ec3cba4450868edbd7948a55df1ccf435b2ae58c795c24671b161fb7bcc3208fb65d89ffb39d31d8d1dfd25ee81e46bf4a515a31da"
+    }
+  ]
+}

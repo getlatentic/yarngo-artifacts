@@ -1,0 +1,23 @@
+{
+  "signed": {
+    "_type": "timestamp",
+    "spec_version": "1.0.0",
+    "version": 1,
+    "expires": "2020-01-01T00:00:00Z",
+    "meta": {
+      "snapshot.json": {
+        "length": 994,
+        "hashes": {
+          "sha256": "1715144c2dcc6e1b235ad4e48cef037a92da545eaa6af304fd833b8c0438db45"
+        },
+        "version": 1
+      }
+    }
+  },
+  "signatures": [
+    {
+      "keyid": "0878d92b2fd6f9c3445a8b968033af32ed21945ac253685d53f5215d5515ed80",
+      "sig": "c0bb243bf8152942deefc273f00e71ddc51a801a50cc83ee301ded4a16b0e6c0a71b8ff19f3acf1ea24ed7aac9d7fe271a9582afa085be032921bf499ea5fa6e1fbc5df623898ad733f658a96facded90a43c07260432aeb1b2098de10d816a6d1b9f1f3a868e5a7e89389b48a58cf9617395a8d7ecfcf7f71cb29af08616241ce2df9eed8dcb44100274e661d6157070f01bb8737516e74309a1fe52bdc04808877aa5ff648de13997a118aa530b8b36209443fbac10801ef5342454a0b2a4a7fd74366adfa21ccc530312140300d381b36e6cf239c9aa8043237aa8b62af07adff3795bee72694cc08e872760375ffed634f3a1403ff2a5fffd09d2ff80502"
+    }
+  ]
+}
