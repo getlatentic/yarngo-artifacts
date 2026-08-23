@@ -8,6 +8,7 @@ mod about;
 mod clips;
 mod enrolment;
 mod inspector;
+mod microphone;
 mod models;
 mod settings;
 mod storage;
@@ -129,6 +130,14 @@ pub enum Enrolment {
     Review(Quality),
     /// Recorded but rejected, with advice on what to fix.
     Rejected(String),
+    /// The system prompt is up, and the answer decides what happens next.
+    Asking,
+    /// Cannot record at all, because the microphone was not granted.
+    ///
+    /// Deliberately not `Rejected`: that means "record it better", and a
+    /// refused microphone answers with silence, which reads as a quiet room.
+    /// Someone told to move closer to the microphone will do it forever.
+    Blocked(microphone::Permission),
 }
 
 /// What the user is currently waiting on, if anything.
@@ -562,6 +571,54 @@ impl VoiceStudio {
         self.consent_given = false;
         self.imported = None;
         self.clear_take();
+
+        // Asked here rather than when the button is pressed, so the system
+        // prompt arrives with the recorder on screen explaining what it is
+        // for. It can only ever be shown once.
+        match microphone::status() {
+            microphone::Permission::Undecided => {
+                self.enrolment = Enrolment::Asking;
+                self.ask_for_microphone(cx);
+            }
+            microphone::Permission::Granted => self.ready_to_record(cx),
+            refused => self.enrolment = Enrolment::Blocked(refused),
+        }
+        cx.notify();
+    }
+
+    /// Show the system prompt and act on the answer.
+    fn ask_for_microphone(&mut self, cx: &mut Context<Self>) {
+        let (tx, rx) = std::sync::mpsc::channel();
+        microphone::request(move |answer| {
+            let _ = tx.send(answer);
+        });
+        cx.spawn(async move |this, cx| {
+            // The handler runs on a queue of the system's choosing, so the
+            // answer comes back across a channel and is acted on here, where
+            // the interface lives.
+            let answered = loop {
+                if let Ok(answer) = rx.try_recv() {
+                    break answer;
+                }
+                cx.background_executor().timer(Duration::from_millis(100)).await;
+            };
+            this.update(cx, |this, cx| {
+                match answered {
+                    microphone::Permission::Granted => this.ready_to_record(cx),
+                    // Undecided cannot come back from a prompt that was
+                    // answered, but reading it as consent would be worse than
+                    // reading it as a refusal.
+                    refused => this.enrolment = Enrolment::Blocked(refused),
+                }
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// The microphone is ours to use; open it.
+    fn ready_to_record(&mut self, cx: &mut Context<Self>) {
         match Recorder::new() {
             Ok(rec) => {
                 self.recorder = Some(rec);
@@ -569,6 +626,12 @@ impl VoiceStudio {
             }
             Err(err) => self.enrolment = Enrolment::Rejected(err),
         }
+        cx.notify();
+    }
+
+    /// Take the person to the one place a refusal can be undone.
+    pub(crate) fn open_microphone_settings(&mut self, cx: &mut Context<Self>) {
+        microphone::open_settings();
         cx.notify();
     }
 
@@ -594,6 +657,15 @@ impl VoiceStudio {
     }
 
     pub(crate) fn start_recording(&mut self, cx: &mut Context<Self>) {
+        // Checked again, because permission can be withdrawn in System
+        // Settings while this window is open — and withdrawn, it records
+        // silence rather than failing.
+        let permission = microphone::status();
+        if permission != microphone::Permission::Granted {
+            self.enrolment = Enrolment::Blocked(permission);
+            cx.notify();
+            return;
+        }
         let Some(rec) = self.recorder.as_mut() else { return };
         match rec.start() {
             Ok(()) => {

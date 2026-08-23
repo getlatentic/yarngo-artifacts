@@ -457,6 +457,18 @@ status:
     sk: "Nepodarilo sa: %{reason}"
 
 enrol:
+  microphone_refused:
+    en: yarngo studio does not have permission to use the microphone. Turn it on in System Settings, then try again.
+    sk: yarngo studio nemá povolenie používať mikrofón. Zapnite ho v Nastaveniach systému a skúste to znova.
+  microphone_restricted:
+    en: Microphone access is turned off for this Mac, and cannot be changed here.
+    sk: Prístup k mikrofónu je na tomto Macu vypnutý a nedá sa tu zmeniť.
+  microphone_asking:
+    en: Waiting for microphone permission…
+    sk: Čaká sa na povolenie mikrofónu…
+  open_settings:
+    en: Open System Settings
+    sk: Otvoriť Nastavenia systému
   unsupported:
     en: This speech runtime cannot learn a voice from a recording.
     sk: Tento rečový modul sa nedokáže naučiť hlas z nahrávky.

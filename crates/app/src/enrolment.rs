@@ -703,8 +703,51 @@ impl VoiceStudio {
                 .child(self.meter_row(false))
                 .child(self.record_button(false, cx))
                 .child(self.checks_block(vec![Check::Warn(reason.clone())], cx)),
+            Enrolment::Asking => Self::recorder_column()
+                .child(self.mic_picker())
+                .child(self.meter_row(false))
+                .child(self.checks_block(
+                    vec![Check::Pending(t!("enrol.microphone_asking").to_string())],
+                    cx,
+                )),
+            Enrolment::Blocked(permission) => self.recorder_blocked(*permission, cx),
             _ => self.recorder_ready(cx),
         }
+    }
+
+    /// No microphone to record with, and the only remedy is somewhere else.
+    ///
+    /// There is no record button here on purpose: pressing it would produce a
+    /// silent take and a complaint about the room. The one thing that can help
+    /// is the settings pane, so that is the one thing offered.
+    fn recorder_blocked(
+        &self,
+        permission: crate::microphone::Permission,
+        cx: &mut Context<Self>,
+    ) -> Div {
+        let reason = permission
+            .refusal()
+            .map(|key| t!(key).to_string())
+            .unwrap_or_else(|| t!("enrol.microphone_refused").to_string());
+
+        Self::recorder_column()
+            .child(self.mic_picker())
+            .child(self.meter_row(false))
+            .child(self.checks_block(vec![Check::Warn(reason)], cx))
+            // Restricted is not the person's to change, so offering the pane
+            // would only send them somewhere that cannot help.
+            .when(
+                permission == crate::microphone::Permission::Refused,
+                |d| {
+                    d.child(
+                        ui::secondary_button(None, t!("enrol.open_settings").to_string())
+                            .id("open-microphone-settings")
+                            .on_click(cx.listener(|this, _, _, cx| {
+                                this.open_microphone_settings(cx);
+                            })),
+                    )
+                },
+            )
     }
 
     /// The header: what to do now, and why the words matter.

@@ -28,6 +28,14 @@ hound = "3.5.1"
 symphonia = { version = "0.5", features = ["aac", "alac", "isomp4", "mp3"] }
 rust-i18n = "4.2"
 
+# Two class methods and a completion block, for asking whether we may record.
+# Raw rather than objc2-av-foundation, which is 168 features of bindings for a
+# question with four possible answers.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"
+block2 = "0.6"
+
 # cargo-packager produces macOS .app/.dmg, Windows NSIS/MSI and Linux
 # deb/AppImage from one config. Zed hand-rolls this (a patched cargo-bundle plus
 # Inno Setup) because it predates the tooling; cargo-bundle still has no Windows

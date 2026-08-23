@@ -353,6 +353,29 @@ pub fn envelope(samples: &[f32], bars: usize) -> Vec<f32> {
 
 #[cfg(test)]
 mod tests {
+    /// What a refused microphone actually produces, and what it used to be
+    /// told.
+    ///
+    /// macOS answers a refusal with silence rather than an error, so this is
+    /// the exact buffer a blocked recording delivers. The advice below is
+    /// perfectly good advice for a quiet room and useless for a permission
+    /// problem — which is why permission is now asked before recording rather
+    /// than inferred from the waveform afterwards.
+    #[test]
+    fn silence_is_never_mistaken_for_a_finished_recording() {
+        let refused = vec![0.0f32; 48_000 * 12];
+        let complaint = assess(&refused, 48_000).expect_err("silence was accepted as a take");
+
+        // It is refused — but it is refused as a room problem, and no wording
+        // here can tell a silent microphone from a silent room. Nothing
+        // downstream may treat this as the permission answer.
+        assert!(
+            complaint.contains("quiet"),
+            "the quality bar changed; the permission check upstream is what \
+             makes this survivable: {complaint}"
+        );
+    }
+
     use super::*;
 
     /// A tone at a given amplitude, which is enough to exercise every check:
