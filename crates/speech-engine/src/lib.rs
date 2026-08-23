@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
+pub mod catalogue;
 pub mod handle;
 pub mod paths;
 pub mod protocol;

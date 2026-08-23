@@ -90,14 +90,31 @@ targets are ours.
 2. Install to a staging directory, complete the handshake from staging, and
    promote atomically. A failure anywhere leaves the runtime that was working
    in place, and keeping the previous version is then rollback for free.
-3. Give an installed runtime an immutable identity — id and version — and
-   record it, so which runtime made a clip is answerable. `latest` is discovery;
-   what got installed is a fact.
-4. Separate the three version questions, which are not one: can this build read
-   this metadata, can it talk to this engine, and which implementation is
-   installed.
+3. Record which runtime and which version made a clip, now that a release has
+   an identity to record.
 
 Only then is the archive path worth opening.
+
+## The catalogue
+
+What runtimes exist and at which versions is itself a target, so what it says is
+covered by the same signatures as the archives it names. It carries no URLs and
+no digests: where a target lives and what it hashes to is already the
+repository's to say, and a second answer to a settled question is only a way to
+disagree.
+
+Its three version fields answer three different questions, and are deliberately
+not one field:
+
+| `schema` | can this build read this document |
+| --- | --- |
+| `engine_api` | can this build hold a conversation with that engine |
+| `version` | which implementation is installed |
+
+A release naming a later `engine_api` is passed over rather than half-understood
+— that refusal is what makes publishing a runtime without shipping an
+application safe. When nothing fits, the reason each release was passed over is
+what tells someone whether to update the application or wait.
 
 ## The boundary of "a new runtime without a new application"
 

@@ -12,6 +12,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use speech_engine::catalogue::Catalogue;
 use speech_engine::trust::Anchor;
 use url::Url;
 
@@ -85,12 +86,15 @@ fn flip_a_byte(path: &Path) {
     fs::write(path, bytes).expect("write tampered");
 }
 
-fn only_file_in(dir: &Path) -> PathBuf {
+/// Targets are stored under a name beginning with their digest, so a test
+/// names the one it means by its suffix.
+fn target_file(dir: &Path, ending: &str) -> PathBuf {
     let mut found: Vec<_> = fs::read_dir(dir)
         .expect("read dir")
         .map(|e| e.expect("dir entry").path())
+        .filter(|path| path.to_string_lossy().ends_with(ending))
         .collect();
-    assert_eq!(found.len(), 1, "expected one file in {}", dir.display());
+    assert_eq!(found.len(), 1, "expected one {ending} in {}", dir.display());
     found.pop().expect("the one file")
 }
 
@@ -108,7 +112,7 @@ fn a_target_edited_after_signing_is_refused() {
     // refusal below is the edit and not the copying.
     fetch(&repo.join("root.json"), &repo).expect("the untouched copy should load");
 
-    flip_a_byte(&only_file_in(&repo.join("targets")));
+    flip_a_byte(&target_file(&repo.join("targets"), TARGET));
     refused(fetch(&repo.join("root.json"), &repo), "hash mismatch");
 }
 
@@ -177,10 +181,48 @@ fn a_target_the_repository_does_not_vouch_for_is_not_fetched() {
     let repo = fixtures().join("repo");
     let (_store, trusted) = open(&repo.join("root.json"), &repo).expect("open");
 
-    assert_eq!(trusted.names(), vec![TARGET.to_string()]);
+    let mut vouched = trusted.names();
+    vouched.sort();
+    assert_eq!(vouched, vec![Catalogue::TARGET.to_string(), TARGET.to_string()]);
     let complaint = trusted.read("something-else.tar.gz").expect_err("no such target");
     assert!(
         complaint.contains("not in this repository"),
         "unhelpful about a target that is not there: {complaint}"
     );
+}
+
+/// The whole shape, end to end: trust the repository, read what it offers,
+/// choose. The catalogue is a target like any other, so nothing it says about
+/// versions rests on anything weaker than the archives it names.
+#[test]
+fn what_to_install_is_read_from_a_catalogue_the_repository_vouches_for() {
+    let repo = fixtures().join("repo");
+    let (_store, trusted) = open(&repo.join("root.json"), &repo).expect("open");
+
+    let offered = Catalogue::read(&trusted.read(Catalogue::TARGET).expect("catalogue"))
+        .expect("readable");
+
+    // 2.0.0 is there and is newer, and wants an application nine major versions
+    // away, so the answer is the newest one that actually fits.
+    let chosen = offered.best("mlx", "0.1.0-alpha.1").expect("a release");
+    assert_eq!(chosen.version, "1.0.0");
+    assert_eq!(chosen.lock, "mlx/1.0.0/uv.lock");
+
+    let later = offered.best("mlx", "9.0.0").expect("a release");
+    assert_eq!(later.version, "2.0.0");
+}
+
+/// A catalogue edited after signing is the interesting one: it is the document
+/// that decides which code gets installed.
+#[test]
+fn a_catalogue_edited_after_signing_is_refused() {
+    let (_scratch, repo) = copy_of("repo");
+    let (store, trusted) = open(&repo.join("root.json"), &repo).expect("open");
+    trusted.read(Catalogue::TARGET).expect("the untouched copy");
+    drop((store, trusted));
+
+    flip_a_byte(&target_file(&repo.join("targets"), Catalogue::TARGET));
+
+    let (_store, trusted) = open(&repo.join("root.json"), &repo).expect("open");
+    refused(trusted.read(Catalogue::TARGET), "hash mismatch");
 }

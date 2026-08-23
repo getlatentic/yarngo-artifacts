@@ -28,6 +28,24 @@ build() {
   local dir="$keys/$name" ; mkdir -p "$dir/keys" "$dir/in"
   printf '%s' "$body" > "$dir/in/yarngo-runtime-spike.tar.gz"
 
+  # The catalogue is a target like any other, so what it says about versions is
+  # covered by the same signatures as the archives it names. It carries no
+  # digests and no URLs: where a target lives and what it hashes to is already
+  # the repository's to say.
+  cat > "$dir/in/catalogue.json" <<'JSON'
+{
+  "schema": 1,
+  "runtimes": {
+    "mlx": [
+      { "version": "1.0.0", "min_app_version": "0.1.0-alpha.1", "engine_api": 1,
+        "lock": "mlx/1.0.0/uv.lock", "pyproject": "mlx/1.0.0/pyproject.toml" },
+      { "version": "2.0.0", "min_app_version": "9.0.0", "engine_api": 1,
+        "lock": "mlx/2.0.0/uv.lock", "pyproject": "mlx/2.0.0/pyproject.toml" }
+    ]
+  }
+}
+JSON
+
   tuftool root init "$dir/root.json"
   tuftool root expire "$dir/root.json" "$far"
   for role in root targets snapshot timestamp; do
