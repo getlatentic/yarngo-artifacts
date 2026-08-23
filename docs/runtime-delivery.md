@@ -138,37 +138,56 @@ answering, untouched by any network failure; a machine with nothing installed
 installs the recipe that ships; the repository is consulted only to offer
 something newer, and offering is not acting.
 
-## The ceremony, once
+## Publishing, in practice
 
 Everything above is inert until a root role ships. Until then this application
 installs the runtime recipe inside it and can never be sent a published one —
 the safe state, and a permanent one for anybody who installs that build.
 
-    scripts/tuf-repo.sh init  <keys-dir> <repo-dir>
-    cp <repo-dir>/root.json packaging/tuf/root.json      # and commit it
+    scripts/tuf-repo.sh status            what exists and what does not
+    scripts/tuf-repo.sh init              once, ever
+    scripts/tuf-repo.sh publish 2026.9.1  per release
 
-`scripts/package.sh` copies that file into the bundle before signing, so the
-trust anchor is covered by the application's own signature — a root role anyone
-could replace is not one. It is copied by the script rather than named in the
-packager's resource list because a named resource that does not exist fails the
-build, and this one does not exist until the ceremony has happened. Every
-package run says which of the two states it is in.
+Neither directory has to be named. Two are involved and they could not be more
+different:
 
-Publishing after that is one command per release:
+| `~/.yarngo/tuf-keys` | **Secret.** Whoever holds these decides what every installed copy of the application downloads and runs. Never in the repository, never in CI. Back it up like a password: lose it and no runtime can ever be published to anyone who already installed the app. |
+| --- | --- |
+| `dist/tuf` | **Public.** The signed repository. Every file in it is meant to be served to the internet. |
 
-    cp packaging/packs/mlx/uv.lock       <targets>/mlx-<version>.uv.lock
-    cp packaging/packs/mlx/pyproject.toml <targets>/mlx-<version>.pyproject.toml
-    # name them in <targets>/catalogue.json, then
-    scripts/tuf-repo.sh build <keys-dir> <repo-dir> <targets>
+`init` writes the keys, and the public half to `packaging/tuf/root.json` for
+committing. It refuses to run twice, because a second key set orphans every
+copy of the application shipped with the first, and refuses to write keys
+anywhere inside the working tree, because a key in the tree is one `git add .`
+from being public. Root is held by three keys needing two — one lost is
+recoverable, one stolen is not enough.
 
-and serving `<repo-dir>` at the address in `speech-engine::published`.
+`publish` signs the recipe as it stands in the checkout, so what ships inside
+the application and what is published are the same two files. Then copy
+`dist/tuf` to wherever the address in `speech-engine::published` is served
+from; the command prints the exact lines.
 
-Proven end to end before it was written down: ceremony, publish the real mlx
-recipe as `2026.08.23.1`, install into an empty machine. It fetched the
-published release rather than the one inside the application, built the
+**Metadata versions only ever go up.** The counter lives with the keys rather
+than with the output, because the output is regenerated and a version that went
+backwards is read by every installed application as somebody replaying an old
+repository at them — they refuse it and quietly keep what they had. Deleting
+`dist/` and republishing is therefore safe. Restoring keys from a backup that
+lacks the counter is not, and is refused with instructions rather than
+published.
+
+Timestamp metadata expires in seven days by design: metadata nobody has
+re-signed lately stops being believed. Republishing is what refreshes it.
+
+## What was proven
+
+Ceremony, publish the real mlx recipe, install into an empty machine: it took
+the published release rather than the one inside the application, built the
 environment, and the engine answered with thirteen methods. Pointed at another
 publisher's repository with the same root shipped, it fell back to the recipe
-that ships instead — which is the whole point of the arrangement.
+that ships. Deleting the built output and republishing kept a machine that had
+already fetched version 3 working; removing the counter as well produced
+version 1, and that same machine refused it as a rollback — which is what the
+counter exists to prevent.
 
 ## Keys
 

@@ -1,101 +1,246 @@
 #!/usr/bin/env bash
-# Creates the signed repository the application fetches runtimes from, and the
-# root role that ships inside it.
+# Sign and publish the runtimes this application will install.
 #
-#   scripts/tuf-repo.sh init  <keys-dir> <out-dir>
-#   scripts/tuf-repo.sh build <keys-dir> <out-dir> <targets-dir>
+#   scripts/tuf-repo.sh init             once, ever — creates the signing keys
+#   scripts/tuf-repo.sh publish 1.2.3    per release — signs the current recipe
+#   scripts/tuf-repo.sh status           what exists and what does not
 #
-# `init` produces the keys and a signed root.json. Run it once. The root role
-# is held by three keys with a threshold of two, so one key lost is recoverable
-# and one key stolen is not enough; keep the three apart — a hardware token, a
-# KMS, an offline machine — and never all three anywhere that builds the
-# application. The other roles each hold one key: targets and snapshot can live
-# in a KMS; timestamp is the one an automated re-signer holds, and it is the
-# least powerful on purpose — it can say a snapshot is current and cannot say
-# which targets are ours. tuftool signs from AWS KMS and SSM; `--key` takes
-# those as URLs.
+# Two directories are involved and they could not be more different.
 #
-# `build` publishes what is in <targets-dir> as version N+1. Nothing about a
-# target is described here: the catalogue names them, and the catalogue is a
-# target itself. It builds a whole repository beside the old one and swaps, so
-# republishing always repairs a served directory somebody has edited, and a
-# failed publish leaves what was working exactly where it was.
+#   ~/.yarngo/tuf-keys    SECRET. The private keys. Whoever holds these decides
+#                         what every installed copy of this application will
+#                         download and run. Never in the repository, never in
+#                         CI. Back them up somewhere you would back up a
+#                         password, because losing them means no runtime can
+#                         ever be published to anyone who has already installed
+#                         the app.
 #
-# Roles hold separate keys on purpose. Timestamp is re-signed often and is the
-# one most exposed; it can say a snapshot is current and cannot say which
-# targets are ours.
+#   dist/tuf              PUBLIC. The signed repository. Upload it as-is; every
+#                         file in it is meant to be served to the internet.
+#
+# Both have defaults and neither needs to be typed. Override with
+# YARNGO_TUF_KEYS and YARNGO_TUF_OUT if you keep them elsewhere.
 set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-command -v tuftool >/dev/null || { echo "tuftool not installed: cargo install tuftool --locked" >&2; exit 1; }
+KEYS="${YARNGO_TUF_KEYS:-$HOME/.yarngo/tuf-keys}"
+OUT="${YARNGO_TUF_OUT:-dist/tuf}"
+ANCHOR="packaging/tuf/root.json"
+# Where the application fetches from, so `publish` can say where to put this.
+SERVED_AT="$(sed -n 's/^ *"\(https:\/\/raw\.githubusercontent\.com[^"]*\)";$/\1/p' \
+  crates/speech-engine/src/published.rs | head -1)"
 
-usage() { sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 1; }
-[ $# -ge 3 ] || usage
-action=$1 keys=$2 out=$3
+command -v tuftool >/dev/null || {
+  echo "tuftool is not installed. Run: cargo install tuftool --locked" >&2
+  exit 1
+}
 
 # Root expires furthest out because rotating it means shipping an application.
-# Timestamp expires soonest because that is what freshness means: metadata that
+# Timestamp expires soonest because that is what freshness means: metadata
 # nobody has re-signed lately stops being believed.
-root_expiry='in 52 weeks'
-targets_expiry='in 26 weeks'
-snapshot_expiry='in 26 weeks'
-timestamp_expiry='in 7 days'
+ROOT_EXPIRY='in 52 weeks'
+ROLE_EXPIRY='in 26 weeks'
+TIMESTAMP_EXPIRY='in 7 days'
 
-case "$action" in
-  init)
-    mkdir -p "$keys"
-    tuftool root init "$keys/root.json"
-    tuftool root expire "$keys/root.json" "$root_expiry"
-    tuftool root set-threshold "$keys/root.json" root 2
-    for n in 1 2 3; do
-      tuftool root gen-rsa-key "$keys/root.json" "$keys/root-$n.pem" --role root
-    done
-    for role in targets snapshot timestamp; do
-      tuftool root set-threshold "$keys/root.json" "$role" 1
-      tuftool root gen-rsa-key "$keys/root.json" "$keys/$role.pem" --role "$role"
-    done
-    tuftool root sign "$keys/root.json" -k "$keys/root-1.pem" -k "$keys/root-2.pem"
+die() { echo "$*" >&2; exit 1; }
 
-    mkdir -p "$out"
-    cp "$keys/root.json" "$out/root.json"
-    echo "signed root role: $out/root.json"
-    echo "ship it as packaging/tuf/root.json — the application trusts nothing without it"
-    ;;
+case "${1:-}" in
+init)
+  [ -e "$KEYS/root.json" ] && die \
+"Signing keys already exist at $KEYS.
 
-  build)
-    [ $# -eq 4 ] || usage
-    targets=$4
-    [ -f "$targets/catalogue.json" ] || {
-      echo "$targets/catalogue.json is missing; without it there is nothing to install" >&2
-      exit 1
-    }
+Creating a second set would orphan every copy of the application already
+shipped with the first — they trust these keys and no others. If you meant to
+rotate them, that is a different and more careful job than this command."
 
-    # One past whatever is published, so a repeat publish is not a rollback.
-    version=$(( $(ls "$out/metadata" 2>/dev/null | sed -n 's/^\([0-9]*\)\.targets\.json$/\1/p' | sort -n | tail -1 || echo 0) + 1 ))
+  # A key inside the working tree is a key one 'git add .' from being public.
+  case "$(cd "$(dirname "$KEYS")" 2>/dev/null && pwd || echo "$KEYS")" in
+    "$PWD"|"$PWD"/*) die "Refusing to write signing keys inside the repository ($KEYS)." ;;
+  esac
 
-    staging="$out.publishing"
-    rm -rf "$staging"
-    tuftool create \
-      --root "$keys/root.json" \
-      -k "$keys/targets.pem" -k "$keys/snapshot.pem" -k "$keys/timestamp.pem" \
-      --add-targets "$targets" \
-      --targets-expires "$targets_expiry" --targets-version "$version" \
-      --snapshot-expires "$snapshot_expiry" --snapshot-version "$version" \
-      --timestamp-expires "$timestamp_expiry" --timestamp-version "$version" \
-      --outdir "$staging"
+  mkdir -p "$KEYS"
+  chmod 700 "$KEYS"
 
-    # tuftool links a target back to where it read it, which is no use to a
-    # server. Take the bytes.
-    find "$staging/targets" -type l | while read -r link; do
-      cp -L "$link" "$link.real" && mv -f "$link.real" "$link"
-    done
+  # Root is held by three keys needing two to sign: one lost is recoverable,
+  # one stolen is not enough. Each other role holds one key of its own, so the
+  # timestamp key — the one that gets re-signed most often and is therefore
+  # most exposed — can say a snapshot is current and cannot say which targets
+  # are ours.
+  tuftool root init "$KEYS/root.json"
+  tuftool root expire "$KEYS/root.json" "$ROOT_EXPIRY"
+  tuftool root set-threshold "$KEYS/root.json" root 2
+  for n in 1 2 3; do
+    tuftool root gen-rsa-key "$KEYS/root.json" "$KEYS/root-$n.pem" --role root
+  done
+  for role in targets snapshot timestamp; do
+    tuftool root set-threshold "$KEYS/root.json" "$role" 1
+    tuftool root gen-rsa-key "$KEYS/root.json" "$KEYS/$role.pem" --role "$role"
+  done
+  tuftool root sign "$KEYS/root.json" -k "$KEYS/root-1.pem" -k "$KEYS/root-2.pem"
+  chmod 600 "$KEYS"/*.pem
 
-    cp "$keys/root.json" "$staging/root.json"
-    rm -rf "$out.previous"
-    [ -d "$out" ] && mv "$out" "$out.previous"
-    mv "$staging" "$out"
+  mkdir -p "$(dirname "$ANCHOR")"
+  cp "$KEYS/root.json" "$ANCHOR"
 
-    echo "published version $version to $out"
-    ;;
+  cat <<DONE
 
-  *) usage ;;
+Done. Two things exist now.
+
+  $KEYS
+      The private keys. Back this directory up somewhere you would keep a
+      password. If you lose it you cannot publish to anyone who already
+      installed the app; if someone else gets it they can publish to everyone
+      who did.
+
+  $ANCHOR
+      The public half. Commit it:
+
+          git add $ANCHOR && git commit -m "Ship the runtime trust anchor"
+
+      Builds made after that can install published runtimes. Builds made
+      before it cannot, ever — so anyone already running one needs a new
+      version of the application, not a new runtime.
+
+Next: scripts/tuf-repo.sh publish <version>
+DONE
+  ;;
+
+publish)
+  version="${2:-}"
+  [ -n "$version" ] || die "Which version? e.g. scripts/tuf-repo.sh publish $(date +%Y.%m.%d).1"
+  [ -f "$KEYS/root.json" ] || die "No signing keys at $KEYS. Run: scripts/tuf-repo.sh init"
+
+  staged="$(mktemp -d)"
+  trap 'rm -rf "$staged"' EXIT
+
+  # The recipe as it stands in this checkout, named for the version it is being
+  # published as. Nothing is invented here: what ships inside the application
+  # and what is published are the same two files.
+  cp packaging/packs/mlx/uv.lock        "$staged/mlx-$version.uv.lock"
+  cp packaging/packs/mlx/pyproject.toml "$staged/mlx-$version.pyproject.toml"
+
+  # The floor is this application's own version: a build older than the one
+  # that produced this recipe should pass the release over rather than install
+  # something it cannot drive.
+  floor="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
+  cat > "$staged/catalogue.json" <<JSON
+{
+  "schema": 1,
+  "runtimes": {
+    "mlx": [
+      { "version": "$version",
+        "min_app_version": "$floor",
+        "engine_api": 1,
+        "lock": "mlx-$version.uv.lock",
+        "pyproject": "mlx-$version.pyproject.toml" }
+    ]
+  }
+}
+JSON
+
+  # Monotonic across publishes, and kept with the keys rather than with the
+  # output — the output is regenerated, and a metadata version that went
+  # backwards would be read by every installed application as somebody
+  # replaying an old repository at them.
+  counter="$KEYS/metadata-version"
+  previous="$(cat "$counter" 2>/dev/null || echo 0)"
+  for existing in "$OUT"/metadata/*.targets.json; do
+    [ -e "$existing" ] || continue
+    seen="$(basename "$existing" .targets.json)"
+    [ "$seen" -gt "$previous" ] 2>/dev/null && previous="$seen"
+  done
+  [ -n "${YARNGO_TUF_FROM:-}" ] && previous="$YARNGO_TUF_FROM"
+
+  # Keys restored from a backup that did not include the counter, with no
+  # output to read either. Publishing as version 1 would be read by every
+  # application that has already fetched a higher one as somebody replaying an
+  # old repository — they would refuse it and quietly keep what they had.
+  if [ "$previous" -eq 0 ] && [ -s "$KEYS/root.json" ] && [ ! -f "$counter" ]; then
+    cat >&2 <<LOST
+Nothing here records which metadata version was last published, and there is no
+built output to read it from.
+
+If you have published before, find the number — it is the highest N in the
+N.targets.json files currently being served — and say so:
+
+    YARNGO_TUF_FROM=<N> scripts/tuf-repo.sh publish $version
+
+If this is genuinely the first publication from these keys, say that instead:
+
+    YARNGO_TUF_FROM=0 scripts/tuf-repo.sh publish $version
+LOST
+    exit 1
+  fi
+  n=$((previous + 1))
+
+  building="$OUT.building"
+  rm -rf "$building"
+  mkdir -p "$(dirname "$OUT")"
+  tuftool create \
+    --root "$KEYS/root.json" \
+    -k "$KEYS/targets.pem" -k "$KEYS/snapshot.pem" -k "$KEYS/timestamp.pem" \
+    --add-targets "$staged" \
+    --targets-expires "$ROLE_EXPIRY"      --targets-version   "$n" \
+    --snapshot-expires "$ROLE_EXPIRY"     --snapshot-version  "$n" \
+    --timestamp-expires "$TIMESTAMP_EXPIRY" --timestamp-version "$n" \
+    --outdir "$building"
+
+  # tuftool links a target back to where it read it, and where it read it is a
+  # temporary directory. Take the bytes.
+  find "$building/targets" -type l | while read -r link; do
+    cp -L "$link" "$link.real" && mv -f "$link.real" "$link"
+  done
+  cp "$KEYS/root.json" "$building/root.json"
+
+  # Built beside and swapped, so a failed publish leaves what was working.
+  rm -rf "$OUT.previous"
+  [ -d "$OUT" ] && mv "$OUT" "$OUT.previous"
+  mv "$building" "$OUT"
+  echo "$n" > "$counter"
+
+  cat <<DONE
+
+Published $version as metadata version $n, into $OUT
+
+To make it real, serve those files at:
+
+  $SERVED_AT
+
+which for a GitHub repository means copying them in and pushing:
+
+  cp -R $OUT/. <your-artifacts-checkout>/tuf/
+  cd <your-artifacts-checkout> && git add tuf && git commit -m "Publish runtime $version" && git push
+
+Until that lands, applications keep installing the recipe inside them.
+
+Note: timestamp metadata expires $TIMESTAMP_EXPIRY. Re-run this command before
+then — expired metadata is refused, which is the point of it.
+DONE
+  ;;
+
+status)
+  echo "signing keys:  $KEYS"
+  if [ -f "$KEYS/root.json" ]; then
+    echo "               present — published at metadata version $(cat "$KEYS/metadata-version" 2>/dev/null || echo 'never')"
+  else
+    echo "               MISSING — run: scripts/tuf-repo.sh init"
+  fi
+  echo "trust anchor:  $ANCHOR"
+  if [ -f "$ANCHOR" ]; then
+    echo "               present — builds can install published runtimes"
+  else
+    echo "               MISSING — builds install only the recipe inside them"
+  fi
+  echo "built output:  $OUT"
+  if [ -d "$OUT" ]; then
+    echo "               present — serve it at $SERVED_AT"
+  else
+    echo "               not built yet"
+  fi
+  ;;
+
+*)
+  sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//' >&2
+  exit 1
+  ;;
 esac

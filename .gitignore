@@ -12,3 +12,6 @@ __pycache__/
 /design/current/
 packaging/uv
 third-party/
+
+# Signed runtime repository, built by scripts/tuf-repo.sh — published, not committed.
+/dist/
