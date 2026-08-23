@@ -37,6 +37,37 @@ fn script(bundle: &std::path::Path) -> Option<PathBuf> {
         .find(|path| path.exists())
 }
 
+/// An interpreter belonging to a runtime installed on this machine.
+///
+/// Versions live at `runtimes/<id>/<version>/.venv`, and installs that predate
+/// versioning at `runtime/<id>/.venv`; both are looked in, newest first, so
+/// this keeps working either side of that change.
+fn an_installed_interpreter() -> Option<std::path::PathBuf> {
+    if let Ok(named) = std::env::var("YARNGO_PYTHON") {
+        return Some(std::path::PathBuf::from(named));
+    }
+    // Read before the sandbox redirects it, and only read.
+    let data = speech_engine::paths::data_dir();
+
+    let mut homes: Vec<std::path::PathBuf> = Vec::new();
+    if let Ok(runtimes) = std::fs::read_dir(data.join("runtimes")) {
+        for runtime in runtimes.flatten() {
+            if let Ok(versions) = std::fs::read_dir(runtime.path()) {
+                homes.extend(versions.flatten().map(|v| v.path()));
+            }
+        }
+    }
+    if let Ok(legacy) = std::fs::read_dir(data.join("runtime")) {
+        homes.extend(legacy.flatten().map(|e| e.path()));
+    }
+    homes.sort();
+    homes
+        .into_iter()
+        .rev()
+        .map(|home| home.join(".venv/bin/python3"))
+        .find(|python| python.exists())
+}
+
 #[test]
 fn the_bundled_sidecar_speaks_this_protocol() {
     let Some(bundle) = bundle() else {
@@ -55,21 +86,16 @@ fn the_bundled_sidecar_speaks_this_protocol() {
     let script = script(&bundle).unwrap_or_else(|| {
         panic!("{} has no engine.py in Contents/Resources", bundle.display())
     });
-    // Any interpreter that can import the protocol module will do — this is a
-    // packaging check on the bundle's Python files, not on an environment.
-    let python = ["python3", "/usr/bin/python3"]
-        .iter()
-        .map(std::path::PathBuf::from)
-        .find(|p| {
-            Command::new(p)
-                .arg("--version")
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()
-                .map(|s| s.success())
-                .unwrap_or(false)
-        })
-        .expect("no python3 on this machine to smoke-test the bundle with");
+    // This starts the engine and takes it through a handshake, so it needs an
+    // interpreter that can import the whole speech stack — not merely one that
+    // can parse the file. Any installed runtime on this machine will do; the
+    // bundle is what is under test, not the environment.
+    let python = an_installed_interpreter().unwrap_or_else(|| {
+        panic!(
+            "no installed runtime to start the bundled sidecar with — install one, \
+             or point YARNGO_PYTHON at an interpreter that has the speech stack"
+        )
+    });
 
     // Its own data directory: a packaging check must not read, still less
     // write, whatever the person running it happens to have.

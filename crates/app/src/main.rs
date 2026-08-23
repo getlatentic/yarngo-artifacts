@@ -1873,7 +1873,7 @@ impl VoiceStudio {
                 cx.theme().muted_foreground,
             ),
             Status::Idle if self.speaking_voice().is_none() => (
-                t!("status.built_in_ready").to_string(),
+                t!("status.no_voice_yet").to_string(),
                 cx.theme().muted_foreground,
             ),
             Status::Idle => (t!("status.ready").to_string(), cx.theme().muted_foreground),
