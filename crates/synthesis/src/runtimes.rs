@@ -226,16 +226,31 @@ fn installation(
 ) -> Result<Ready, String> {
     runtime::host_supported()?;
 
-    // What to install: the newest published release this build can use, or the
-    // recipe that shipped when the repository has nothing for us. A network
-    // failure is a reason to install what shipped, never a reason to touch
-    // what is already answering.
+    // What to install, in order: the newest published release this build can
+    // use; failing that whatever already answers; failing that the recipe
+    // inside the application.
+    //
+    // The middle step is the one worth stating. Not being able to reach or
+    // believe the repository says nothing about the runtime already on the
+    // disk, and replacing it with the one inside the application would be a
+    // silent downgrade to a different implementation — decided by a network
+    // failure, on a machine whose voices were made by the runtime it just
+    // discarded. Unreachable and untrustworthy are the same answer here: we
+    // were not told anything we can act on.
     let published = Published::newest(pack.id);
     let version = match &published {
         Ok(release) => release.version().to_string(),
         Err(why) => {
-            report(Progress::Step("Using the runtime this build ships with.".into()));
             eprintln!("no published runtime: {why}");
+            if let Some(answering) = active(store, places, pack.id) {
+                report(Progress::Step(format!(
+                    "Keeping the runtime already installed, {}.",
+                    answering.version
+                )));
+                report(Progress::Fraction(1.0));
+                return Ok(answering);
+            }
+            report(Progress::Step("Using the runtime this build ships with.".into()));
             format!("bundled-{}", env!("CARGO_PKG_VERSION"))
         }
     };

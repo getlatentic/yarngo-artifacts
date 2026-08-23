@@ -133,10 +133,18 @@ than broken by an application update. Which runtime version answered a session
 is recorded with the session, so everything it produced can say what produced
 it.
 
-Offline is a priority order, not a fallback: what is installed and active keeps
-answering, untouched by any network failure; a machine with nothing installed
-installs the recipe that ships; the repository is consulted only to offer
-something newer, and offering is not acting.
+Offline is a priority order, not a fallback. In order: the newest published
+release this build can use; failing that, whatever already answers; failing
+that, the recipe inside the application.
+
+The middle step is the one worth stating, because getting it wrong is quiet.
+Not being able to reach or believe the repository says nothing about the
+runtime already on the disk, so it is kept — replacing it with the one inside
+the application would be a downgrade to a different implementation, decided by
+a network failure, on a machine whose voices were made by the runtime it just
+discarded. Unreachable and untrustworthy are the same answer here: nothing was
+said that can be acted on. Only a machine with nothing installed falls back to
+what shipped.
 
 ## Publishing, in practice
 

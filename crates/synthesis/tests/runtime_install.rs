@@ -121,6 +121,16 @@ exit 0
             std::env::set_var("YARNGO_REPOSITORY", "file:///nowhere/at/all");
         }
     }
+
+    /// Point it at a different fixture repository.
+    fn point_at(&self, repo: &str) {
+        unsafe {
+            std::env::set_var(
+                "YARNGO_REPOSITORY",
+                format!("file://{}", fixtures().join(repo).display()),
+            );
+        }
+    }
 }
 
 impl Drop for Rig {
@@ -177,7 +187,7 @@ fn installing_again_changes_nothing_but_says_so() {
 }
 
 #[test]
-fn offline_installs_what_shipped_and_a_later_install_does_not_regress() {
+fn a_machine_with_no_repository_installs_what_shipped() {
     let rig = Rig::new("repo");
     rig.go_offline();
     let bundled = rig.install().expect("offline install");
@@ -187,6 +197,50 @@ fn offline_installs_what_shipped_and_a_later_install_does_not_regress() {
     assert_eq!(
         bundled.descriptor.engine_path().expect("engine"),
         rig.root().join("resources/sidecar/engine.py")
+    );
+}
+
+/// A published runtime, once installed, is not given up because the repository
+/// went away.
+///
+/// Losing sight of the repository says nothing about the runtime already on the
+/// disk. Replacing it with the one inside the application would be a silent
+/// downgrade to a different implementation, decided by a network failure — and
+/// on a machine whose voices were made by the runtime it just discarded.
+#[test]
+fn a_published_runtime_is_not_replaced_by_the_bundled_one_when_the_repository_goes_away() {
+    let rig = Rig::new("repo");
+    let published = rig.install().expect("install the published release");
+    assert_eq!(published.version, "1.0.0");
+
+    rig.go_offline();
+    let after = rig.install();
+
+    assert_eq!(
+        answering(&rig).as_deref(),
+        Some("1.0.0"),
+        "an unreachable repository downgraded a working published runtime"
+    );
+    if let Ok(ready) = &after {
+        assert_eq!(ready.version, "1.0.0", "installed something else instead");
+    }
+}
+
+/// The same, but the repository is reachable and lying: correctly signed by
+/// keys this build never trusted. That is a stronger signal than silence, and
+/// it must not be rewarded with a downgrade either.
+#[test]
+fn a_repository_we_do_not_trust_does_not_replace_a_working_runtime() {
+    let rig = Rig::new("repo");
+    rig.install().expect("install the published release");
+
+    rig.point_at("impostor");
+    let _ = rig.install();
+
+    assert_eq!(
+        answering(&rig).as_deref(),
+        Some("1.0.0"),
+        "another publisher's repository caused a downgrade by being refused"
     );
 }
 
