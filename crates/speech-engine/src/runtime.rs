@@ -483,7 +483,6 @@ fn can_speak(python: &Path) -> bool {
 }
 
 /// Whether a usable runtime is already installed.
-
 pub fn is_installed() -> bool {
     let python = interpreter(&paths::runtime_dir());
     // Presence of the interpreter is not enough — the speech package is what

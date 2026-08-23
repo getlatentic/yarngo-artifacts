@@ -15,14 +15,18 @@ tempfile = "3"
 # than whichever tar the host happens to ship.
 tar = "0.4"
 flate2 = "1"
+# Who published a runtime, and whether it is current, is The Update Framework's
+# question rather than one to answer here. Its HTTP client is left out: fetching
+# stays on the curl the installer already uses.
+tough = { version = "0.24.0", default-features = false }
+url = "2"
+tokio = { version = "1.53.1", features = ["rt", "time"] }
+futures-core = "0.3"
+futures-util = { version = "0.3", default-features = false }
 
 [dev-dependencies]
 yarngo-testing = { path = "../testing" }
-# Who published a runtime, and whether it is current, is The Update Framework's
-# question rather than one to answer here.
-tough = "0.24.0"
-url = "2"
-tokio = { version = "1.53.1", features = ["rt", "macros"] }
+tokio = { version = "1.53.1", features = ["rt", "time", "macros"] }
 
 [[example]]
 name = "runtime_install"

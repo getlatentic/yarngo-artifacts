@@ -14,6 +14,7 @@ pub mod paths;
 pub mod protocol;
 pub mod runtime;
 pub mod runtimes;
+pub mod trust;
 
 pub use handle::EngineHandle;
 pub use paths::EnginePaths;

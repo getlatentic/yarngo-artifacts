@@ -12,7 +12,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use tough::{FilesystemTransport, Limits, RepositoryLoader, TargetName};
+use speech_engine::trust::Anchor;
 use url::Url;
 
 const TARGET: &str = "yarngo-runtime-spike.tar.gz";
@@ -22,34 +22,23 @@ fn fixtures() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tuf")
 }
 
-/// Fetch `TARGET` from `served`, trusting only `root`. They are separate
-/// arguments because pointing them at different repositories is the attack.
-async fn fetch(root: &Path, served: &Path) -> Result<Vec<u8>, String> {
-    let anchor = fs::read(root).map_err(|e| format!("reading root.json: {e}"))?;
+/// Open `served`, trusting only `root`. They are separate arguments because
+/// pointing them at different repositories is the attack.
+fn open(root: &Path, served: &Path) -> Result<(tempfile::TempDir, speech_engine::trust::Trusted), String> {
     let store = tempfile::tempdir().map_err(|e| e.to_string())?;
+    let trusted = Anchor {
+        root: fs::read(root).map_err(|e| format!("reading root.json: {e}"))?,
+        metadata: directory(&served.join("metadata")),
+        targets: directory(&served.join("targets")),
+        datastore: store.path().join("seen"),
+    }
+    .open()?;
+    Ok((store, trusted))
+}
 
-    let repository = RepositoryLoader::new(
-        &anchor,
-        directory(&served.join("metadata")),
-        directory(&served.join("targets")),
-    )
-    .transport(FilesystemTransport)
-    .limits(Limits::default())
-    .datastore(store.path())
-    .load()
-    .await
-    .map_err(|e| format!("{e}"))?;
-
-    let name = TargetName::new(TARGET).map_err(|e| format!("{e}"))?;
-    let stream = repository
-        .read_target(&name)
-        .await
-        .map_err(|e| format!("{e}"))?
-        .ok_or_else(|| "no such target".to_string())?;
-
-    tough::IntoVec::into_vec(stream)
-        .await
-        .map_err(|e| format!("{e}"))
+fn fetch(root: &Path, served: &Path) -> Result<Vec<u8>, String> {
+    let (_store, trusted) = open(root, served)?;
+    trusted.read(TARGET)
 }
 
 fn directory(path: &Path) -> Url {
@@ -59,7 +48,7 @@ fn directory(path: &Path) -> Url {
 /// Refused, and refused for the stated reason. A fixture that had simply gone
 /// missing would satisfy "this fails" in every one of these tests.
 fn refused(outcome: Result<Vec<u8>, String>, because: &str) {
-    let complaint = outcome.err().expect("this should not have been accepted");
+    let complaint = outcome.expect_err("this should not have been accepted");
     assert!(
         complaint.to_lowercase().contains(because),
         "refused, but not over {because}: {complaint}"
@@ -105,54 +94,49 @@ fn only_file_in(dir: &Path) -> PathBuf {
     found.pop().expect("the one file")
 }
 
-#[tokio::test]
-async fn a_signed_repository_yields_the_target() {
+#[test]
+fn a_signed_repository_yields_the_target() {
     let repo = fixtures().join("repo");
-    let bytes = fetch(&repo.join("root.json"), &repo).await.expect("fetch");
+    let bytes = fetch(&repo.join("root.json"), &repo).expect("fetch");
     assert_eq!(String::from_utf8_lossy(&bytes), CONTENTS);
 }
 
-#[tokio::test]
-async fn a_target_edited_after_signing_is_refused() {
+#[test]
+fn a_target_edited_after_signing_is_refused() {
     let (_scratch, repo) = copy_of("repo");
     // The copy is a working repository until the moment it is edited, so the
     // refusal below is the edit and not the copying.
-    fetch(&repo.join("root.json"), &repo)
-        .await
-        .expect("the untouched copy should load");
+    fetch(&repo.join("root.json"), &repo).expect("the untouched copy should load");
 
     flip_a_byte(&only_file_in(&repo.join("targets")));
-    refused(fetch(&repo.join("root.json"), &repo).await, "hash mismatch");
+    refused(fetch(&repo.join("root.json"), &repo), "hash mismatch");
 }
 
-#[tokio::test]
-async fn metadata_edited_after_signing_is_refused() {
+#[test]
+fn metadata_edited_after_signing_is_refused() {
     let (_scratch, repo) = copy_of("repo");
-    fetch(&repo.join("root.json"), &repo)
-        .await
-        .expect("the untouched copy should load");
+    fetch(&repo.join("root.json"), &repo).expect("the untouched copy should load");
 
     flip_a_byte(&repo.join("metadata/1.targets.json"));
-    refused(fetch(&repo.join("root.json"), &repo).await, "hash mismatch");
+    refused(fetch(&repo.join("root.json"), &repo), "hash mismatch");
 }
 
 /// The question a digest in a manifest cannot answer. The impostor repository
 /// is correctly built and correctly signed — by keys that were never ours,
 /// which is exactly what someone who can publish to the artifact host holds.
-#[tokio::test]
-async fn a_repository_signed_by_someone_else_is_refused() {
+#[test]
+fn a_repository_signed_by_someone_else_is_refused() {
     let theirs = fixtures().join("impostor");
 
     // Against their own root it is a perfectly good repository, and the bytes
     // they serve are the ones we would have served, so nothing about the target
     // gives them away.
     let bytes = fetch(&theirs.join("root.json"), &theirs)
-        .await
         .expect("their repository is well formed");
     assert_eq!(String::from_utf8_lossy(&bytes), CONTENTS);
 
     refused(
-        fetch(&fixtures().join("repo/root.json"), &theirs).await,
+        fetch(&fixtures().join("repo/root.json"), &theirs),
         "signature threshold",
     );
 }
@@ -160,8 +144,43 @@ async fn a_repository_signed_by_someone_else_is_refused() {
 /// Freshness, which a digest also cannot answer: metadata signed by the right
 /// keys and long out of date. Replaying an old snapshot is how someone keeps a
 /// machine on the version they already know how to break.
-#[tokio::test]
-async fn metadata_that_has_expired_is_refused() {
+#[test]
+fn metadata_that_has_expired_is_refused() {
     let stale = fixtures().join("stale");
-    refused(fetch(&stale.join("root.json"), &stale).await, "expired");
+    refused(fetch(&stale.join("root.json"), &stale), "expired");
+}
+
+/// The archive path: written as it arrives rather than held in memory, because
+/// a runtime is hundreds of megabytes.
+#[test]
+fn a_target_can_be_written_out_as_it_arrives() {
+    let repo = fixtures().join("repo");
+    let (store, trusted) = open(&repo.join("root.json"), &repo).expect("open");
+    let into = store.path().join("archive");
+
+    let mut seen = Vec::new();
+    let written = trusted
+        .fetch(TARGET, &into, &mut |so_far| seen.push(so_far))
+        .expect("fetch");
+
+    assert_eq!(fs::read(&into).expect("written file"), CONTENTS.as_bytes());
+    assert_eq!(written, CONTENTS.len() as u64);
+    assert_eq!(
+        seen.last().copied(),
+        Some(CONTENTS.len() as u64),
+        "progress should end at the whole thing"
+    );
+}
+
+#[test]
+fn a_target_the_repository_does_not_vouch_for_is_not_fetched() {
+    let repo = fixtures().join("repo");
+    let (_store, trusted) = open(&repo.join("root.json"), &repo).expect("open");
+
+    assert_eq!(trusted.names(), vec![TARGET.to_string()]);
+    let complaint = trusted.read("something-else.tar.gz").expect_err("no such target");
+    assert!(
+        complaint.contains("not in this repository"),
+        "unhelpful about a target that is not there: {complaint}"
+    );
 }

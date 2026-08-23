@@ -51,11 +51,21 @@ These are ours under any trust model, and are done:
   speaks version 1 is a claim; what the process answers at `initialize` is the
   fact, and the application offers only what that list permits.
 
-## The client, demonstrated
+## The client
 
-`tough` is the Rust TUF client, and `crates/speech-engine/tests/runtime_trust.rs`
-shows it answering the two questions a digest cannot. Against repositories built
-by `scripts/make-tuf-fixture.sh` — one ours, one another publisher's, one signed
+`tough` is the Rust TUF client, wrapped in `speech-engine::trust`. Its own HTTP
+client is left out: fetching stays on the `curl` the installer already uses, so
+proxies, retries and certificate handling keep behaving the way they do on the
+machines this runs on. Only verification is TUF's.
+
+Downloads go over `https` or a local `file` URL and nothing else — TUF would
+still catch tampering over plain HTTP, but there is no reason to let anyone
+watch. A target is read back in pieces and written as it arrives, because a
+runtime archive is hundreds of megabytes and never belongs in memory whole.
+
+`crates/speech-engine/tests/runtime_trust.rs` shows the client answering the two
+questions a digest cannot. Against repositories built by
+`scripts/make-tuf-fixture.sh` — one ours, one another publisher's, one signed
 correctly and long expired — loading refuses:
 
 - a target edited after signing, and metadata edited after signing;
