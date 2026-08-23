@@ -439,6 +439,34 @@ fn the_engine_starts_without_the_repository() {
     assert!(capabilities.cloning());
 }
 
+#[test]
+fn an_update_is_offered_only_when_the_repository_has_something_newer() {
+    let rig = Rig::new("repo");
+    rig.go_offline();
+    let bundled = rig.install().expect("offline install");
+
+    // Back online: the repository offers 1.0.0 and something older answers.
+    unsafe {
+        std::env::set_var(
+            "YARNGO_REPOSITORY",
+            format!("file://{}", fixtures().join("repo").display()),
+        );
+    }
+    let store = rig.store();
+    let offered = installer::update_available(&store, runtime::pack())
+        .expect("read the repository")
+        .expect("an update should be offered");
+    assert_eq!(offered, "1.0.0");
+    assert_eq!(answering(&rig), Some(bundled.version.clone()), "offering is not acting");
+
+    rig.install().expect("take it");
+    assert_eq!(
+        installer::update_available(&store, runtime::pack()).expect("read again"),
+        None,
+        "what is answering is what is offered"
+    );
+}
+
 fn copy_tree(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).expect("create dir");
     for entry in std::fs::read_dir(from).expect("read dir") {

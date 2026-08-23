@@ -10,7 +10,8 @@ are not written here.
 | --- | --- |
 | Rust ↔ runtime | JSON-RPC 2.0 over stdio, `yarngo-engine` version 1 |
 | Who published this and is it current | The Update Framework |
-| What a runtime is and how it starts | the descriptor, in `runtimes/<id>/runtime.json` |
+| What a runtime is and how it starts | the descriptor, beside it in its version directory |
+| Which version answers | one row in the application's database |
 | What it can do | the handshake's method list |
 
 The middle row is the one that must not be invented. Freshness, rollback,
@@ -98,15 +99,54 @@ Role expiries differ on purpose: root furthest out, because rotating it means
 shipping an application; timestamp soonest, because that is what freshness
 means — metadata nobody has re-signed lately stops being believed.
 
-## What comes next
+## Installation and activation
 
-1. Install to a staging directory, complete the handshake from staging, and
-   promote atomically. A failure anywhere leaves the runtime that was working
-   in place, and keeping the previous version is then rollback for free.
-2. Record which runtime and which version made a clip, now that a release has
-   an identity to record.
+A version is installed at its final immutable path — `runtimes/<id>/<version>/`,
+holding the recipe, the environment, the engine and the descriptor — and never
+moved, because a Python environment remembers where it was built. What changes
+when a version becomes the one that answers is a single row in the database.
+There is no directory swap, no symlink, no moment with two active versions or
+none; rollback is the same row pointed at the version kept from before, and the
+store refuses to remove the active version outright.
 
-Only then is the archive path worth opening.
+The order is the point:
+
+1. everything is written into the new version's own directory — recipe from the
+   signed repository (or the one that ships, when the repository is
+   unreachable), the environment built by `uv` *at that path*, the engine, the
+   descriptor;
+2. an engine is started **from that directory** and must answer the handshake
+   with capabilities this application can use;
+3. only then does the database mark it ready, and — separately — active.
+
+A failure anywhere leaves whatever was answering untouched: the new directory
+is debris, deleted on failure and swept at startup after a crash. A streamed
+archive never appears at its destination until the whole of it has verified,
+because TUF's client hands bytes over before the final digest is known and says
+plainly not to use them if the stream then fails.
+
+The interpreter is digest-pinned the way uv is, shared between versions keyed
+by its pin, and refused rather than installed unpinned — it executes everything
+else, and a hand-carried archive claims to be the same bytes, so it meets the
+same pin. An install that predates versions is adopted where it lies rather
+than broken by an application update. Which runtime version answered a session
+is recorded with the session, so everything it produced can say what produced
+it.
+
+Offline is a priority order, not a fallback: what is installed and active keeps
+answering, untouched by any network failure; a machine with nothing installed
+installs the recipe that ships; the repository is consulted only to offer
+something newer, and offering is not acting.
+
+## Keys
+
+`init` gives the root role three keys with a threshold of two — one lost is
+recoverable, one stolen is not enough — and each other role one key of its own.
+Keep the root keys apart, offline, and never anywhere that builds the
+application. Timestamp's key is the one an automated re-signer holds, and it is
+the least powerful on purpose: it can say a snapshot is current and cannot say
+which targets are ours. `tuftool` signs from AWS KMS and SSM when the keys
+should not exist as files at all.
 
 ## The catalogue
 

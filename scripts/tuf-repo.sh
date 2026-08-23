@@ -5,11 +5,15 @@
 #   scripts/tuf-repo.sh init  <keys-dir> <out-dir>
 #   scripts/tuf-repo.sh build <keys-dir> <out-dir> <targets-dir>
 #
-# `init` produces the keys and a signed root.json. Run it once. The keys are the
-# only thing that makes a runtime ours, so they belong somewhere they cannot be
-# read by anything that builds the application — a hardware token or a KMS, not
-# this repository and not CI's ordinary environment. tuftool can sign from AWS
-# KMS and from SSM; `--key` takes those as URLs.
+# `init` produces the keys and a signed root.json. Run it once. The root role
+# is held by three keys with a threshold of two, so one key lost is recoverable
+# and one key stolen is not enough; keep the three apart — a hardware token, a
+# KMS, an offline machine — and never all three anywhere that builds the
+# application. The other roles each hold one key: targets and snapshot can live
+# in a KMS; timestamp is the one an automated re-signer holds, and it is the
+# least powerful on purpose — it can say a snapshot is current and cannot say
+# which targets are ours. tuftool signs from AWS KMS and SSM; `--key` takes
+# those as URLs.
 #
 # `build` publishes what is in <targets-dir> as version N+1. Nothing about a
 # target is described here: the catalogue names them, and the catalogue is a
@@ -41,11 +45,15 @@ case "$action" in
     mkdir -p "$keys"
     tuftool root init "$keys/root.json"
     tuftool root expire "$keys/root.json" "$root_expiry"
-    for role in root targets snapshot timestamp; do
+    tuftool root set-threshold "$keys/root.json" root 2
+    for n in 1 2 3; do
+      tuftool root gen-rsa-key "$keys/root.json" "$keys/root-$n.pem" --role root
+    done
+    for role in targets snapshot timestamp; do
       tuftool root set-threshold "$keys/root.json" "$role" 1
       tuftool root gen-rsa-key "$keys/root.json" "$keys/$role.pem" --role "$role"
     done
-    tuftool root sign "$keys/root.json" -k "$keys/root.pem"
+    tuftool root sign "$keys/root.json" -k "$keys/root-1.pem" -k "$keys/root-2.pem"
 
     mkdir -p "$out"
     cp "$keys/root.json" "$out/root.json"
