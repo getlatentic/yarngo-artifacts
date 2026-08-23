@@ -201,6 +201,32 @@ A release naming a later `engine_api` is passed over rather than half-understood
 application safe. When nothing fits, the reason each release was passed over is
 what tells someone whether to update the application or wait.
 
+## Proving it against a real model
+
+The engine tests are asked for rather than run by default, because they start a
+real model and take minutes:
+
+    YARNGO_TEST_ENGINE=1 cargo test -p yarngo-synthesis --test real_engine -- --test-threads=1
+
+They find a runtime installed on this machine, and work on a copy of the
+application's store — never the store itself. Among them is the one that
+matters most for deletion: a voice deleted while a real model is speaking in it
+must refuse immediately, end the generation, publish no take, remove the
+recording, and leave every clip already made with it alone.
+
+That test existed for a while without ever having run. Two things were in the
+way, both of them real:
+
+- the harness symlinked the interpreter out of its environment, and Python
+  resolves `pyvenv.cfg` relative to the executable it was launched as — so it
+  ran a Python with none of the packages installed into that environment;
+- a runtime running its own engine from its own directory could not find the
+  model catalogue at all, because every place the engine looked was relative to
+  itself. The application now says where it is.
+
+The second was a product defect, not a test one, and it would have met the
+first person to publish a runtime with an engine of its own.
+
 ## The boundary of "a new runtime without a new application"
 
 A runtime can be published without releasing the application when it fits

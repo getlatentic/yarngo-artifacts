@@ -25,6 +25,16 @@ use yarngo_synthesis::{Layout, Outcome, Reference, Request, Synthesis};
 /// machine and longer under load.
 const PATIENCE: Duration = Duration::from_secs(600);
 
+/// These start a real model and take minutes, so they are asked for rather
+/// than run by default:
+///
+/// ```text
+/// YARNGO_TEST_ENGINE=1 cargo test -p yarngo-synthesis --test real_engine -- --test-threads=1
+/// ```
+///
+/// They need a runtime installed on this machine and a voice enrolled in the
+/// application, and they work on a copy of that store — never the store
+/// itself.
 fn wanted() -> bool {
     std::env::var_os("YARNGO_TEST_ENGINE").is_some()
 }
@@ -43,10 +53,42 @@ fn data_dir() -> PathBuf {
     store().map(|s| s.root().to_path_buf()).unwrap_or_default()
 }
 
+/// An interpreter with the speech stack in it.
+///
+/// A runtime installed on this machine by default, rather than one developer's
+/// path — which is what this used to be, and meant nobody else could run these
+/// at all. `YARNGO_PYTHON` still wins, for an environment built by hand.
 fn python() -> PathBuf {
-    std::env::var_os("YARNGO_PYTHON").map(PathBuf::from).unwrap_or_else(|| {
-        PathBuf::from("/Users/dev/workspace/voice-clone-bench/mlx-speech/.venv/bin/python")
-    })
+    if let Some(named) = std::env::var_os("YARNGO_PYTHON") {
+        return PathBuf::from(named);
+    }
+    installed_interpreter().expect(
+        "no runtime installed on this machine to run the real engine with — \
+         install one, or set YARNGO_PYTHON to an interpreter that has the speech stack",
+    )
+}
+
+/// Environments live at `runtimes/<id>/<version>/.venv`, and installs that
+/// predate versioning at `runtime/<id>/.venv`. Newest first.
+fn installed_interpreter() -> Option<PathBuf> {
+    let data = speech_engine::paths::installed_data_dir();
+    let mut homes: Vec<PathBuf> = Vec::new();
+    if let Ok(runtimes) = std::fs::read_dir(data.join("runtimes")) {
+        for runtime in runtimes.flatten() {
+            if let Ok(versions) = std::fs::read_dir(runtime.path()) {
+                homes.extend(versions.flatten().map(|v| v.path()));
+            }
+        }
+    }
+    if let Ok(legacy) = std::fs::read_dir(data.join("runtime")) {
+        homes.extend(legacy.flatten().map(|e| e.path()));
+    }
+    homes.sort();
+    homes
+        .into_iter()
+        .rev()
+        .map(|home| home.join(".venv/bin/python3"))
+        .find(|python| python.exists())
 }
 
 /// The real engine, laid out and described the way an install leaves it — the

@@ -326,11 +326,13 @@ This is the part that is unusual for a desktop app and worth getting right.
 **`0.1.0-alpha.1`**, and it moves forward from here — never backwards to
 `0.0.1`. Two reasons, both checked rather than assumed.
 
-A version below the published `min_app_version` is refused by the runtime
-updater, so an app calling itself `0.0.1` would silently keep its bundled
-recipe forever. And SemVer puts a pre-release *below* its release, so the floor
-in `publish-artifacts.sh` is `0.0.0` while the app is pre-release; raise it only
-when a published recipe genuinely cannot be driven by an older build.
+A version below a release's `min_app_version` means that release is passed
+over, so an app calling itself `0.0.1` would silently keep the recipe inside it
+forever. And SemVer puts a pre-release *below* its release, so the floor in a
+published catalogue stays at `0.1.0-alpha.1` or lower while the app is
+pre-release; raise it only when a published release genuinely cannot be driven
+by an older build. `scripts/tuf-repo.sh` publishes the catalogue that carries
+it.
 
 The scheme from here:
 

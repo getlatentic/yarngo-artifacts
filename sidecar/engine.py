@@ -70,7 +70,11 @@ REQUIRED_FIELDS = ("label", "name", "repo", "revision", "licence")
 
 def _catalog_paths() -> list[Path]:
     here = Path(__file__).resolve().parent
+    named = os.environ.get("YARNGO_CATALOG")
     return [
+        # Where the application says it is. A runtime running its own engine
+        # from its own directory cannot find this by looking around itself.
+        *([Path(named)] if named else []),
         VOICE_DIR.parent / "catalog.json",       # fetched, if one has arrived
         here / "catalog.json",                   # bundled beside the sidecar
         here.parent / "catalog.json",            # bundled in Resources/

@@ -572,11 +572,28 @@ fn a_descriptor_cannot_set_the_environment() {
 
     let found = read(&home, &sandbox).expect("an unknown field made it unreadable");
     let command = found.command().expect("command");
-    let named: Vec<String> = command
+    let mut named: Vec<String> = command
         .get_envs()
         .map(|(k, _)| k.to_string_lossy().into_owned())
         .collect();
-    assert_eq!(named, ["YARNGO_DATA"], "the descriptor set the environment");
+    named.sort();
+
+    // An allowlist rather than a search for the two it tried to set: what makes
+    // this safe is that the environment is exactly what the application decided
+    // to put there, so anything new has to be added here deliberately.
+    assert_eq!(
+        named,
+        ["YARNGO_CATALOG", "YARNGO_DATA"],
+        "the environment is not exactly what the application sets"
+    );
+    let values: Vec<String> = command
+        .get_envs()
+        .filter_map(|(_, v)| v.map(|v| v.to_string_lossy().into_owned()))
+        .collect();
+    assert!(
+        !values.iter().any(|value| value.contains("attacker") || value.contains("evil")),
+        "a value the descriptor named reached the command: {values:?}"
+    );
 }
 
 /// A descriptor from a newer application describes an arrangement this one

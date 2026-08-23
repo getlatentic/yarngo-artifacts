@@ -206,7 +206,11 @@ impl Descriptor {
     ///
     /// The environment is the application's: a downloaded descriptor setting
     /// `PYTHONPATH` or `DYLD_INSERT_LIBRARIES` would be running its own code
-    /// without ever naming a program.
+    /// without ever naming a program. What the application does set is where
+    /// its own things are — the data directory, and the catalogue of models it
+    /// offers. A runtime running its own engine from its own directory has no
+    /// way to find either by looking around itself, and guessing is how an
+    /// engine ends up with no models and no explanation.
     pub fn command(&self) -> Result<Command, String> {
         let home = self.home.as_ref().ok_or("was not read from anywhere")?;
         let engine = self.engine_path()?;
@@ -215,6 +219,7 @@ impl Descriptor {
             command.arg(argument.replace("{engine}", &engine.to_string_lossy()));
         }
         command.env("YARNGO_DATA", &home.places.data);
+        command.env("YARNGO_CATALOG", home.places.resources.join("catalog.json"));
         command.current_dir(&home.own);
         Ok(command)
     }
