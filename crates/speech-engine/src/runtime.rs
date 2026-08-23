@@ -702,12 +702,46 @@ pub fn fetch_engine(pack: &Pack, report: &mut dyn FnMut(Progress)) -> Result<boo
     let Some(recipe) = manifest.runtimes.get(pack.id) else {
         return Ok(false);
     };
+    engine_from(recipe, pack.id, &pack.folder(), report)
+}
+
+/// Install a runtime's own code from one recipe, if it names any and if it may
+/// be trusted.
+///
+/// Told the recipe and the folder rather than reaching for a manifest and the
+/// environment, so what it decides can be tested.
+pub fn engine_from(
+    recipe: &Recipe,
+    id: &str,
+    folder: &Path,
+    report: &mut dyn FnMut(Progress),
+) -> Result<bool, String> {
     let (Some(url), Some(expected)) = (&recipe.engine_url, &recipe.engine_sha256) else {
         return Ok(false);
     };
 
+    // Off until the manifest can be shown to have come from us.
+    //
+    // A digest proves the bytes are the bytes the manifest named. It says
+    // nothing about who wrote the manifest, so whoever can publish to the
+    // artifact repository can name any archive and any digest and have it run.
+    // That was tolerable while a recipe could only change which packages are
+    // installed; it is not, now that it can deliver the program itself.
+    //
+    // The answer is signed metadata, and inventing that is not the way to get
+    // it. Until it is in, this path exists and is not taken: a runtime is run
+    // by the engine that shipped, which is signed with the application.
+    if std::env::var_os("YARNGO_UNVERIFIED_RUNTIME_CODE").is_none() {
+        report(Progress::Step(
+            "This runtime publishes its own engine, which cannot be verified yet — \
+             using the one that ships."
+                .into(),
+        ));
+        return Ok(false);
+    }
+
     report(Progress::Step("Fetching the runtime…".into()));
-    unpack_engine(pack.id, &pack.folder(), url, expected)?;
+    unpack_engine(id, folder, url, expected)?;
     Ok(true)
 }
 

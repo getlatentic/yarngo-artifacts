@@ -1059,3 +1059,50 @@ fn an_ordinary_runtime_archive_installs() {
     );
     assert!(landing.path().join("pyproject.toml").exists(), "./ was not handled");
 }
+
+/// Runtime code is not fetched while the manifest naming it cannot be verified.
+///
+/// A digest proves the bytes match what the manifest said, and says nothing
+/// about who wrote the manifest. Whoever can publish to the artifact repository
+/// could name any archive and any digest. That is a different risk from being
+/// able to change which packages get installed, and the path stays shut until
+/// the metadata is signed.
+#[test]
+fn unverified_runtime_code_is_not_fetched() {
+    assert!(
+        std::env::var_os("YARNGO_UNVERIFIED_RUNTIME_CODE").is_none(),
+        "this test is meaningless with the escape hatch set"
+    );
+    // A recipe naming an archive that is genuinely there and genuinely matches
+    // its digest. What is missing is any reason to believe the recipe.
+    let (_served, url, digest) = crafted(&[("engine.py", "file", "# published\n")]);
+    let recipe = speech_engine::runtime::Recipe {
+        lock_url: String::new(),
+        lock_sha256: String::new(),
+        pyproject_url: String::new(),
+        pyproject_sha256: String::new(),
+        engine_url: Some(url),
+        engine_sha256: Some(digest),
+    };
+
+    let landing = tempfile::tempdir().expect("landing");
+    let mut said = Vec::new();
+    let brought = speech_engine::runtime::engine_from(
+        &recipe,
+        "mlx",
+        landing.path(),
+        &mut |p| said.push(format!("{p:?}")),
+    )
+    .expect("deciding not to fetch is not a failure");
+
+    assert!(!brought, "unverifiable runtime code was installed");
+    assert!(
+        !landing.path().join("engine.py").exists(),
+        "code was fetched from a manifest nothing had authenticated"
+    );
+    assert!(
+        said.iter().any(|s| s.contains("cannot be verified")),
+        "it declined without saying why: {said:?}"
+    );
+}
+
