@@ -438,7 +438,7 @@ fn publish(
 ) -> bool {
     let job_id = format!("job-{execution_id}");
     let mut job = Job::queued(&job_id, DurableJobKind::Synthesis);
-    store.open_session(execution_id, "fake", at).expect("session");
+    store.open_session(execution_id, "fake", at, None).expect("session");
     store.insert_job(&job, Some(clip_id), at).expect("insert");
     job.dispatch(execution_id);
     let mut execution = Execution::started(execution_id, &job_id, execution_id);

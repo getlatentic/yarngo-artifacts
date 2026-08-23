@@ -21,6 +21,7 @@ pub mod audio;
 pub mod engine;
 pub mod layout;
 pub mod library;
+pub mod runtimes;
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;

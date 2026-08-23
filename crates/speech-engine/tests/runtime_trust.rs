@@ -176,6 +176,38 @@ fn a_target_can_be_written_out_as_it_arrives() {
     );
 }
 
+/// The half of streaming that matters: a stream that fails verification must
+/// leave nothing at the destination. Bytes arrive before the digest across the
+/// whole target can be checked, so what makes them safe to use is that they
+/// never reach the promised path until every check has passed.
+#[test]
+fn a_target_that_fails_verification_leaves_nothing_at_the_destination() {
+    let (_scratch, repo) = copy_of("repo");
+    flip_a_byte(&target_file(&repo.join("targets"), TARGET));
+
+    let (store, trusted) = open(&repo.join("root.json"), &repo).expect("open");
+    let into = store.path().join("landing").join("archive");
+
+    let mut saw = 0u64;
+    let complaint = trusted
+        .fetch(TARGET, &into, &mut |so_far| saw = so_far)
+        .err()
+        .map(|why| why.to_lowercase())
+        .expect("a tampered target was fetched");
+    assert!(complaint.contains("hash mismatch"), "{complaint}");
+    assert!(
+        !into.exists(),
+        "a file that failed verification was left where a caller would find it"
+    );
+    // And nothing else was left beside it either — a crash cleans to at most a
+    // dropped temporary, a failure cleans to none.
+    let beside: Vec<_> = fs::read_dir(into.parent().expect("parent"))
+        .expect("read dir")
+        .map(|e| e.expect("entry").file_name())
+        .collect();
+    assert!(beside.is_empty(), "left behind: {beside:?}");
+}
+
 #[test]
 fn a_target_the_repository_does_not_vouch_for_is_not_fetched() {
     let repo = fixtures().join("repo");
@@ -269,9 +301,11 @@ fn a_release_is_staged_from_the_repository_that_vouched_for_it() {
 
     let folder = scratch.path().join("runtime");
     assert!(published.stage_engine("mlx", &folder).expect("engine"), "no engine staged");
-    assert_eq!(
-        fs::read_to_string(folder.join("engine.py")).expect("engine.py"),
-        "# the published engine\n"
+    let staged = fs::read_to_string(folder.join("engine.py")).expect("engine.py");
+    assert!(
+        staged.starts_with("# the published engine"),
+        "not the published implementation: {}",
+        staged.lines().next().unwrap_or_default()
     );
 }
 

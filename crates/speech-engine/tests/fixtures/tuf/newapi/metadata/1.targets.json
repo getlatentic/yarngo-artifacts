@@ -1,0 +1,50 @@
+{
+  "signed": {
+    "_type": "targets",
+    "spec_version": "1.0.0",
+    "version": 1,
+    "expires": "2125-01-01T00:00:00Z",
+    "targets": {
+      "mlx-1.0.0.engine.tar.gz": {
+        "length": 674,
+        "hashes": {
+          "sha256": "f1ee99874c5547ab582d5696b09f9a1590fa5d633ea744dc08ba8749f4be24be"
+        }
+      },
+      "mlx-1.0.0.uv.lock": {
+        "length": 39,
+        "hashes": {
+          "sha256": "df61c198e4a2c40d5504c0060fb08ba7de65c16803de26c5367cdb7d5ec8041f"
+        }
+      },
+      "catalogue.json": {
+        "length": 416,
+        "hashes": {
+          "sha256": "479c6638e16d8e5dd371b2a7acfca8a7797c952e60e3c449377b16dad98dfaa6"
+        }
+      },
+      "mlx-1.0.0.pyproject.toml": {
+        "length": 49,
+        "hashes": {
+          "sha256": "ed477ef0d52c8ca246c7d702872f2768d71df708483d21c5f216e5504e60ac4e"
+        }
+      },
+      "yarngo-runtime-spike.tar.gz": {
+        "length": 51,
+        "hashes": {
+          "sha256": "d18a1b367b6862d384bbe9db81551d5cb1a3eeef6386a2a5e329a07fdf6d68d8"
+        }
+      }
+    },
+    "delegations": {
+      "keys": {},
+      "roles": []
+    }
+  },
+  "signatures": [
+    {
+      "keyid": "263cee51e5f26911cb1600dcff3c5300fb0add8f49476bc6d40da1b703c06c97",
+      "sig": "77a0ed516d75d58f9ebae019fc962e73b75c5b726a73a8401f7789408929c773c88ac54d8f7a54609efaf635d4bf5483f3ce0e0f71fdcdf1681ca1747c7bb8532c24014384a2eab9bb69b87be08e1d762b9c6fecef7fa8edbfededb4b0afa56be01662f1692e460ab0e43fa20df5b6d611bf3f3f407d4af9fb5c69b1edf07411fc7906c6546cdc1fcc1c35289083927bd06ee0db6615fe77f0ceba250e1e89388cde13c372beda3cf26abc190ce37d554e0583f76a30329b0b91a02af167901541937d1aa9a9ac76ddacb8d4979498f784e33ef6c1def19cceeba1377698e2a06fdc1ec6040906db4ad8e929223e07b78c2a853708bbff0a6bed9251e58d75e8"
+    }
+  ]
+}

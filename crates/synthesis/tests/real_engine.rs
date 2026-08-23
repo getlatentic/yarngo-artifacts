@@ -53,17 +53,17 @@ fn python() -> PathBuf {
 /// interpreter inside the environment, the engine inside the runtime, and a
 /// descriptor that has to satisfy the same rules any downloaded one does.
 fn mlx_runtime(data: &Path) -> speech_engine::runtimes::Descriptor {
-    let own = data.join("runtimes/mlx");
-    std::fs::create_dir_all(&own).expect("runtime directory");
-    std::fs::copy(repo().join("sidecar/engine.py"), own.join("engine.py")).expect("engine");
-    std::fs::copy(repo().join("sidecar/protocol.py"), own.join("protocol.py")).expect("protocol");
-    let bin = data.join("runtime/mlx/.venv/bin");
+    let home = data.join("runtimes/mlx/test");
+    std::fs::create_dir_all(&home).expect("runtime directory");
+    std::fs::copy(repo().join("sidecar/engine.py"), home.join("engine.py")).expect("engine");
+    std::fs::copy(repo().join("sidecar/protocol.py"), home.join("protocol.py")).expect("protocol");
+    let bin = home.join(".venv/bin");
     std::fs::create_dir_all(&bin).expect("bin");
     let linked = bin.join("python3");
     let _ = std::fs::remove_file(&linked);
     std::os::unix::fs::symlink(python(), &linked).expect("interpreter");
     std::fs::write(
-        own.join("runtime.json"),
+        home.join("runtime.json"),
         serde_json::json!({
             "schema": 1, "id": "mlx", "name": "Apple silicon", "engine": "own",
             "program": "{venv}/bin/python3", "arguments": ["{engine}"],
@@ -74,10 +74,10 @@ fn mlx_runtime(data: &Path) -> speech_engine::runtimes::Descriptor {
 
     let places = speech_engine::runtimes::Places {
         data: data.to_path_buf(),
-        runtime: data.join("runtime"),
         resources: repo().join("packaging"),
     };
-    speech_engine::runtimes::choose(&speech_engine::runtimes::discover(&places), Some("mlx"))
+    speech_engine::runtimes::Descriptor::read(&home.join("runtime.json"), &places)
+        .filter(speech_engine::runtimes::Descriptor::available)
         .expect("the mlx runtime was not usable")
 }
 
@@ -168,7 +168,7 @@ fn a_real_generation_becomes_a_take_in_the_database() {
     };
     let Some((clip_id, reference)) = a_custom_clip(&legacy) else { return };
     let layout = Layout::under(dir.path());
-    store.open_session("session-1", "mlx", "t1").expect("session");
+    store.open_session("session-1", "mlx", "t1", None).expect("session");
     let (connection, _events) = engine();
 
     let request = asked_for(&clip_id, reference);
@@ -213,7 +213,7 @@ fn a_real_generation_does_not_touch_the_legacy_store() {
     let Some((mut store, legacy)) = shadowed(dir.path()) else { return };
     let Some((clip_id, reference)) = a_custom_clip(&legacy) else { return };
     let layout = Layout::under(dir.path());
-    store.open_session("session-1", "mlx", "t1").expect("session");
+    store.open_session("session-1", "mlx", "t1", None).expect("session");
 
     let watched = [
         data_dir().join("clips/clips.json"),
@@ -272,7 +272,7 @@ fn a_voice_deleted_during_real_inference_refuses_the_take() {
         .expect("voice");
     let layout = Layout::under(dir.path());
     let db = dir.path().join("shadow.db");
-    store.open_session("session-1", "mlx", "t1").expect("session");
+    store.open_session("session-1", "mlx", "t1", None).expect("session");
     let (connection, events) = engine();
 
     // From another connection, the moment the engine says it has finished part
@@ -340,6 +340,7 @@ fn the_durable_engine_answers_for_the_library_and_the_machine() {
         Spawn {
             runtime: mlx_runtime(&data_dir()),
             data_dir: data_dir(),
+            version: Some("test".into()),
         },
     )
     .expect("open");
@@ -400,6 +401,7 @@ fn the_engine_answers_through_the_handle_while_it_is_generating() {
     let spawn = Spawn {
             runtime: mlx_runtime(&data),
             data_dir: data.clone(),
+            version: Some("test".into()),
         };
     let handle = Arc::new(
         EngineHandle::spawn_backend(move || {
@@ -518,6 +520,7 @@ fn deleting_a_voice_during_real_inference_stops_it_and_removes_the_recording() {
     let spawn = Spawn {
             runtime: mlx_runtime(&data),
             data_dir: data.clone(),
+            version: Some("test".into()),
         };
     let opened = database.clone();
     let handle = Arc::new(

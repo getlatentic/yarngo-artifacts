@@ -792,7 +792,11 @@ impl VoiceStudio {
     /// so it appears here beside anything installed rather than above it.
     fn runtime_pane(&self, cx: &mut Context<Self>) -> AnyElement {
         let places = speech_engine::paths::places();
-        let installed = speech_engine::runtimes::discover(&places);
+        // Which versions are installed is a fact in the database; the pane
+        // shows the version that answers for each runtime.
+        let installed = yarngo_store::Store::open(&places.data.join("yarngo.db"))
+            .map(|store| yarngo_synthesis::runtimes::all_active(&store, &places))
+            .unwrap_or_default();
         let running = self.capabilities.backend.clone();
 
         div()
@@ -820,21 +824,14 @@ impl VoiceStudio {
                         theme::hex(0x857D72),
                     )),
             )
-            .children(installed.iter().map(|runtime| {
+            .children(installed.iter().map(|ready| {
+                let runtime = &ready.descriptor;
                 let id = runtime.id.clone();
                 let chosen = self.preferred_runtime.as_deref() == Some(id.as_str());
-                let here = runtime.available();
-                // What is wrong when something is, in the runtime's own terms
-                // rather than a path nobody can act on.
-                let facts = match (here, runtime.program_path(), runtime.engine_path()) {
-                    (true, _, _) => t!("runtime.ready").to_string(),
-                    (_, Err(why), _) | (_, _, Err(why)) => {
-                        t!("runtime.refused", why = why).to_string()
-                    }
-                    (_, Ok(program), _) => {
-                        t!("runtime.missing", path = program.display().to_string()).to_string()
-                    }
-                };
+                // all_active only lists what loads whole, so what is left to
+                // say is which version this is.
+                let here = true;
+                let facts = format!("{} · {}", ready.version, t!("runtime.ready"));
                 div()
                     .h_flex()
                     .w_full()

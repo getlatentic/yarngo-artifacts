@@ -55,13 +55,21 @@ fn the_bundled_sidecar_speaks_this_protocol() {
     let script = script(&bundle).unwrap_or_else(|| {
         panic!("{} has no engine.py in Contents/Resources", bundle.display())
     });
-    let python = speech_engine::runtime::interpreter(&speech_engine::paths::runtime_dir());
-    let python = if python.exists() {
-        python
-    } else {
-        speech_engine::runtime::existing_interpreter()
-            .expect("no interpreter to run the bundled sidecar with")
-    };
+    // Any interpreter that can import the protocol module will do — this is a
+    // packaging check on the bundle's Python files, not on an environment.
+    let python = ["python3", "/usr/bin/python3"]
+        .iter()
+        .map(std::path::PathBuf::from)
+        .find(|p| {
+            Command::new(p)
+                .arg("--version")
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false)
+        })
+        .expect("no python3 on this machine to smoke-test the bundle with");
 
     // Its own data directory: a packaging check must not read, still less
     // write, whatever the person running it happens to have.

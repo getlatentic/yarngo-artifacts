@@ -132,10 +132,24 @@ pub(crate) fn write_job(transaction: &Transaction<'_>, job: &Job, at: &str) -> R
 }
 
 impl Store {
-    pub fn open_session(&self, id: &str, backend: &str, at: &str) -> Result<()> {
+    /// `runtime` is which installed code answered — `(id, version, engine_api)`
+    /// — so everything the session produced can say what produced it.
+    pub fn open_session(
+        &self,
+        id: &str,
+        backend: &str,
+        at: &str,
+        runtime: Option<(&str, &str, u32)>,
+    ) -> Result<()> {
+        let (runtime_id, runtime_version, engine_api) = match runtime {
+            Some((id, version, api)) => (Some(id), Some(version), Some(api)),
+            None => (None, None, None),
+        };
         self.raw().execute(
-            "INSERT INTO engine_sessions (id, backend, started_at) VALUES (?1, ?2, ?3)",
-            params![id, backend, at],
+            "INSERT INTO engine_sessions
+                 (id, backend, started_at, runtime_id, runtime_version, engine_api)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![id, backend, at, runtime_id, runtime_version, engine_api],
         )?;
         Ok(())
     }

@@ -48,32 +48,34 @@ use speech_engine::{
 /// audio.
 fn start_engine(preferred: Option<&str>) -> Result<EngineHandle, speech_engine::EngineError> {
     let places = speech_engine::paths::places();
-    // Read before anything starts, because which runtime to start is the
-    // question being answered. A brief look at the database of its own, since
-    // the thing that usually holds it open is what this is about to build.
-    let chosen = preferred.map(str::to_string).or_else(|| remembered_runtime(&places.data));
-    let preferred = chosen.as_deref();
-    let installed = speech_engine::runtimes::discover(&places);
-    let Some(runtime) = speech_engine::runtimes::choose(&installed, preferred) else {
-        return Err(speech_engine::EngineError::Transport(match installed.len() {
-            0 => "no speech runtime is installed".into(),
-            n => format!("none of the {n} installed speech runtimes can start"),
-        }));
+    // A brief look at the database of its own, because which runtime version
+    // answers is a fact in it — and the thing that usually holds the database
+    // open is what this is about to build.
+    let ready = {
+        let store = yarngo_store::Store::open(&places.data.join("yarngo.db"))
+            .map_err(|e| speech_engine::EngineError::Transport(format!("{e}")))?;
+        yarngo_synthesis::runtimes::startup(&store, &places, runtime::pack());
+        // The person's choice if it answers; the pack this host runs otherwise.
+        let chosen = preferred
+            .map(str::to_string)
+            .or_else(|| store.preference(yarngo_store::preferences::RUNTIME).ok().flatten());
+        chosen
+            .and_then(|id| yarngo_synthesis::runtimes::active(&store, &places, &id))
+            .or_else(|| yarngo_synthesis::runtimes::active(&store, &places, runtime::pack().id))
+    };
+    let Some(ready) = ready else {
+        return Err(speech_engine::EngineError::Transport(
+            "no speech runtime is installed".into(),
+        ));
     };
     let data_dir = places.data.clone();
-    let spawn = yarngo_synthesis::engine::Spawn { runtime, data_dir: data_dir.clone() };
+    let spawn = ready.spawn(&data_dir);
     let database = data_dir.join("yarngo.db");
     EngineHandle::spawn_backend(move || {
         Ok(Box::new(yarngo_synthesis::engine::DurableEngine::open(
             &database, &data_dir, spawn,
         )?))
     })
-}
-
-/// Which runtime the person picked last time, if they picked one.
-fn remembered_runtime(data_dir: &std::path::Path) -> Option<String> {
-    let store = yarngo_store::Store::open(&data_dir.join("yarngo.db")).ok()?;
-    store.preference(yarngo_store::preferences::RUNTIME).ok().flatten()
 }
 
 /// Remember one, so the next start makes the same choice.
@@ -358,18 +360,19 @@ impl VoiceStudio {
 
     /// Engine startup loads models from disk, so it happens off the main thread.
     fn start_engine(&mut self, cx: &mut Context<Self>) {
-        // Which runtimes are here is now a question about what is on disk,
-        // rather than about one interpreter at one path.
-        // A runtime installed before descriptors existed is still a runtime;
-        // this is what makes it visible where every other one is.
-        runtime::describe_installed();
+        // Whether a runtime answers is a fact in the database, put in order
+        // first: debris from a crashed install swept, an install that predates
+        // versions adopted where it lies, a broken active version repointed.
         let places = speech_engine::paths::places();
-        let available = speech_engine::runtimes::discover(&places)
-            .iter()
-            .any(|runtime| runtime.available());
+        let available = yarngo_store::Store::open(&places.data.join("yarngo.db"))
+            .map(|store| {
+                yarngo_synthesis::runtimes::startup(&store, &places, runtime::pack());
+                !yarngo_synthesis::runtimes::all_active(&store, &places).is_empty()
+            })
+            .unwrap_or(false);
 
         // A first run has none. Offer to install rather than failing.
-        if !available && !runtime::is_installed() {
+        if !available {
             self.status = Status::Installing {
                 step: "The speech engine is not installed yet.".into(),
                 fraction: 0.0,
@@ -1539,9 +1542,17 @@ impl VoiceStudio {
 
         let (tx, rx) = std::sync::mpsc::channel::<runtime::Progress>();
         std::thread::spawn(move || {
-            runtime::install_pack(pack, archive, |p| {
+            let places = speech_engine::paths::places();
+            let store = match yarngo_store::Store::open(&places.data.join("yarngo.db")) {
+                Ok(store) => store,
+                Err(err) => {
+                    let _ = tx.send(runtime::Progress::Failed(format!("{err}")));
+                    return;
+                }
+            };
+            let _ = yarngo_synthesis::runtimes::install(&store, &places, pack, archive, &mut |p| {
                 let _ = tx.send(p);
-            })
+            });
         });
 
         cx.spawn(async move |this, cx| {
@@ -1946,7 +1957,14 @@ impl VoiceStudio {
         pack: &'static runtime::Pack,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let here = pack.installed();
+        let here = {
+            let places = speech_engine::paths::places();
+            yarngo_store::Store::open(&places.data.join("yarngo.db"))
+                .map(|store| {
+                    yarngo_synthesis::runtimes::active(&store, &places, pack.id).is_some()
+                })
+                .unwrap_or(false)
+        };
         // Under way, not merely "the setup screen is showing": this screen is
         // reached by the status being Installing, so treating that as busy hid
         // the button that starts it.

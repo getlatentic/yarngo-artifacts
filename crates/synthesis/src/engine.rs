@@ -55,6 +55,9 @@ const RATE_FROM_TAKES_LONGER_THAN: f64 = 3.0;
 pub struct Spawn {
     pub runtime: Descriptor,
     pub data_dir: PathBuf,
+    /// Which installed version this descriptor came from, for provenance.
+    /// `None` for arrangements that predate versions, such as `YARNGO_PYTHON`.
+    pub version: Option<String>,
 }
 
 impl Spawn {
@@ -86,6 +89,15 @@ impl Spawn {
             .initialize(PROMPT)
             .map_err(|e| EngineError::Transport(format!("{e}")))?;
         Ok((connection, events, Capabilities::from_handshake(&hello)))
+    }
+
+    /// Start, take the handshake, stop. What an install runs before marking a
+    /// version ready: proof that an engine at this exact path answers this
+    /// protocol, with nothing else of the application around it.
+    pub fn probe(&self) -> Result<Capabilities, EngineError> {
+        let (mut connection, _events, capabilities) = self.start()?;
+        let _ = connection.kill();
+        Ok(capabilities)
     }
 }
 
@@ -205,8 +217,11 @@ impl DurableEngine {
         progress.follow(events);
         let run = stamp();
         let session = format!("session-{run}");
+        let provenance = spawn.version.as_deref().map(|version| {
+            (spawn.runtime.id.as_str(), version, speech_engine::catalogue::ENGINE_API)
+        });
         store
-            .open_session(&session, "mlx", &now())
+            .open_session(&session, &spawn.runtime.id, &now(), provenance)
             .map_err(store_error)?;
         let mut engine = Self {
             store,
@@ -396,7 +411,7 @@ fn store_error(error: yarngo_store::StoreError) -> EngineError {
 
 /// The same format the store already holds, in local time, so a clip made today
 /// sorts against one made last month rather than against a different clock.
-fn now() -> String {
+pub(crate) fn now() -> String {
     chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string()
 }
 

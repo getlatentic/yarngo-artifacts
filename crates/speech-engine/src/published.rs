@@ -98,19 +98,29 @@ fn write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 
 /// Where trust starts for this build: the root role inside the bundle, and the
 /// address the repository is served from.
+///
+/// A test may substitute the root — and only a test: the override is read
+/// exclusively under `YARNGO_TEST_MODE`, which the data layer already refuses
+/// to mix with a real installation. In production the root ships inside the
+/// signed bundle or there is no root, and `YARNGO_REPOSITORY` alone redirects
+/// nothing because a repository the shipped root did not sign does not open.
 fn anchor() -> Result<Anchor, String> {
-    let root = paths::resource(ROOT).ok_or_else(|| {
-        "no root role ships with this build, so nothing is published to it".to_string()
-    })?;
+    let root = match test_root() {
+        Some(substituted) => substituted,
+        None => paths::resource(ROOT).ok_or_else(|| {
+            "no root role ships with this build, so nothing is published to it".to_string()
+        })?,
+    };
     let root = std::fs::read(&root).map_err(|e| format!("cannot read {}: {e}", root.display()))?;
 
     at(
         &base(),
         root,
-        // Beside the runtime rather than inside it: being handed last year's
-        // metadata again is only visible to something that remembers this
-        // year's, and reinstalling a runtime must not forget.
-        paths::data_dir().join("metadata"),
+        // Trust state, not cache: being handed last year's metadata again is
+        // only visible to something that remembers this year's. It lives in
+        // its own tree so that no runtime install, removal or reinstall ever
+        // touches it — forgetting is what a rollback needs.
+        paths::data_dir().join("trust").join("runtime-repository"),
     )
 }
 
@@ -128,6 +138,11 @@ pub fn at(base: &str, root: Vec<u8>, datastore: std::path::PathBuf) -> Result<An
         targets: base.join("targets/").map_err(|e| e.to_string())?,
         datastore,
     })
+}
+
+fn test_root() -> Option<std::path::PathBuf> {
+    std::env::var_os("YARNGO_TEST_MODE")?;
+    std::env::var_os("YARNGO_TRUST_ROOT").map(std::path::PathBuf::from)
 }
 
 /// Overridable so a release can be staged somewhere else before it is

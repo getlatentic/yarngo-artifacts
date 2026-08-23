@@ -17,9 +17,9 @@ pub mod published;
 pub mod runtime;
 pub mod runtimes;
 pub mod trust;
+pub mod unpack;
 
 pub use handle::EngineHandle;
-pub use paths::EnginePaths;
 
 /// A model the user can pick between. Only commercially licensed models belong
 /// here; anything under non-commercial terms must never reach the catalogue.

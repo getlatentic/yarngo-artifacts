@@ -128,21 +128,28 @@ pub fn python() -> PathBuf {
     PathBuf::from("/usr/bin/python3")
 }
 
-/// Lay out a stand-in runtime the way an install leaves one.
-///
-/// The environment with an interpreter in it, the runtime's own directory with
-/// its engine, and a descriptor beside it — so a test goes through the same
-/// discovery and the same validation the application does, rather than
-/// constructing a descriptor no file ever had to satisfy.
-pub fn install(root: &Path, id: &str, python: &Path, behaviour: &str, without: &[&str]) {
-    let own = root.join("runtimes").join(id);
-    std::fs::create_dir_all(&own).expect("runtime directory");
-    let script = limited(&own, behaviour, without);
-    std::fs::rename(&script, own.join("engine.py")).expect("engine.py");
+/// The version name every stand-in install wears. One is enough: these tests
+/// are about the engine's behaviour, not about upgrades.
+pub const VERSION: &str = "test";
 
-    // The interpreter where the application installs one, linked rather than
-    // copied: what matters is that it is inside the environment.
-    let bin = root.join("runtime").join(id).join(".venv").join("bin");
+/// Lay out a stand-in runtime the way an install leaves one: a version
+/// directory holding the engine, the descriptor, and an environment with an
+/// interpreter in it — so a test goes through the same loading and the same
+/// validation the application does, rather than constructing a descriptor no
+/// file ever had to satisfy.
+///
+/// The database rows that make it *the* runtime are the caller's to write,
+/// because they live in the application's store and this crate stays beneath
+/// it.
+pub fn install(root: &Path, id: &str, python: &Path, behaviour: &str, without: &[&str]) {
+    let home = home(root, id);
+    std::fs::create_dir_all(&home).expect("runtime directory");
+    let script = limited(&home, behaviour, without);
+    std::fs::rename(&script, home.join("engine.py")).expect("engine.py");
+
+    // The interpreter inside the version's own environment, linked rather
+    // than copied: what matters is that it is where the descriptor points.
+    let bin = home.join(".venv").join("bin");
     std::fs::create_dir_all(&bin).expect("bin");
     let linked = bin.join("python3");
     let _ = std::fs::remove_file(&linked);
@@ -150,7 +157,7 @@ pub fn install(root: &Path, id: &str, python: &Path, behaviour: &str, without: &
     std::os::unix::fs::symlink(python, &linked).expect("interpreter");
 
     std::fs::write(
-        own.join("runtime.json"),
+        home.join("runtime.json"),
         serde_json::json!({
             "schema": 1,
             "id": id,
@@ -164,9 +171,14 @@ pub fn install(root: &Path, id: &str, python: &Path, behaviour: &str, without: &
     .expect("descriptor");
 }
 
+/// Where [`install`] puts the runtime's version directory.
+pub fn home(root: &Path, id: &str) -> PathBuf {
+    root.join("runtimes").join(id).join(VERSION)
+}
+
 /// The stand-in resolves its marker and its records beside itself, which is
-/// the runtime's own directory once it is installed. Named here so a test does
-/// not have to know that layout.
+/// the version directory once it is installed. Named here so a test does not
+/// have to know that layout.
 pub fn beside(root: &Path, id: &str, name: &str) -> PathBuf {
-    root.join("runtimes").join(id).join(name)
+    home(root, id).join(name)
 }

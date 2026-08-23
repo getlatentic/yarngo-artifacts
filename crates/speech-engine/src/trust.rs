@@ -88,9 +88,13 @@ impl Trusted {
 
     /// A large target, such as a runtime archive, written as it arrives.
     ///
-    /// Bytes reach the file before the digest over the whole stream can be
-    /// checked, so the file is only worth anything once this has returned
-    /// `Ok` — the same rule that already governs unpacking.
+    /// The stream hands bytes over before the digest across the whole of it
+    /// can be checked, and TUF's client says plainly not to use them if the
+    /// stream then fails. So nothing appears at `into` until the stream has
+    /// ended and every check has passed: the bytes accumulate in a temporary
+    /// file the operating system named, and a failure anywhere drops it. A
+    /// crash leaves at most an unreferenced temporary, never a plausible
+    /// archive at the destination.
     pub fn fetch(
         &self,
         target: &str,
@@ -102,7 +106,17 @@ impl Trusted {
         use std::pin::Pin;
 
         let name = TargetName::new(target).map_err(|e| e.to_string())?;
-        self.executor.block_on(async {
+        let beside = into
+            .parent()
+            .ok_or_else(|| format!("{} has nowhere to live", into.display()))?;
+        std::fs::create_dir_all(beside)
+            .map_err(|e| format!("could not prepare {}: {e}", beside.display()))?;
+        // In the destination's own directory, so promoting it is a rename on
+        // one filesystem rather than a copy that could be caught half-done.
+        let holding = tempfile::NamedTempFile::new_in(beside)
+            .map_err(|e| format!("could not write beside {}: {e}", into.display()))?;
+
+        let written = self.executor.block_on(async {
             let mut stream: Pin<Box<dyn Stream<Item = _> + Send + Sync>> = Box::pin(
                 self.repository
                     .read_target(&name)
@@ -110,9 +124,7 @@ impl Trusted {
                     .map_err(|e| format!("{e}"))?
                     .ok_or_else(|| format!("{target} is not in this repository"))?,
             );
-            let mut file = std::fs::File::create(into)
-                .map_err(|e| format!("could not write {}: {e}", into.display()))?;
-
+            let mut file = holding.as_file();
             let mut written = 0u64;
             while let Some(chunk) = futures_util::StreamExt::next(&mut stream).await {
                 let chunk = chunk.map_err(|e| format!("{e}"))?;
@@ -123,8 +135,15 @@ impl Trusted {
             }
             file.flush()
                 .map_err(|e| format!("could not write {}: {e}", into.display()))?;
-            Ok(written)
-        })
+            Ok::<u64, String>(written)
+        })?;
+
+        // Only a stream that ended cleanly reaches this line, and ending
+        // cleanly is what "the hashes matched" means to the client.
+        holding
+            .persist(into)
+            .map_err(|e| format!("could not finish {}: {e}", into.display()))?;
+        Ok(written)
     }
 
     /// The targets this repository vouches for, for diagnosis when a name we

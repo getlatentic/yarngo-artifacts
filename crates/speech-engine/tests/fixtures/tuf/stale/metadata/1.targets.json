@@ -5,10 +5,16 @@
     "version": 1,
     "expires": "2020-01-01T00:00:00Z",
     "targets": {
-      "mlx-1.0.0.pyproject.toml": {
-        "length": 49,
+      "mlx-1.0.0.uv.lock": {
+        "length": 39,
         "hashes": {
-          "sha256": "ed477ef0d52c8ca246c7d702872f2768d71df708483d21c5f216e5504e60ac4e"
+          "sha256": "df61c198e4a2c40d5504c0060fb08ba7de65c16803de26c5367cdb7d5ec8041f"
+        }
+      },
+      "mlx-1.0.0.engine.tar.gz": {
+        "length": 675,
+        "hashes": {
+          "sha256": "497dcfe0a48c3a67eea819013c943728cd59758d64cdb6f41fb8c592ea63a881"
         }
       },
       "catalogue.json": {
@@ -17,22 +23,16 @@
           "sha256": "479c6638e16d8e5dd371b2a7acfca8a7797c952e60e3c449377b16dad98dfaa6"
         }
       },
-      "mlx-1.0.0.engine.tar.gz": {
-        "length": 367,
-        "hashes": {
-          "sha256": "3bd3cd7253f3719451af129e4c81be2bbd74da682cf154630477d2ce9d8f3902"
-        }
-      },
-      "mlx-1.0.0.uv.lock": {
-        "length": 39,
-        "hashes": {
-          "sha256": "df61c198e4a2c40d5504c0060fb08ba7de65c16803de26c5367cdb7d5ec8041f"
-        }
-      },
       "yarngo-runtime-spike.tar.gz": {
         "length": 51,
         "hashes": {
           "sha256": "d18a1b367b6862d384bbe9db81551d5cb1a3eeef6386a2a5e329a07fdf6d68d8"
+        }
+      },
+      "mlx-1.0.0.pyproject.toml": {
+        "length": 49,
+        "hashes": {
+          "sha256": "ed477ef0d52c8ca246c7d702872f2768d71df708483d21c5f216e5504e60ac4e"
         }
       }
     },
@@ -43,8 +43,8 @@
   },
   "signatures": [
     {
-      "keyid": "26af7801dd9a1f802f7e965e18d1d168286e7e3a57c4456f34e59929fc1fca01",
-      "sig": "9dd4f1c49294f305005a1d5afe296a8bb152de35391f63a6fd9b7fc8da4879f49d08ce4c4e7201138628dff9c68e2a041ecfb1a856bd00c0d5b46cd980c41496514a136deeadbdf1c6a9f765cc3ca68149b2ade9e18de3c8e67d24941d85eca7000e2789d4d0770d10b0096e457bd392ff0f72895f6669e1f8de63f65b3875c9e501557d80bcbd0fcdacc56367f424c3d2af940850ffd3fe511feb73e0f215e7e18eafd546798c07229b1d2b9e4882ecdf259722c9adc50212e952ba6d7aaf63416740322b2f23742496da15fef5a46afa7800a02d535ec5675fbeeecb762db06f6d4f0b3d8eb0cd8c45db45205858d92d4a7701d1053a85644d88ebf887eb5f"
+      "keyid": "f93d931e330081712ef86181ce34595fe78689e1dc4b0669ae7c99865e75811b",
+      "sig": "795c9874b0c7cc37b00dcdc92bf698c1011077394182d963f8ac116811fe2765d4f6f9411f67bd4e73cb145c8771ed12db386025632b0d1251da11bd1fbd9ffd7d173df6a700719a2c140cd0b022a6f1da924b0800bb672983d28f5097e672434ccb8a015278cb2f22bfde232403495cda393012d726211ae607864917eb05e416af0da9af519ebff6745c51bb812a504ad3c68e84f37126ea8a90ef0ddceab0f455516a0ad4e9ee07d89e84b434917648215735339420fbc3beeb35f8a10544fb5b61e91944eec821bbecd99f540e3e24ae987ab12341854eba6e6c8acc2152382c1b58da91328cca9f50303dfe1687e19b7123f8249a74c557be33fc6889df"
     }
   ]
 }

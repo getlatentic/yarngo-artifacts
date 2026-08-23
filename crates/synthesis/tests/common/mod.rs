@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use speech_engine::{EngineError, EngineHandle, Synthesis, SynthesisRequest};
 use yarngo_store::import::{Legacy, LegacyClip, LegacyConsent, LegacyVoice};
 use yarngo_store::Store;
-use yarngo_synthesis::engine::{DurableEngine, Spawn};
+use yarngo_synthesis::engine::DurableEngine;
 use yarngo_testing::{standin, Sandbox};
 
 pub const PATIENCE: Duration = Duration::from_secs(30);
@@ -94,17 +94,25 @@ pub fn engine_without(
     standin::install(sandbox.root(), "stand-in", &standin::python(), behaviour, without);
     let places = speech_engine::runtimes::Places {
         data: sandbox.root().to_path_buf(),
-        runtime: sandbox.root().join("runtime"),
         resources: sandbox.root().join("resources"),
     };
-    // Found and validated the way the application finds one, rather than
-    // handed a descriptor no file ever had to satisfy.
-    let runtime = speech_engine::runtimes::choose(
-        &speech_engine::runtimes::discover(&places),
-        Some("stand-in"),
-    )
-    .expect("the stand-in runtime was not usable");
-    let spawn = Spawn { runtime, data_dir: sandbox.root().to_path_buf() };
+    // Registered and chosen the way the application chooses one — rows in the
+    // store, then the active version — rather than handed a descriptor no
+    // record ever vouched for.
+    {
+        let store = Store::open(&sandbox.database()).expect("store");
+        store
+            .runtime_installing("stand-in", standin::VERSION, 1, "t0")
+            .expect("installing");
+        store.runtime_ready("stand-in", standin::VERSION, "t0").expect("ready");
+        store.activate_runtime("stand-in", standin::VERSION, "t0").expect("activate");
+    }
+    let ready = {
+        let store = Store::open(&sandbox.database()).expect("store");
+        yarngo_synthesis::runtimes::active(&store, &places, "stand-in")
+            .expect("the stand-in runtime was not usable")
+    };
+    let spawn = ready.spawn(sandbox.root());
     let database = sandbox.database();
     let data = sandbox.root().to_path_buf();
     Arc::new(

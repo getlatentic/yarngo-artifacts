@@ -1,0 +1,50 @@
+{
+  "signed": {
+    "_type": "targets",
+    "spec_version": "1.0.0",
+    "version": 1,
+    "expires": "2125-01-01T00:00:00Z",
+    "targets": {
+      "catalogue.json": {
+        "length": 416,
+        "hashes": {
+          "sha256": "479c6638e16d8e5dd371b2a7acfca8a7797c952e60e3c449377b16dad98dfaa6"
+        }
+      },
+      "mlx-1.0.0.engine.tar.gz": {
+        "length": 654,
+        "hashes": {
+          "sha256": "9f4eaff0f3c8a791ff6d20f09645af5c9fa037ec7c82e6f212c8cf01b99eac75"
+        }
+      },
+      "yarngo-runtime-spike.tar.gz": {
+        "length": 51,
+        "hashes": {
+          "sha256": "d18a1b367b6862d384bbe9db81551d5cb1a3eeef6386a2a5e329a07fdf6d68d8"
+        }
+      },
+      "mlx-1.0.0.pyproject.toml": {
+        "length": 49,
+        "hashes": {
+          "sha256": "ed477ef0d52c8ca246c7d702872f2768d71df708483d21c5f216e5504e60ac4e"
+        }
+      },
+      "mlx-1.0.0.uv.lock": {
+        "length": 39,
+        "hashes": {
+          "sha256": "df61c198e4a2c40d5504c0060fb08ba7de65c16803de26c5367cdb7d5ec8041f"
+        }
+      }
+    },
+    "delegations": {
+      "keys": {},
+      "roles": []
+    }
+  },
+  "signatures": [
+    {
+      "keyid": "bae82b3f4e076eb7eb1560f850a5f5099da90cb1617dc1d01e533867b5b872d8",
+      "sig": "9657ef245437894f6d5f6c1e546886fd8eb98f2443da6cd2892c05080ffad72b010b71d87b4cb2f57e7595192003aa88cf8cc034b8bcdce6b96ff38ce479a32cc107373ca35750eefe6fe05490e40ea82f8f5fc38a2ddf69ffa5a0cc71ee702d41d1e038c570109990bbe113478f76c31c3e6dae32de99c6916b9fcfefd80e68fe1374887b049f05ead8190fed1a852104b61aed1f18019d469b776769e95d03da0b643b9ad22fc0b9927bbfddb3781b88e711e6942f37934dd689b7e67aa7bd92010dc65318151457a899ff4bed2e768f648dfa51eecc2bbc542367ccf2539c205f7e074d3852274696d3b361b832fb3bf2323f183f00bb4d5a648881e2ff41"
+    }
+  ]
+}

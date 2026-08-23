@@ -5,28 +5,28 @@
     "version": 1,
     "expires": "2125-01-01T00:00:00Z",
     "targets": {
-      "mlx-1.0.0.engine.tar.gz": {
-        "length": 369,
-        "hashes": {
-          "sha256": "ad037f505163b493b8ce5c648ebc2d831abc4b535183227f49c31aee7648f3c0"
-        }
-      },
       "yarngo-runtime-spike.tar.gz": {
         "length": 51,
         "hashes": {
           "sha256": "d18a1b367b6862d384bbe9db81551d5cb1a3eeef6386a2a5e329a07fdf6d68d8"
         }
       },
-      "mlx-1.0.0.pyproject.toml": {
-        "length": 49,
-        "hashes": {
-          "sha256": "ed477ef0d52c8ca246c7d702872f2768d71df708483d21c5f216e5504e60ac4e"
-        }
-      },
       "catalogue.json": {
         "length": 416,
         "hashes": {
           "sha256": "479c6638e16d8e5dd371b2a7acfca8a7797c952e60e3c449377b16dad98dfaa6"
+        }
+      },
+      "mlx-1.0.0.engine.tar.gz": {
+        "length": 674,
+        "hashes": {
+          "sha256": "8032f795ee3298245f99b139a6748989634cbe10f3a0447d160853bf1263a70f"
+        }
+      },
+      "mlx-1.0.0.pyproject.toml": {
+        "length": 49,
+        "hashes": {
+          "sha256": "ed477ef0d52c8ca246c7d702872f2768d71df708483d21c5f216e5504e60ac4e"
         }
       },
       "mlx-1.0.0.uv.lock": {
@@ -43,8 +43,8 @@
   },
   "signatures": [
     {
-      "keyid": "627ecf7caadfe3dc3c26c4f94dfa980b7f29ad9270f9b5e3512fe6b4bcae3f4d",
-      "sig": "9e6eb88b01b39a4b36125bda3357775570e691c2fdb7cedb3b2e498f7c1ed70527ccf0865f85a14a791d9d2fefdbac4983247ecd943725d66f3eef53815fc0c9e3946717a581cd01c66e9b6f7824f5639e753dc752791dc50837d6cb4cc76f5c2a39945e8ab5f93afff619576be6d08fa6892de491973ab2e92e09a5e165129750628e37459ab23e39fe36bd93442d2ef13eb25f3419a8150ead0206edfba38b376af7e5988cdd9317d53dfa19a035a7c59215522e88615abe5c6403010d14a52af57053cbe57f54a9957c2e9f892156f6fb5923bfc706514b0bedd15232b76313bf83dc1b9d9ad03c71bc5e2b17a185c40372422facd17727dcad88590c54ea"
+      "keyid": "af835b0b4a50a6fb229cedef95df8c768187cd3278d8932b7827c46b001ca2e7",
+      "sig": "765c818e8962d66ea55965ea7c4bf70f610ee0f617e4c455d35a5355c6cf519b38d7c8bddd31a461459a7b1333637782c313f2cdbf9f6abe3695c4576fd8ce7ed7e635fcdfc11f3c5f5e3e14b96ab5eb2a9a6a706cd48963437f66eaa2f609b04567682322a4b98593f62d05a72aa3f24b47dda6486af1bddbf5d62d30c75ae647d81a412568da61fb3c6721a5b61f22327e7b6ad494d1e8d0bb4142978826b89912fe985df2ff064f416064d939d8b06131b5be8923e566e57aa87bb337a0a9d5ea5ad43360ccc77a301163f4bd86f2e21e9e741bcdca411af2853a306409848bf3a15240411fcc41ffbfee39f65876e0424004f91eb79f4336cf3a7a01ae5b"
     }
   ]
 }

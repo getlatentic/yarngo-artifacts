@@ -5,12 +5,6 @@
     "version": 2,
     "expires": "2125-01-01T00:00:00Z",
     "targets": {
-      "mlx-1.0.0.uv.lock": {
-        "length": 39,
-        "hashes": {
-          "sha256": "df61c198e4a2c40d5504c0060fb08ba7de65c16803de26c5367cdb7d5ec8041f"
-        }
-      },
       "catalogue.json": {
         "length": 416,
         "hashes": {
@@ -23,16 +17,22 @@
           "sha256": "d18a1b367b6862d384bbe9db81551d5cb1a3eeef6386a2a5e329a07fdf6d68d8"
         }
       },
+      "mlx-1.0.0.engine.tar.gz": {
+        "length": 675,
+        "hashes": {
+          "sha256": "faf256b2f14316b3542afc05ca93613f562ce0e7b0ca7dc973abfe877070a473"
+        }
+      },
+      "mlx-1.0.0.uv.lock": {
+        "length": 39,
+        "hashes": {
+          "sha256": "df61c198e4a2c40d5504c0060fb08ba7de65c16803de26c5367cdb7d5ec8041f"
+        }
+      },
       "mlx-1.0.0.pyproject.toml": {
         "length": 49,
         "hashes": {
           "sha256": "ed477ef0d52c8ca246c7d702872f2768d71df708483d21c5f216e5504e60ac4e"
-        }
-      },
-      "mlx-1.0.0.engine.tar.gz": {
-        "length": 366,
-        "hashes": {
-          "sha256": "a249cf27027cd6098f187c13854a66c5a03db948aedfb6eb070d043bb56043c9"
         }
       }
     },
@@ -43,8 +43,8 @@
   },
   "signatures": [
     {
-      "keyid": "627ecf7caadfe3dc3c26c4f94dfa980b7f29ad9270f9b5e3512fe6b4bcae3f4d",
-      "sig": "2b3aa59e1d7bb0e6e2193daff8ba0f3f30ced5e9b1c8e87b2d41f613acccdda65f7da2b65455950e602e3125faf2fcffcbb0775cad244fb4b9594bf025b082d95ff21ad1940ed368b068ce33eb8d7e9faf29e2aaadee16c7493ff3421022ffefe275018c2ce3faa209aefb290b181bbc006c19b2e78864d01ea71b12f2f503af5b585b91b8becc35e9e6d6b9d7e1d6c50c8cec49376f5bce6d68a2e00e81424eedc5abd5814b2ed432c01d41d3b7e7b5074a3c8a192099c06b4d85bb6f8175ef426d70f16e07acc719a97b568d30ef744d18203e95cd8feded9782dec53d9d43abbcddc872aa971f3a67ea2c6ac2dd5c2ba479899c96a60f875e4be50c89c913"
+      "keyid": "af835b0b4a50a6fb229cedef95df8c768187cd3278d8932b7827c46b001ca2e7",
+      "sig": "10aa8fb7d20f7cde3ae059ae1ea514754d79f94146e8ef4909d4083c88951e1f04971732b94c948d0df717074e5cd73e338ebeae8f531cb29405f71b3563bcf178c99e96bccc6f3552489658c45ebdf692fd9ef1f8e54df3b0303744ab5612e851668bf449bd75260fab8354b9439180ee0025d9da48ef54260d6888523fb9ef926d17d573e52453814550f212377c3984de2c6f9118612f89a4299e6665185f41f18fa1231d99e487a088d8b89c03d3972896e8f242bbbd076aa9e3cc98dbeff7ad136d3cb2e271216276d410cda5fbcc17fb877a38483651bdd3ec14add69ba52113eed0cb65f35899f0681791cbf4f8e7ab2e36c8f273f481adc698fc3506"
     }
   ]
 }

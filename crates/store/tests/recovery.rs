@@ -26,7 +26,7 @@ fn a_job_running_when_its_engine_died_comes_back_and_is_finished_by_another() {
     let (mut store, path) = on_disk(&dir, "recovery.db");
 
     // A session, a job, and an attempt at it.
-    store.open_session("session-1", "mlx", &at(0)).expect("session");
+    store.open_session("session-1", "mlx", &at(0), None).expect("session");
     let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
     store.insert_job(&job, Some("clip-1"), &at(0)).expect("insert");
     job.dispatch("exec-1");
@@ -53,7 +53,7 @@ fn a_job_running_when_its_engine_died_comes_back_and_is_finished_by_another() {
     assert_eq!(job.current_execution(), None);
 
     // A second engine takes it. Same job, second attempt.
-    store.open_session("session-2", "mlx", &at(4)).expect("session");
+    store.open_session("session-2", "mlx", &at(4), None).expect("session");
     job.dispatch("exec-2");
     let mut second = Execution::started("exec-2", "job-1", "session-2");
     store.save_progress(&job, Some(&second), &at(5)).expect("redispatch");
@@ -94,7 +94,7 @@ fn a_job_being_cancelled_when_its_engine_died_is_cancelled_not_requeued() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, path) = on_disk(&dir, "cancel.db");
 
-    store.open_session("session-1", "mlx", &at(0)).expect("session");
+    store.open_session("session-1", "mlx", &at(0), None).expect("session");
     let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
     store.insert_job(&job, Some("clip-1"), &at(0)).expect("insert");
     job.dispatch("exec-1");
@@ -133,7 +133,7 @@ fn work_under_a_live_session_is_left_alone() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, _) = on_disk(&dir, "live.db");
 
-    store.open_session("session-1", "mlx", &at(0)).expect("session");
+    store.open_session("session-1", "mlx", &at(0), None).expect("session");
     let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
     store.insert_job(&job, None, &at(0)).expect("insert");
     job.dispatch("exec-1");
@@ -155,7 +155,7 @@ fn reconciling_twice_settles_nothing_the_second_time() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, _) = on_disk(&dir, "twice.db");
 
-    store.open_session("session-1", "mlx", &at(0)).expect("session");
+    store.open_session("session-1", "mlx", &at(0), None).expect("session");
     let mut job = Job::queued("job-1", DurableJobKind::VoiceDelete);
     store.insert_job(&job, Some("voice-1"), &at(0)).expect("insert");
     job.dispatch("exec-1");
@@ -175,7 +175,7 @@ fn a_completed_job_survives_its_session_ending() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, _) = on_disk(&dir, "done.db");
 
-    store.open_session("session-1", "mlx", &at(0)).expect("session");
+    store.open_session("session-1", "mlx", &at(0), None).expect("session");
     let mut job = Job::queued("job-1", DurableJobKind::Synthesis);
     store.insert_job(&job, None, &at(0)).expect("insert");
     job.dispatch("exec-1");
@@ -201,7 +201,7 @@ fn a_completed_job_survives_its_session_ending() {
 fn an_execution_cannot_name_a_job_that_does_not_exist() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, _) = on_disk(&dir, "fk.db");
-    store.open_session("session-1", "mlx", &at(0)).expect("session");
+    store.open_session("session-1", "mlx", &at(0), None).expect("session");
 
     let orphan = Execution::started("exec-1", "job-that-never-was", "session-1");
     let job = Job::queued("job-that-never-was", DurableJobKind::Synthesis);

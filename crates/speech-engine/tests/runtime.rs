@@ -67,16 +67,22 @@ fn fake_archive(dir: &Path, executable: bool) -> std::path::PathBuf {
 }
 
 #[test]
-fn the_interpreter_is_the_pack_environment_not_the_raw_unpack() {
-    let runtime_dir = Path::new("/tmp/anywhere");
-    let python = runtime::interpreter(runtime_dir);
-    assert!(python.starts_with(runtime_dir));
+fn the_interpreter_is_the_versions_environment_not_the_raw_unpack() {
+    let data = Path::new("/tmp/anywhere");
+    let home = data.join("runtimes/mlx/1.0.0");
+    let python = runtime::venv_python(&home);
+    assert!(python.starts_with(&home), "{python:?}");
     assert!(python.ends_with("python3") || python.ends_with("python.exe"), "{python:?}");
-    // The sidecar runs inside the pack's environment, built from the lock —
-    // not the interpreter the tarball unpacked, which has no packages in it.
+    // The sidecar runs inside the version's own environment, built from the
+    // lock — not the interpreter the tarball unpacked, which has no packages
+    // in it and is shared between versions.
     assert!(python.to_string_lossy().contains(".venv"), "{python:?}");
-    assert!(python.to_string_lossy().contains(runtime::MLX.manifest), "{python:?}");
-    assert_ne!(python, runtime::base_interpreter(runtime_dir));
+    let base = runtime::interpreter_base(data, &runtime::MLX);
+    assert_ne!(python, base);
+    assert!(
+        base.starts_with(data.join("interpreters").join(runtime::MLX.python)),
+        "the base interpreter is keyed by its pin, so two pins never collide: {base:?}"
+    );
 }
 
 #[test]
@@ -152,18 +158,11 @@ fn a_runtime_from_the_old_layout_is_cleared_out() {
     Command::new("chmod").arg("+x").arg(legacy_bin.join("python3")).status().unwrap();
     std::fs::create_dir_all(scratch.path().join("python").join("lib")).unwrap();
 
-    // An unsupported host refuses before this runs, so only assert the removal
-    // where the installer actually gets that far.
-    let source = tempfile::tempdir().unwrap();
-    let archive = fake_archive(source.path(), true);
-    runtime::install_from(Some(archive), |_| {});
-
-    if runtime::host_supported().is_ok() {
-        assert!(
-            !scratch.path().join("python").exists(),
-            "the pre-pack runtime should have been removed"
-        );
-    }
+    runtime::remove_pre_pack_runtime(scratch.path());
+    assert!(
+        !scratch.path().join("python").exists(),
+        "the pre-pack runtime should have been removed"
+    );
 }
 
 #[test]
@@ -176,10 +175,7 @@ fn a_pack_runtime_is_left_alone() {
     std::fs::write(legacy_bin.join("python3"), "#!/bin/sh\nexit 0\n").unwrap();
     std::fs::create_dir_all(scratch.path().join("interpreter")).unwrap();
 
-    let source = tempfile::tempdir().unwrap();
-    let archive = fake_archive(source.path(), true);
-    runtime::install_from(Some(archive), |_| {});
-
+    runtime::remove_pre_pack_runtime(scratch.path());
     assert!(
         scratch.path().join("python").exists(),
         "a directory beside a pack layout is not ours to delete"
@@ -221,160 +217,153 @@ fn a_tampered_uv_download_is_refused() {
 
 #[test]
 fn production_never_borrows_the_machines_python() {
-    // The PATH probe is gone deliberately. Using whatever `python3` resolved to
-    // meant two people ran different versions of the engine and its whole
-    // dependency tree — which is what the committed lock exists to prevent.
-    // It also risked Apple's command-line-tools dialog appearing over our own
-    // setup screen, since a bare /usr/bin/python3 is a stub on a Mac without
-    // them.
-    let _scratch = Scratch::new();
-    unsafe { std::env::remove_var("YARNGO_PYTHON") };
+    // Using whatever `python3` resolved to meant two people ran different
+    // versions of the engine and its whole dependency tree — which is what the
+    // committed lock exists to prevent. It also risked Apple's
+    // command-line-tools dialog appearing over our own setup screen, since a
+    // bare /usr/bin/python3 is a stub on a Mac without them. So the base
+    // interpreter is a fixed place under our data directory and nothing else.
+    let base = runtime::interpreter_base(Path::new("/data"), &runtime::MLX);
+    assert!(base.starts_with("/data/interpreters"), "{base:?}");
     assert!(
-        runtime::existing_interpreter().is_none(),
-        "with no explicit interpreter named, nothing on this machine counts"
+        base.to_string_lossy().contains(runtime::MLX.python),
+        "unpinned location: {base:?}"
     );
 }
 
 #[test]
-fn nothing_installed_is_not_installed() {
+fn nothing_installed_is_not_proven() {
     let scratch = Scratch::new();
-    assert!(!runtime::is_installed(), "an empty {:?} is not an install", scratch.path());
+    assert!(
+        !runtime::MLX.proven_in(scratch.path()),
+        "an empty {:?} is not an install",
+        scratch.path()
+    );
 }
 
 #[test]
-fn an_interpreter_alone_is_not_installed() {
+fn an_interpreter_alone_is_not_proven() {
     // The check is deliberately two-part: a half-finished install leaves the
     // interpreter without the speech package, and calling that "installed"
     // would fail later, at the first synthesis, with a worse message.
     let scratch = Scratch::new();
-    let bin = scratch.path().join("python").join("bin");
+    let bin = scratch.path().join(".venv").join("bin");
     std::fs::create_dir_all(&bin).unwrap();
     std::fs::write(bin.join("python3"), "#!/bin/sh\nexit 1\n").unwrap();
     Command::new("chmod").arg("+x").arg(bin.join("python3")).status().unwrap();
 
-    assert!(!runtime::is_installed(), "an interpreter without mlx_speech is not an install");
+    assert!(
+        !runtime::MLX.proven_in(scratch.path()),
+        "an interpreter without mlx_speech is not an install"
+    );
+    // And one that answers the probe is.
+    std::fs::write(bin.join("python3"), "#!/bin/sh\nexit 0\n").unwrap();
+    Command::new("chmod").arg("+x").arg(bin.join("python3")).status().unwrap();
+    assert!(runtime::MLX.proven_in(scratch.path()));
 }
 
 #[test]
-fn a_supplied_archive_is_unpacked_and_left_alone() {
+fn a_supplied_archive_that_is_not_the_pinned_one_is_refused() {
+    // A hand-carried archive claims to be the same bytes the installer would
+    // have fetched, so it is checked against the same pin — the interpreter
+    // executes everything else, and "the user chose the file" is not a
+    // provenance.
     let scratch = Scratch::new();
     let source = tempfile::tempdir().unwrap();
     let archive = fake_archive(source.path(), true);
 
+    let home = scratch.path().join("runtimes/mlx/1.0.0");
+    runtime::stage_bundled(&runtime::MLX, &home).expect("recipe");
     let mut steps = Vec::new();
-    let mut failure = None;
-    runtime::install_from(Some(archive.clone()), |p| match p {
-        Progress::Step(step) => steps.push(step),
-        Progress::Failed(err) => failure = Some(err),
-        _ => {}
-    });
+    let failure = runtime::build_env(
+        scratch.path(),
+        &runtime::MLX,
+        &home,
+        Some(archive.clone()),
+        &mut |p| {
+            if let Progress::Step(step) = p {
+                steps.push(step);
+            }
+        },
+    )
+    .expect_err("an archive that does not match the pin was accepted");
 
-    assert!(
-        runtime::base_interpreter(scratch.path()).exists(),
-        "the archive was not unpacked into the runtime directory"
-    );
+    assert!(failure.contains("digest"), "the reason should name the check: {failure}");
     assert!(archive.exists(), "a file the user supplied must not be deleted");
     assert!(
         !steps.iter().any(|s| s.contains("Downloading")),
         "a supplied archive must not be downloaded again: {steps:?}"
     );
     assert!(
-        steps.iter().any(|s| s.contains("Unpacking")),
-        "expected an unpacking step, got {steps:?}"
-    );
-    // The package step then fails, and that is the correct outcome: the stub is
-    // a shell script, not an interpreter. pip used to accept it, because
-    // `-m pip install` on a script that exits 0 looks like success; uv queries
-    // the interpreter and refuses. The stricter behaviour is worth asserting —
-    // a fake runtime should never reach the point of being called installed.
-    let failure = failure.expect("a stub interpreter must not pass for a real one");
-    assert!(
-        failure.contains("Python interpreter") || failure.contains("interpreter"),
-        "the reason should name what was wrong with it: {failure}"
+        !runtime::interpreter_base(scratch.path(), &runtime::MLX).exists(),
+        "nothing may be unpacked from bytes that failed their pin"
     );
 }
 
 #[test]
 fn a_failing_package_step_is_reported_with_its_output() {
     let scratch = Scratch::new();
-    let source = tempfile::tempdir().unwrap();
-    // An interpreter that refuses everything, which is what a partial or
-    // mismatched runtime looks like in practice.
-    let archive = fake_archive(source.path(), true);
-    let mut steps = Vec::new();
-    let mut failure = None;
-    // Unpack first, then break the interpreter before the package step runs.
-    runtime::install_from(Some(archive.clone()), |p| match p {
-        Progress::Step(step) => steps.push(step),
-        Progress::Failed(err) => failure = Some(err),
-        _ => {}
-    });
-    let python = runtime::base_interpreter(scratch.path());
-    std::fs::write(&python, "#!/bin/sh\necho 'no module named pip' >&2\nexit 1\n").unwrap();
-    Command::new("chmod").arg("+x").arg(&python).status().unwrap();
+    // The interpreter is already down, so the build goes straight to uv — and
+    // uv refuses, the way a partial or mismatched runtime does in practice.
+    let base = runtime::interpreter_base(scratch.path(), &runtime::MLX);
+    std::fs::create_dir_all(base.parent().unwrap()).unwrap();
+    std::fs::write(&base, "#!/bin/sh\nexit 0\n").unwrap();
+    Command::new("chmod").arg("+x").arg(&base).status().unwrap();
 
-    failure = None;
-    runtime::install_from(Some(archive), |p| {
-        if let Progress::Failed(err) = p {
-            failure = Some(err);
-        }
-    });
+    let uv = scratch.path().join("uv-that-refuses");
+    std::fs::write(&uv, "#!/bin/sh\necho 'error: no lock file found' >&2\nexit 2\n").unwrap();
+    Command::new("chmod").arg("+x").arg(&uv).status().unwrap();
+    unsafe { std::env::set_var("YARNGO_UV", &uv) };
 
-    let failure = failure.expect("a refusing interpreter must fail the install");
+    let home = scratch.path().join("runtimes/mlx/1.0.0");
+    runtime::stage_bundled(&runtime::MLX, &home).expect("recipe");
+    let failure = runtime::build_env(scratch.path(), &runtime::MLX, &home, None, &mut |_| {})
+        .expect_err("a refusing uv must fail the install");
+    unsafe { std::env::remove_var("YARNGO_UV") };
+
     assert!(
-        failure.contains("speech engine") || failure.contains("pip"),
-        "the reason should name the step that failed: {failure}"
+        failure.contains("speech engine") && failure.contains("lock file"),
+        "the reason should carry the step and its output: {failure}"
     );
 }
 
 #[test]
-fn an_unusable_archive_fails_with_a_reason() {
+fn a_corrupt_archive_is_refused_before_it_is_unpacked() {
     let scratch = Scratch::new();
     let source = tempfile::tempdir().unwrap();
     let archive = source.path().join("python.tar.gz");
     std::fs::write(&archive, b"this is not a tarball").unwrap();
 
-    let mut failure = None;
-    runtime::install_from(Some(archive), |p| {
-        if let Progress::Failed(err) = p {
-            failure = Some(err);
-        }
-    });
+    let home = scratch.path().join("runtimes/mlx/1.0.0");
+    runtime::stage_bundled(&runtime::MLX, &home).expect("recipe");
+    let failure =
+        runtime::build_env(scratch.path(), &runtime::MLX, &home, Some(archive), &mut |_| {})
+            .expect_err("a corrupt archive must fail rather than continue");
 
-    let failure = failure.expect("a corrupt archive must fail rather than continue");
-    assert!(failure.contains("unpacking"), "the reason should name the step: {failure}");
+    // The pin refuses it before tar ever runs on it.
+    assert!(failure.contains("digest"), "the reason should name the check: {failure}");
     assert!(
-        !runtime::base_interpreter(scratch.path()).exists(),
-        "nothing should be left behind by a failed unpack"
+        !runtime::interpreter_base(scratch.path(), &runtime::MLX).exists(),
+        "nothing should be left behind"
     );
 }
 
 #[test]
 fn an_unsupported_host_is_refused_before_anything_is_downloaded() {
     let scratch = Scratch::new();
-    let source = tempfile::tempdir().unwrap();
-    let archive = fake_archive(source.path(), true);
-
-    let mut steps = Vec::new();
-    let mut failure = None;
-    runtime::install_from(Some(archive), |p| match p {
-        Progress::Step(step) => steps.push(step),
-        Progress::Failed(err) => failure = Some(err),
-        _ => {}
-    });
-
-    match runtime::host_supported() {
-        // On a machine that can run it, the install proceeds as usual.
-        Ok(()) => assert!(!steps.is_empty(), "a supported host should get on with it"),
-        Err(reason) => {
-            assert_eq!(failure.as_deref(), Some(reason.as_str()));
-            assert!(steps.is_empty(), "nothing should happen first: {steps:?}");
-            assert!(
-                !runtime::base_interpreter(scratch.path()).exists(),
-                "nothing should be installed on a host that cannot use it"
-            );
-        }
+    if runtime::host_supported().is_ok() {
+        // On a machine that can run it there is nothing to refuse; the other
+        // half of this test lives on hosts where the refusal fires.
+        return;
     }
+    let home = scratch.path().join("runtimes/mlx/1.0.0");
+    let failure = runtime::build_env(scratch.path(), &runtime::MLX, &home, None, &mut |_| {})
+        .expect_err("an unsupported host must refuse");
+    assert_eq!(failure, runtime::host_supported().unwrap_err());
+    assert!(
+        !scratch.path().join("interpreters").exists(),
+        "nothing should be installed on a host that cannot use it"
+    );
 }
 
 #[test]
@@ -388,42 +377,6 @@ fn the_refusal_names_the_reason_rather_than_the_symptom() {
             "the reason should name what is actually missing: {reason}"
         );
     }
-}
-
-#[test]
-fn an_interpreter_the_machine_already_has_is_found_and_used() {
-    let scratch = Scratch::new();
-    let stub = scratch.path().join("already-here");
-    std::fs::write(&stub, "#!/bin/sh\nexit 0\n").unwrap();
-    Command::new("chmod").arg("+x").arg(&stub).status().unwrap();
-    unsafe { std::env::set_var("YARNGO_PYTHON", &stub) };
-
-    // Nothing was installed here, but the machine can already speak, so there
-    // is nothing to download and nothing for setup to ask.
-    assert_eq!(runtime::existing_interpreter().as_deref(), Some(stub.as_path()));
-    assert!(runtime::is_installed(), "an interpreter that imports the package is an install");
-
-    let paths = speech_engine::EnginePaths::resolve(Path::new("/nonexistent"));
-    assert_eq!(paths.python, stub, "the found interpreter should be the one used");
-
-    unsafe { std::env::remove_var("YARNGO_PYTHON") };
-}
-
-#[test]
-fn an_interpreter_that_cannot_import_the_package_is_not_used() {
-    let scratch = Scratch::new();
-    let stub = scratch.path().join("no-package");
-    std::fs::write(&stub, "#!/bin/sh\nexit 1\n").unwrap();
-    Command::new("chmod").arg("+x").arg(&stub).status().unwrap();
-    unsafe { std::env::set_var("YARNGO_PYTHON", &stub) };
-
-    assert_ne!(
-        runtime::existing_interpreter().as_deref(),
-        Some(stub.as_path()),
-        "an interpreter without the speech package is not a runtime"
-    );
-
-    unsafe { std::env::remove_var("YARNGO_PYTHON") };
 }
 
 #[test]
@@ -471,64 +424,74 @@ fn the_download_url_names_the_pinned_version() {
     }
 }
 
-/// An installed runtime is found and started the way the application finds one.
+/// An installed version carries its descriptor beside its environment, and the
+/// descriptor resolves everything inside that one directory.
 #[test]
-fn installing_a_runtime_leaves_a_descriptor_where_runtimes_are_looked_for() {
+fn installing_a_runtime_leaves_a_descriptor_beside_its_environment() {
     let sandbox = yarngo_testing::Sandbox::empty();
-    let interpreter = sandbox.root().join("runtime/mlx/.venv/bin/python3");
+    let home = sandbox.root().join("runtimes/mlx/1.0.0");
+    let interpreter = home.join(".venv/bin/python3");
     std::fs::create_dir_all(interpreter.parent().unwrap()).expect("bin");
     std::fs::write(&interpreter, b"#!/bin/sh\n").expect("interpreter");
 
-    let written = speech_engine::runtime::MLX
-        .describe_in(sandbox.root(), &interpreter)
+    speech_engine::runtime::describe_home(&speech_engine::runtime::MLX, &home)
         .expect("describe");
-    assert_eq!(
-        written,
-        sandbox.root().join("runtimes/mlx/runtime.json"),
-        "a descriptor was written somewhere runtimes are not looked for"
-    );
 
-    let found = speech_engine::runtimes::discover(&places(&sandbox));
-    assert_eq!(found.len(), 1, "the installed runtime was not discovered");
-    assert_eq!(found[0].id, "mlx");
-    assert_eq!(found[0].program_path().expect("program"), interpreter);
+    let found =
+        speech_engine::runtimes::Descriptor::read(&home.join("runtime.json"), &places(&sandbox))
+            .expect("the descriptor an install writes must load");
+    assert_eq!(found.id, "mlx");
+    assert_eq!(found.program_path().expect("program"), interpreter);
     // With no code of its own it is run by the copy that ships, which is what
     // a first install has always done.
-    assert_eq!(found[0].engine, speech_engine::runtimes::Engine::Bundled);
+    assert_eq!(found.engine, speech_engine::runtimes::Engine::Bundled);
     assert_eq!(
-        found[0].engine_path().expect("engine"),
+        found.engine_path().expect("engine"),
         sandbox.root().join("resources/sidecar/engine.py")
     );
+
+    // And once its own code is there, describing again does not overwrite what
+    // the archive said.
+    std::fs::write(home.join("engine.py"), b"# own\n").expect("engine");
+    speech_engine::runtime::describe_home(&speech_engine::runtime::MLX, &home)
+        .expect("describe again");
+    let again =
+        speech_engine::runtimes::Descriptor::read(&home.join("runtime.json"), &places(&sandbox))
+            .expect("still loads");
+    assert_eq!(again.engine, speech_engine::runtimes::Engine::Bundled,
+        "an existing descriptor is the authority; a re-describe must not rewrite it");
 }
 
 fn places(sandbox: &yarngo_testing::Sandbox) -> speech_engine::runtimes::Places {
     speech_engine::runtimes::Places {
         data: sandbox.root().to_path_buf(),
-        runtime: sandbox.root().join("runtime"),
         resources: sandbox.root().join("resources"),
     }
+}
+
+/// Load the descriptor at `home`, the way the application loads one.
+fn read(home: &Path, sandbox: &yarngo_testing::Sandbox) -> Option<speech_engine::runtimes::Descriptor> {
+    speech_engine::runtimes::Descriptor::read(&home.join("runtime.json"), &places(sandbox))
 }
 
 /// A runtime that published its own implementation is started from it.
 #[test]
 fn a_runtime_that_brought_its_own_code_is_started_from_it() {
     let sandbox = yarngo_testing::Sandbox::empty();
-    let interpreter = sandbox.root().join("runtime/mlx/.venv/bin/python3");
+    let home = sandbox.root().join("runtimes/mlx/1.0.0");
+    let interpreter = home.join(".venv/bin/python3");
     std::fs::create_dir_all(interpreter.parent().unwrap()).expect("bin");
     std::fs::write(&interpreter, b"#!/bin/sh\n").expect("interpreter");
-    let folder = speech_engine::runtime::MLX.folder_in(sandbox.root());
-    std::fs::create_dir_all(&folder).expect("folder");
-    std::fs::write(folder.join("engine.py"), b"# the runtime's own").expect("engine");
+    std::fs::write(home.join("engine.py"), b"# the runtime's own").expect("engine");
 
-    speech_engine::runtime::MLX
-        .describe_in(sandbox.root(), &interpreter)
+    speech_engine::runtime::describe_home(&speech_engine::runtime::MLX, &home)
         .expect("describe");
 
-    let found = speech_engine::runtimes::discover(&places(&sandbox));
-    assert_eq!(found[0].engine, speech_engine::runtimes::Engine::Own);
+    let found = read(&home, &sandbox).expect("loads");
+    assert_eq!(found.engine, speech_engine::runtimes::Engine::Own);
     assert_eq!(
-        found[0].engine_path().expect("engine"),
-        folder.join("engine.py"),
+        found.engine_path().expect("engine"),
+        home.join("engine.py"),
         "a runtime with its own code was started from the application's"
     );
 }
@@ -539,26 +502,21 @@ fn a_runtime_that_brought_its_own_code_is_started_from_it() {
 #[test]
 fn a_runtime_missing_its_own_engine_is_not_run_by_the_bundled_one() {
     let sandbox = yarngo_testing::Sandbox::empty();
-    let own = sandbox.root().join("runtimes/mlx");
-    std::fs::create_dir_all(&own).expect("folder");
+    let home = sandbox.root().join("runtimes/mlx/1.0.0");
+    std::fs::create_dir_all(&home).expect("folder");
     std::fs::write(
-        own.join("runtime.json"),
+        home.join("runtime.json"),
         br#"{"schema":1,"id":"mlx","name":"Apple silicon","engine":"own",
              "program":"{venv}/bin/python3","arguments":["{engine}"]}"#,
     )
     .expect("descriptor");
-    let bin = sandbox.root().join("runtime/mlx/.venv/bin");
+    let bin = home.join(".venv/bin");
     std::fs::create_dir_all(&bin).expect("bin");
     std::fs::write(bin.join("python3"), b"#!/bin/sh\n").expect("interpreter");
 
-    let found = speech_engine::runtimes::discover(&places(&sandbox));
-    assert_eq!(found.len(), 1, "it was not read at all");
-    assert!(found[0].engine_path().is_err(), "it was given an engine it did not bring");
-    assert!(!found[0].available(), "a runtime with no engine was offered");
-    assert!(
-        speech_engine::runtimes::choose(&found, Some("mlx")).is_none(),
-        "a runtime with no engine was chosen"
-    );
+    let found = read(&home, &sandbox).expect("it was not read at all");
+    assert!(found.engine_path().is_err(), "it was given an engine it did not bring");
+    assert!(!found.available(), "a runtime with no engine was offered");
 }
 
 /// A descriptor is downloaded data, and may not become a second way to run
@@ -566,9 +524,9 @@ fn a_runtime_missing_its_own_engine_is_not_run_by_the_bundled_one() {
 #[test]
 fn a_descriptor_cannot_name_a_program_outside_the_runtime() {
     let sandbox = yarngo_testing::Sandbox::empty();
-    let own = sandbox.root().join("runtimes/rogue");
-    std::fs::create_dir_all(&own).expect("folder");
-    std::fs::write(own.join("engine.py"), b"# own").expect("engine");
+    let home = sandbox.root().join("runtimes/rogue/1.0.0");
+    std::fs::create_dir_all(&home).expect("folder");
+    std::fs::write(home.join("engine.py"), b"# own").expect("engine");
 
     for (what, program) in [
         ("a shell", "/bin/sh"),
@@ -578,7 +536,7 @@ fn a_descriptor_cannot_name_a_program_outside_the_runtime() {
         ("a placeholder there is no such thing as", "{data}/sh"),
     ] {
         std::fs::write(
-            own.join("runtime.json"),
+            home.join("runtime.json"),
             serde_json::json!({
                 "schema": 1, "id": "rogue", "name": "Rogue", "engine": "own",
                 "program": program, "arguments": [],
@@ -587,7 +545,7 @@ fn a_descriptor_cannot_name_a_program_outside_the_runtime() {
         )
         .expect("descriptor");
         assert!(
-            speech_engine::runtimes::discover(&places(&sandbox)).is_empty(),
+            read(&home, &sandbox).is_none(),
             "{what} was accepted: {program}"
         );
     }
@@ -598,23 +556,22 @@ fn a_descriptor_cannot_name_a_program_outside_the_runtime() {
 #[test]
 fn a_descriptor_cannot_set_the_environment() {
     let sandbox = yarngo_testing::Sandbox::empty();
-    let own = sandbox.root().join("runtimes/mlx");
-    std::fs::create_dir_all(&own).expect("folder");
-    std::fs::write(own.join("engine.py"), b"# own").expect("engine");
-    let bin = sandbox.root().join("runtime/mlx/.venv/bin");
+    let home = sandbox.root().join("runtimes/mlx/1.0.0");
+    std::fs::create_dir_all(&home).expect("folder");
+    std::fs::write(home.join("engine.py"), b"# own").expect("engine");
+    let bin = home.join(".venv/bin");
     std::fs::create_dir_all(&bin).expect("bin");
     std::fs::write(bin.join("python3"), b"#!/bin/sh\n").expect("interpreter");
     std::fs::write(
-        own.join("runtime.json"),
+        home.join("runtime.json"),
         br#"{"schema":1,"id":"mlx","name":"Apple silicon","engine":"own",
              "program":"{venv}/bin/python3","arguments":["{engine}"],
              "env":{"PYTHONPATH":"/tmp/attacker","DYLD_INSERT_LIBRARIES":"/tmp/evil.dylib"}}"#,
     )
     .expect("descriptor");
 
-    let found = speech_engine::runtimes::discover(&places(&sandbox));
-    assert_eq!(found.len(), 1, "an unknown field made it unreadable");
-    let command = found[0].command().expect("command");
+    let found = read(&home, &sandbox).expect("an unknown field made it unreadable");
+    let command = found.command().expect("command");
     let named: Vec<String> = command
         .get_envs()
         .map(|(k, _)| k.to_string_lossy().into_owned())
@@ -627,28 +584,28 @@ fn a_descriptor_cannot_set_the_environment() {
 #[test]
 fn a_descriptor_from_a_newer_application_is_refused() {
     let sandbox = yarngo_testing::Sandbox::empty();
-    let own = sandbox.root().join("runtimes/future");
-    std::fs::create_dir_all(&own).expect("folder");
-    std::fs::write(own.join("engine.py"), b"# own").expect("engine");
+    let home = sandbox.root().join("runtimes/future/1.0.0");
+    std::fs::create_dir_all(&home).expect("folder");
+    std::fs::write(home.join("engine.py"), b"# own").expect("engine");
     std::fs::write(
-        own.join("runtime.json"),
+        home.join("runtime.json"),
         br#"{"schema":99,"id":"future","name":"Future","engine":"own",
              "program":"{venv}/bin/python3","arguments":[]}"#,
     )
     .expect("descriptor");
-    assert!(speech_engine::runtimes::discover(&places(&sandbox)).is_empty());
+    assert!(read(&home, &sandbox).is_none());
 }
 
 /// An id becomes a directory name, so it may not decide where anything lives.
 #[test]
 fn a_runtime_name_that_is_a_path_is_refused() {
     let sandbox = yarngo_testing::Sandbox::empty();
-    let own = sandbox.root().join("runtimes/sneaky");
-    std::fs::create_dir_all(&own).expect("folder");
-    std::fs::write(own.join("engine.py"), b"# own").expect("engine");
+    let home = sandbox.root().join("runtimes/sneaky/1.0.0");
+    std::fs::create_dir_all(&home).expect("folder");
+    std::fs::write(home.join("engine.py"), b"# own").expect("engine");
     for id in ["../escape", "/absolute", "with space", "Upper", "dots.and.dots"] {
         std::fs::write(
-            own.join("runtime.json"),
+            home.join("runtime.json"),
             serde_json::json!({
                 "schema": 1, "id": id, "name": "Sneaky", "engine": "own",
                 "program": "{venv}/bin/python3", "arguments": [],
@@ -657,7 +614,7 @@ fn a_runtime_name_that_is_a_path_is_refused() {
         )
         .expect("descriptor");
         assert!(
-            speech_engine::runtimes::discover(&places(&sandbox)).is_empty(),
+            read(&home, &sandbox).is_none(),
             "{id:?} was accepted as a runtime name"
         );
     }
@@ -719,6 +676,14 @@ for name, kind, body in [{spec}]:
     elif kind == "hardlink":
         i = tarfile.TarInfo(name); i.type = tarfile.LNKTYPE; i.linkname = body
         t.addfile(i)
+    elif kind == "contiguous":
+        data = body.encode()
+        i = tarfile.TarInfo(name); i.type = tarfile.CONTTYPE; i.size = len(data)
+        t.addfile(i, io.BytesIO(data))
+    elif kind == "file4777":
+        data = body.encode()
+        i = tarfile.TarInfo(name); i.size = len(data); i.mode = 0o4777
+        t.addfile(i, io.BytesIO(data))
     else:
         data = body.encode()
         i = tarfile.TarInfo(name); i.size = len(data)
@@ -775,6 +740,34 @@ fn an_archive_cannot_write_outside_the_runtime() {
         !std::path::Path::new("/tmp/yarngo-escape-test").exists(),
         "an absolute entry was written outside the runtime"
     );
+}
+
+/// Type 7 — "contiguous" — is a regular file to most tools, which is exactly
+/// why it is refused: the allowlist is Regular and Directory, not "whatever
+/// probably behaves like a file".
+#[test]
+fn an_archive_with_a_contiguous_entry_is_refused() {
+    let (_landing, outcome) = unpacking(&[("cont.py", "contiguous", "# type 7\n")]);
+    outcome.expect_err("a contiguous entry was accepted");
+}
+
+/// The archive's modes are not consulted. A setuid, group-writable entry lands
+/// as an ordinary owner-writable file, whatever it asked for.
+#[cfg(unix)]
+#[test]
+fn an_archives_modes_are_not_taken() {
+    use std::os::unix::fs::PermissionsExt;
+    let (landing, outcome) = unpacking(&[
+        ("engine.py", "file", "# fine\n"),
+        ("sneaky", "file4777", "#!/bin/sh\n"),
+    ]);
+    outcome.expect("a plain file, whatever bits it wore");
+    let mode = std::fs::metadata(landing.path().join("sneaky"))
+        .expect("extracted")
+        .permissions()
+        .mode()
+        & 0o7777;
+    assert_eq!(mode, 0o644, "extracted with mode {mode:o}");
 }
 
 /// An archive that unpacks to far more than it appears to is refused rather

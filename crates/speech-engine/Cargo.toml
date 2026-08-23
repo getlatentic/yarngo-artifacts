@@ -28,6 +28,3 @@ futures-util = { version = "0.3", default-features = false }
 yarngo-testing = { path = "../testing" }
 tokio = { version = "1.53.1", features = ["rt", "time", "macros"] }
 
-[[example]]
-name = "runtime_install"
-path = "examples/runtime_install.rs"

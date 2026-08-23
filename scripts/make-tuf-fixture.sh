@@ -21,10 +21,40 @@ far='2125-01-01T00:00:00Z'
 # Already gone, so that enforcing expiry is observable rather than asserted.
 past='2020-01-01T00:00:00Z'
 
+# A minimal engine that genuinely answers the handshake, so "install, start it
+# from its own directory, verify what it says" can run against a fixture.
+# $1 the version it claims  $2 the methods it answers with (JSON array)
+engine_speaking() {
+  cat <<PYEOF
+# the published engine
+import json, sys
+
+for line in sys.stdin:
+    try:
+        message = json.loads(line)
+    except ValueError:
+        continue
+    reply = {"jsonrpc": "2.0", "id": message.get("id")}
+    if message.get("method") == "initialize":
+        reply["result"] = {
+            "protocol": "yarngo-engine", "version": $1,
+            "backend": "fixture", "conditioning_eviction": "none",
+            "methods": $2,
+        }
+    else:
+        reply["result"] = {}
+    print(json.dumps(reply), flush=True)
+    if message.get("method") == "shutdown":
+        break
+PYEOF
+}
+
 # A repository, signed by its own key per role, exactly as the real one would be.
 # $1 output name  $2 target contents  $3 expiry  $4 targets version
 build() {
   local name=$1 body=$2 expires=$3 version=$4
+  local engine_version=${5:-1}
+  local engine_methods=${6:-'["conditioning.prepare", "synthesis.generate", "ping"]'}
   local dir="$keys/$name" ; mkdir -p "$dir/keys" "$dir/in"
   printf '%s' "$body" > "$dir/in/yarngo-runtime-spike.tar.gz"
 
@@ -48,12 +78,14 @@ build() {
 JSON
 
   # The release the catalogue points at, so the whole path can be walked: read
-  # the catalogue, choose, fetch what it named.
+  # the catalogue, choose, fetch what it named. The engine is a real one as far
+  # as the wire is concerned — it answers the handshake — so an install test
+  # can carry a fixture release every step of the way to "active".
   mkdir -p "$dir/in/engine"
   printf 'version = 1\nrequires-python = ">=3.13"\n' > "$dir/in/mlx-1.0.0.uv.lock"
   printf '[project]\nname = "mlx-runtime"\nversion = "1.0.0"\n' \
     > "$dir/in/mlx-1.0.0.pyproject.toml"
-  printf '# the published engine\n' > "$dir/in/engine/engine.py"
+  engine_speaking "$engine_version" "$engine_methods" > "$dir/in/engine/engine.py"
   tar -czf "$dir/in/mlx-1.0.0.engine.tar.gz" -C "$dir/in/engine" engine.py
   rm -rf "$dir/in/engine"
 
@@ -101,6 +133,13 @@ build stale 'a runtime archive, as far as this test is concerned' "$past" 1
 # point: replaying an old snapshot needs no keys at all.
 cp -R "$out/repo" "$out/rollback"
 build repo 'a runtime archive, as far as this test is concerned' "$far" 2
+
+# Two repositories publishing runtimes that install cleanly and then disqualify
+# themselves at the handshake: one answering a version this build does not
+# speak, one answering without the methods that make it a speech runtime. The
+# install path must refuse both without touching whatever was answering before.
+build newapi 'a runtime archive, as far as this test is concerned' "$far" 1 2
+build mute 'a runtime archive, as far as this test is concerned' "$far" 1 1 '["ping"]' 
 
 echo "wrote $out"
 find "$out" -type f | sed "s|$out/|  |" | sort

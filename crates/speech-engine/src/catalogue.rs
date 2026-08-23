@@ -107,6 +107,16 @@ impl Catalogue {
 impl Release {
     /// Whether this build may install this release.
     pub fn usable_by(&self, app: &str) -> Result<(), String> {
+        // The version becomes a directory name. One that could carry a
+        // separator would decide where the runtime lives, and that decision is
+        // not the catalogue's to make.
+        let plain = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_');
+        if self.version.is_empty()
+            || !self.version.chars().all(plain)
+            || self.version.starts_with('.')
+        {
+            return Err(format!("{:?} is not a version a directory can be named", self.version));
+        }
         if self.engine_api > ENGINE_API {
             return Err(format!(
                 "speaks engine api {}, and this build speaks {ENGINE_API}",
@@ -227,6 +237,17 @@ mod tests {
             release("2.0.0", "0.1.0", ENGINE_API + 1),
         ]);
         assert_eq!(listed.best("mlx", "0.1.0").expect("a release").version, "1.0.0");
+    }
+
+    /// A version is about to be a directory name, so one that reads as a path
+    /// is not a version.
+    #[test]
+    fn a_version_that_reads_as_a_path_is_not_installable() {
+        for version in ["../escape", "a/b", "", ".hidden", "x\\y"] {
+            let listed = catalogue(vec![release(version, "0.1.0", 1)]);
+            let refused = listed.best("mlx", "9.9.9").expect_err("a path is not a version");
+            assert!(refused.contains("version"), "{version:?}: {refused}");
+        }
     }
 
     /// Nothing to install is a thing to say clearly: the reason each release

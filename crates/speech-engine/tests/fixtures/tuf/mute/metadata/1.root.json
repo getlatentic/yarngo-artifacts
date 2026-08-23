@@ -1,0 +1,71 @@
+{
+  "signed": {
+    "_type": "root",
+    "spec_version": "1.0.0",
+    "consistent_snapshot": true,
+    "version": 1,
+    "expires": "2125-01-01T00:00:00Z",
+    "keys": {
+      "8f192436a6500e5feedb946bab443124bdfb149ba268ed47c81d1b72b2fe8e88": {
+        "keytype": "rsa",
+        "keyval": {
+          "public": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvRrazYfLcMW5lzw1tMJu\nwICW1wLWfnc99BF2pg9s0cqauXnHwFwBB7Wj0+6dcxPIhS9TLLj740qyuoqD6lJL\nzce3VrT/qDOsVwh8OZJcxR6nyP50H80IfZbE1bFE1ub6r1CfpVcmdW510Q7t9/kn\nU89Qkr4l/Yd9fmSEKLlPknq3Y7lt+Gq/wixZhH5lZYFejjKSylofjpDonMfyw87u\nqrTaSErgeAYT0/w57RfUXFvgtUfEOoAfJSeg7uuGsu6eprojRPZELMbpmYfUGF/+\nmnxHU4d4ckRjGrwOJh0M1ruiGXctTI2hdxhj/qNBJIBuLN15ll9cG6dlK2Wvk4Tx\ntQIDAQAB\n-----END PUBLIC KEY-----"
+        },
+        "scheme": "rsassa-pss-sha256"
+      },
+      "bae82b3f4e076eb7eb1560f850a5f5099da90cb1617dc1d01e533867b5b872d8": {
+        "keytype": "rsa",
+        "keyval": {
+          "public": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwJemCdxQ6AEPu1HTTbEu\nyqKSoe88MlpkIqMEaMPjN/Up7sfISReVTcqNsBKx+e+Dc2D2ingccfIy8UJ2YUqH\nmO+fT7xktwXtKbWeBp5uBGh0BW2sKF5KLWs8hYC9hMoWZQdeez7Ho+i9UFqJnMIP\nejZdj4z+FLf3VT5WtZZkLGJrAxKmKzeRhvgoQBgODsFn6Hj2NTmkMh5uN41Uokk/\nqB8aN6WrRFc5Zg4yIPgsL+9nUIlqQLXnbDqwo9qOZ72eEdznWUcM7rFxi04bTOUQ\nLMwJoAtSL8F8fEzQssk1UJBSKaIMPAhPsQvFYmBLFs88ticdlJu2bG2BHNSaiO0t\nPwIDAQAB\n-----END PUBLIC KEY-----"
+        },
+        "scheme": "rsassa-pss-sha256"
+      },
+      "2554c35b75b2c8f698c9fad52c9d9fd8de535c27363b3b30a559171a83f78fea": {
+        "keytype": "rsa",
+        "keyval": {
+          "public": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAymQOOs2FGtqRgz+dCCwX\nOCzo1+puGgt5ENGuuXpb4RRuDiI1V5XoLlSeMIfz+PylsGGtkYRoQPIf17JMVoXN\nnbMghANkok3MHVAt4naKX3ZYDxskxCE0jsAaBF0Crl+bwMQj7kmYoOL5MxLg4icD\nqcKgzDL60gEE1WQf750QKn/1eNeeoeCtvvk1RVKsVT4mFat0wbD4vYdg/iFHBLW6\nxgPISO4LovahIWZhuiXFXuxP/ip9CHsFH9nRo983DFm1wsAhRLcDafASK1spmeFQ\nWCc2+3hwwpxZnb+J10sYHZwy1V6erUMlSzOhyO3ZOiRzqZ/6Ky/eo4i19QnEoyYO\nXQIDAQAB\n-----END PUBLIC KEY-----"
+        },
+        "scheme": "rsassa-pss-sha256"
+      },
+      "a4c1ef5b06f9560f374d41f7e4882376e69fb477c3560f85913030739e22d629": {
+        "keytype": "rsa",
+        "keyval": {
+          "public": "-----BEGIN PUBLIC KEY-----\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0nXE3reZKHKmoMiQY87B\noopcAltm9usBmZ6BmdAJEoLIPdLhb39P7jHQ8HGt7kTBtqQzbNKgX2QxmTKlsZ8c\np6kEW4/JTu2KWamzgkJY3TkOKdv72cBFqhDZvXJQe98JbrWaUthFKDZuP0Ig3LGd\nda9+VH67Tzu9bgaumvLLTxSSVwSaBTl07FfW9R+1ld8pE8Gxif7bFe8tMJUBKcNQ\nSSq7H3alHSr+zSmy0QEM/+lQVJRKx6jiu/ytdfYf9Gmbz1LeFhlyUeLHKS6b78t1\n1O2YlO7GPoYSXbZNAeQSq3raiU77lYPAy3icE+cjtO0oszWOrgUDVAWhi3bloBWg\nqQIDAQAB\n-----END PUBLIC KEY-----"
+        },
+        "scheme": "rsassa-pss-sha256"
+      }
+    },
+    "roles": {
+      "timestamp": {
+        "keyids": [
+          "2554c35b75b2c8f698c9fad52c9d9fd8de535c27363b3b30a559171a83f78fea"
+        ],
+        "threshold": 1
+      },
+      "targets": {
+        "keyids": [
+          "bae82b3f4e076eb7eb1560f850a5f5099da90cb1617dc1d01e533867b5b872d8"
+        ],
+        "threshold": 1
+      },
+      "snapshot": {
+        "keyids": [
+          "8f192436a6500e5feedb946bab443124bdfb149ba268ed47c81d1b72b2fe8e88"
+        ],
+        "threshold": 1
+      },
+      "root": {
+        "keyids": [
+          "a4c1ef5b06f9560f374d41f7e4882376e69fb477c3560f85913030739e22d629"
+        ],
+        "threshold": 1
+      }
+    }
+  },
+  "signatures": [
+    {
+      "keyid": "a4c1ef5b06f9560f374d41f7e4882376e69fb477c3560f85913030739e22d629",
+      "sig": "9ca6c719a025a70287155d5846d63caa73046c222d138c9ceb4a5c18c99d23aa4a9d754a6b432f3b9b04b46aa2eb63fc118cbe461b72433ad8b01a8d9c416acb79a3cdac74e9f1429108a59c96c138d43cff6dfbf99472310058b850d21511bcf35547b83e9d52ecd5fbbb1ff1f212f96f2e1ae998753a5d6758266e07f77a0b10cf0a6a0101917e19df96d0264251bbc22ea36cbe1dd3147454c04389e3de089ac917f4454db7f7cb577790b5fa03f67d1d7ee23df187e167f5feb9aafdf4f583714b6a604a5dea6d3fb41d4984f7be7487997d01f9246928c36f88e8ae3f2dcc0746ef906995287c63bad41fac2fe88e6ea64ba344f429d46ed83638373a20"
+    }
+  ]
+}

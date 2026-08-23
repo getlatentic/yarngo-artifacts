@@ -58,8 +58,6 @@ pub const DESCRIPTOR_SCHEMA: u32 = 1;
 pub struct Places {
     /// Everything the application keeps.
     pub data: PathBuf,
-    /// Where the environments the application installs live.
-    pub runtime: PathBuf,
     /// What shipped with the application.
     pub resources: PathBuf,
 }
@@ -88,8 +86,11 @@ pub struct Descriptor {
     pub name: String,
     #[serde(default)]
     pub engine: Engine,
-    /// Inside the installed environment when it begins `{venv}`, otherwise
-    /// inside the runtime's own directory. Never absolute, never climbing out.
+    /// Inside this runtime's environment when it begins `{venv}` — the
+    /// `.venv` in the descriptor's own directory — otherwise inside the
+    /// runtime's own directory. Never absolute, never climbing out. Everything
+    /// a runtime runs lives beside it, which is what lets one version be
+    /// installed while another answers.
     pub program: String,
     /// Passed through as written, except for `{engine}`, which is the
     /// implementation the application resolved. Arguments are not paths the
@@ -160,9 +161,11 @@ impl Descriptor {
             return Err("was not read from anywhere".into());
         };
         let (root, rest) = match self.program.strip_prefix("{venv}/") {
-            // The environment the application installed for this runtime. Its
-            // location is the application's, not the descriptor's.
-            Some(rest) => (home.places.runtime.join(&self.id).join(".venv"), rest),
+            // The environment built for this runtime, beside the descriptor.
+            // Not a shared location: two versions of one runtime each own an
+            // environment, and which one runs is decided by which directory
+            // this descriptor was read from.
+            Some(rest) => (home.own.join(".venv"), rest),
             None => (home.own.clone(), self.program.as_str()),
         };
         if self.program.contains('{') && !self.program.starts_with("{venv}/") {
@@ -238,49 +241,4 @@ fn inside(root: &Path, path: &Path) -> Result<PathBuf, String> {
         return Err(format!("{} resolves outside the runtime", path.display()));
     }
     Ok(landing)
-}
-
-/// Every runtime this machine offers, the shipped one first.
-///
-/// Installed runtimes live one directory each under `runtimes/`, so a runtime
-/// is a folder somebody can add or remove without the application knowing it
-/// was coming.
-pub fn discover(places: &Places) -> Vec<Descriptor> {
-    let mut found: Vec<Descriptor> = Vec::new();
-    for root in [places.resources.join("runtimes"), places.data.join("runtimes")] {
-        let Ok(entries) = std::fs::read_dir(&root) else {
-            continue;
-        };
-        let mut paths: Vec<PathBuf> = entries
-            .flatten()
-            .map(|entry| entry.path())
-            .map(|path| if path.is_dir() { path.join("runtime.json") } else { path })
-            .filter(|path| path.extension().is_some_and(|e| e == "json"))
-            .collect();
-        // Read in a stated order rather than whatever the filesystem returns,
-        // so which runtime the application picks is the same on every machine.
-        paths.sort();
-        for path in paths {
-            let Some(descriptor) = Descriptor::read(&path, places) else {
-                continue;
-            };
-            // First wins: a shipped runtime is not silently replaced by an
-            // installed one that took its name.
-            if !found.iter().any(|other| other.id == descriptor.id) {
-                found.push(descriptor);
-            }
-        }
-    }
-    found
-}
-
-/// The one to start: the person's choice if it is here and works, otherwise the
-/// first that does.
-pub fn choose(runtimes: &[Descriptor], preferred: Option<&str>) -> Option<Descriptor> {
-    if let Some(preferred) = preferred {
-        if let Some(found) = runtimes.iter().find(|r| r.id == preferred && r.available()) {
-            return Some(found.clone());
-        }
-    }
-    runtimes.iter().find(|r| !r.hidden && r.available()).cloned()
 }

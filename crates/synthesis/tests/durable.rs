@@ -156,7 +156,7 @@ fn a_generation_becomes_a_take() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, _) = seeded(dir.path());
     let layout = Layout::under(dir.path());
-    store.open_session("session-1", "stand-in", "t1").expect("session");
+    store.open_session("session-1", "stand-in", "t1", None).expect("session");
     let (connection, _events) = engine("");
 
     let pending = {
@@ -208,7 +208,7 @@ fn a_failed_generation_leaves_nothing_behind() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, _) = seeded(dir.path());
     let layout = Layout::under(dir.path());
-    store.open_session("session-1", "stand-in", "t1").expect("session");
+    store.open_session("session-1", "stand-in", "t1", None).expect("session");
     let (connection, _events) = engine("    raise RuntimeError('the model fell over')");
 
     let mut synthesis = Synthesis { store: &mut store, layout: &layout, session_id: "session-1" };
@@ -228,7 +228,7 @@ fn losing_the_engine_returns_the_job_and_a_second_attempt_finishes_it() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, _) = seeded(dir.path());
     let layout = Layout::under(dir.path());
-    store.open_session("session-1", "stand-in", "t1").expect("session");
+    store.open_session("session-1", "stand-in", "t1", None).expect("session");
     let (dying, _events) = engine("    os._exit(1)");
 
     let mut synthesis = Synthesis { store: &mut store, layout: &layout, session_id: "session-1" };
@@ -242,7 +242,7 @@ fn losing_the_engine_returns_the_job_and_a_second_attempt_finishes_it() {
     assert_eq!(store.execution_state("exec-1").expect("state").as_deref(), Some("interrupted"));
 
     // A second engine, and a second attempt at the same job.
-    store.open_session("session-2", "stand-in", "t3").expect("session");
+    store.open_session("session-2", "stand-in", "t3", None).expect("session");
     let (living, _events) = engine("");
     let mut synthesis = Synthesis { store: &mut store, layout: &layout, session_id: "session-2" };
     // The first attempt's staged audio, had it written any, is not the second's
@@ -269,7 +269,7 @@ fn a_voice_deleted_while_generating_refuses_the_take() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, db) = seeded(dir.path());
     let layout = Layout::under(dir.path());
-    store.open_session("session-1", "stand-in", "t1").expect("session");
+    store.open_session("session-1", "stand-in", "t1", None).expect("session");
     // Long enough that the deletion lands while the engine is working.
     let (connection, _events) = engine("    time.sleep(0.8)");
 
@@ -316,7 +316,7 @@ fn a_crash_before_the_take_is_committed_is_finished_on_the_next_start() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (mut store, db) = seeded(dir.path());
     let layout = Layout::under(dir.path());
-    store.open_session("session-1", "stand-in", "t1").expect("session");
+    store.open_session("session-1", "stand-in", "t1", None).expect("session");
     let (connection, _events) = engine("");
 
     // Everything up to the decision, and then nothing: the process is gone.
@@ -371,7 +371,7 @@ fn generating_writes_the_take_and_the_database_and_nothing_else() {
     std::fs::create_dir_all(&data).expect("data");
     let (mut store, _) = seeded(&data);
     let layout = Layout::under(&data);
-    store.open_session("session-1", "stand-in", "t1").expect("session");
+    store.open_session("session-1", "stand-in", "t1", None).expect("session");
     let (connection, _events) = engine("");
 
     let before = tree(&data);
