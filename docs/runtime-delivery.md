@@ -228,13 +228,19 @@ answering is untouched until the moment it is replaced. The engine is ended
 before the new one starts — the install itself does not need it down, but two
 of them holding a model at once is gigabytes for no reason.
 
-**`raw.githubusercontent.com` caches for five minutes** (`cache-control:
-max-age=300`, measured). A publication is invisible until that expires, which is
-worth knowing before concluding a push did not work. That host is also not
-meant as a production CDN — it is rate-limited and GitHub says not to use it as
-one. Moving to GitHub Pages, R2, or any static host is a change of one address
-in `speech-engine::published` and nothing else, and it is free to do until a
-build has shipped pointing at the old one.
+Served by GitHub Pages, from the same repository and the same files:
+
+    https://getlatentic.github.io/yarngo-artifacts/tuf/
+
+Not `raw.githubusercontent.com`, which caches for five minutes — measured
+serving three-minute-old metadata after a push — is rate-limited, and is not
+meant to be used as a content network. Pages serves a push as soon as it has
+built it, and `scripts/tuf-repo.sh` reads the address out of the source rather
+than keeping a second copy of it.
+
+The address is compiled into every build, so changing it is free only until one
+has shipped pointing at the old one. After that the old address has to keep
+answering for as long as those copies exist.
 
 ## Keys
 

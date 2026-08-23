@@ -27,8 +27,14 @@ KEYS="${YARNGO_TUF_KEYS:-$HOME/.yarngo/tuf-keys}"
 OUT="${YARNGO_TUF_OUT:-dist/tuf}"
 ANCHOR="packaging/tuf/root.json"
 # Where the application fetches from, so `publish` can say where to put this.
-SERVED_AT="$(sed -n 's/^ *"\(https:\/\/raw\.githubusercontent\.com[^"]*\)";$/\1/p' \
+# Read from the source rather than repeated here, because two copies of an
+# address that must match is one copy too many.
+SERVED_AT="$(sed -n 's/^const REPOSITORY: &str = "\(.*\)";$/\1/p' \
   crates/speech-engine/src/published.rs | head -1)"
+[ -n "$SERVED_AT" ] || {
+  echo "Could not read the repository address from crates/speech-engine/src/published.rs" >&2
+  exit 1
+}
 
 command -v tuftool >/dev/null || {
   echo "tuftool is not installed. Run: cargo install tuftool --locked" >&2

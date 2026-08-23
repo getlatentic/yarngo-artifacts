@@ -15,8 +15,15 @@ use crate::trust::{Anchor, Trusted};
 
 /// Where the signed repository is served from. Metadata and targets sit under
 /// it, so it is one address rather than two to keep in step.
-const REPOSITORY: &str =
-    "https://raw.githubusercontent.com/getlatentic/yarngo-artifacts/main/tuf/";
+///
+/// Pages rather than `raw.githubusercontent.com`, which caches for five
+/// minutes and is not meant to be used as a content network. The same files
+/// from the same repository, served by something built to serve them.
+///
+/// Changing this address is free only until a build ships pointing at the old
+/// one, because it is compiled into every copy — after that, the old address
+/// has to keep answering for as long as those copies exist.
+const REPOSITORY: &str = "https://getlatentic.github.io/yarngo-artifacts/tuf/";
 
 /// The root role, inside the bundle. The one file whose authenticity comes from
 /// somewhere other than TUF, because it is where TUF starts.
