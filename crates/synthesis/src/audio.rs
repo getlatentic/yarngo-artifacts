@@ -123,7 +123,7 @@ mod tests {
         out.extend(16u16.to_le_bytes());
         out.extend(b"data");
         out.extend((data as u32).to_le_bytes());
-        out.extend(std::iter::repeat(0u8).take(data));
+        out.extend(std::iter::repeat_n(0u8, data));
         out
     }
 

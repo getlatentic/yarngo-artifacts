@@ -1012,10 +1012,7 @@ impl VoiceStudio {
 
         match self.take().cloned() {
             Some(take) => {
-                let (playing, progress) = match self.player_state() {
-                    Some(state) => state,
-                    None => (false, 0.0),
-                };
+                let (playing, progress) = self.player_state().unwrap_or((false, 0.0));
                 let position = crate::format_time(self.player_position());
                 strip
                     .h_flex()
@@ -1564,7 +1561,7 @@ mod tests {
                 let cut = reach - line_sliver(reach);
                 let into_line = cut.rem_euclid(TEXT_LINE);
                 assert!(
-                    into_line < 0.01 || into_line > TEXT_LINE - 0.51,
+                    !(0.01..=TEXT_LINE - 0.51).contains(&into_line),
                     "viewport {viewport} scrolled {scrolled}: cut {cut} is {into_line} into a line"
                 );
             }

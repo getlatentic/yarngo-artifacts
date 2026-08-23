@@ -1,5 +1,9 @@
 //! What the deletion and lifecycle tests both need: a store with a voice in it,
 //! and the application's engine over a stand-in that can be made to misbehave.
+//!
+//! Compiled separately into each test binary, so anything only one of them wants
+//! reads as unused from the others.
+#![allow(dead_code)]
 
 use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
@@ -9,7 +13,6 @@ use std::time::{Duration, Instant};
 use speech_engine::{EngineError, EngineHandle, Synthesis, SynthesisRequest};
 use yarngo_store::import::{Legacy, LegacyClip, LegacyConsent, LegacyVoice};
 use yarngo_store::Store;
-use speech_engine::runtimes::Descriptor;
 use yarngo_synthesis::engine::{DurableEngine, Spawn};
 use yarngo_testing::{standin, Sandbox};
 
@@ -174,4 +177,3 @@ pub fn staged(sandbox: &Sandbox) -> Vec<PathBuf> {
         .map(|entries| entries.flatten().map(|e| e.path()).collect())
         .unwrap_or_default()
 }
-

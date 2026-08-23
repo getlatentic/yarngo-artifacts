@@ -331,7 +331,6 @@ fn the_durable_engine_answers_for_the_library_and_the_machine() {
         return;
     }
     use speech_engine::SpeechEngine;
-    use speech_engine::runtimes::Descriptor;
     use yarngo_synthesis::engine::{DurableEngine, Spawn};
 
     let dir = tempfile::tempdir().expect("tempdir");
@@ -391,7 +390,6 @@ fn the_engine_answers_through_the_handle_while_it_is_generating() {
     }
     use speech_engine::{EngineHandle, SynthesisRequest};
     use std::sync::Arc;
-    use speech_engine::runtimes::Descriptor;
     use yarngo_synthesis::engine::{DurableEngine, Spawn};
 
     let dir = tempfile::tempdir().expect("tempdir");
@@ -491,7 +489,6 @@ fn deleting_a_voice_during_real_inference_stops_it_and_removes_the_recording() {
     }
     use speech_engine::{EngineHandle, SynthesisRequest};
     use std::sync::Arc;
-    use speech_engine::runtimes::Descriptor;
     use yarngo_synthesis::engine::{DurableEngine, Spawn};
 
     let Some(sandbox) = Sandbox::copying(&speech_engine::paths::installed_data_dir()) else {

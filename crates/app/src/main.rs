@@ -1197,7 +1197,7 @@ impl VoiceStudio {
         if bounds.size.width <= px(0.0) {
             return;
         }
-        let fraction: f32 = ((x - bounds.origin.x) / bounds.size.width).into();
+        let fraction: f32 = (x - bounds.origin.x) / bounds.size.width;
         if let Err(err) = player.seek_to(fraction) {
             self.status = Status::Failed(err);
         }

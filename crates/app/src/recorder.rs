@@ -374,7 +374,7 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, s)| {
-                let loud = (i / (rate as usize / 2)) % 2 == 0;
+                let loud = (i / (rate as usize / 2)).is_multiple_of(2);
                 s * if loud { speech } else { noise }
             })
             .collect()

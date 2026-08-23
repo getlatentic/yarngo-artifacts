@@ -368,6 +368,12 @@ pub struct Dispatched {
 }
 
 /// How an attempt ended.
+///
+/// One variant is much larger than the other, which is deliberate: it is built
+/// once per attempt and matched immediately, so boxing it would buy an
+/// allocation per generation and a level of indirection to save bytes nothing
+/// is short of.
+#[allow(clippy::large_enum_variant)]
 pub enum Finished {
     /// There is audio, and nothing has ruled on it. The job is deliberately
     /// still open: [`Synthesis::publish`] is what closes it.

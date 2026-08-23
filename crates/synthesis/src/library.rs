@@ -15,6 +15,17 @@ use yarngo_store::{Result, Store};
 ///
 /// A clip whose takes have all gone is not listed: there is nothing to play and
 /// nothing to look at, and a row that does neither is a row that only confuses.
+/// One row of the clip query, named so that six columns in a row are read by
+/// what they are rather than by where they sit.
+struct Row {
+    id: String,
+    name: String,
+    text: String,
+    voice_id: Option<String>,
+    model: Option<String>,
+    created: String,
+}
+
 pub fn clips(store: &Store) -> Result<Vec<Clip>> {
     let mut statement = store.raw().prepare(
         "SELECT c.id, c.name, c.text, r.voice_id, c.model_id, c.created_at
@@ -23,33 +34,33 @@ pub fn clips(store: &Store) -> Result<Vec<Clip>> {
           WHERE c.deleted_at IS NULL
           ORDER BY c.created_at DESC, c.id DESC",
     )?;
-    let rows: Vec<(String, String, String, Option<String>, Option<String>, String)> = statement
+    let rows: Vec<Row> = statement
         .query_map([], |row| {
-            Ok((
-                row.get(0)?,
-                row.get(1)?,
-                row.get(2)?,
-                row.get(3)?,
-                row.get(4)?,
-                row.get(5)?,
-            ))
+            Ok(Row {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                text: row.get(2)?,
+                voice_id: row.get(3)?,
+                model: row.get(4)?,
+                created: row.get(5)?,
+            })
         })?
         .collect::<std::result::Result<_, _>>()?;
 
     let mut clips = Vec::new();
-    for (id, name, text, voice_id, model, created) in rows {
-        let takes = takes_of(store, &id)?;
+    for row in rows {
+        let takes = takes_of(store, &row.id)?;
         if takes.is_empty() {
             continue;
         }
         clips.push(Clip {
-            title: title_of(&text),
-            id,
-            name,
-            text,
-            voice_id,
-            model: model.unwrap_or_default(),
-            created,
+            title: title_of(&row.text),
+            id: row.id,
+            name: row.name,
+            text: row.text,
+            voice_id: row.voice_id,
+            model: row.model.unwrap_or_default(),
+            created: row.created,
             takes,
         });
     }
