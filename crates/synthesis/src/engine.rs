@@ -59,7 +59,9 @@ pub struct Spawn {
 
 impl Spawn {
     fn start(&self) -> Result<(Connection, Events, Capabilities), EngineError> {
-        let mut command = self.runtime.command();
+        let mut command = self.runtime.command().map_err(|why| {
+            EngineError::Transport(format!("the {} runtime {why}", self.runtime.name))
+        })?;
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt as _;
@@ -73,9 +75,8 @@ impl Spawn {
             .spawn()
             .map_err(|e| {
                 EngineError::Transport(format!(
-                    "could not start the {} runtime ({}): {e}",
-                    self.runtime.name,
-                    self.runtime.program().display()
+                    "could not start the {} runtime: {e}",
+                    self.runtime.name
                 ))
             })?;
         let stdin = child.stdin.take().ok_or(EngineError::NotRunning)?;

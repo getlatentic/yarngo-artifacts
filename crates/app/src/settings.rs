@@ -824,10 +824,16 @@ impl VoiceStudio {
                 let id = runtime.id.clone();
                 let chosen = self.preferred_runtime.as_deref() == Some(id.as_str());
                 let here = runtime.available();
-                let facts = if here {
-                    t!("runtime.ready").to_string()
-                } else {
-                    t!("runtime.missing", path = runtime.program().display().to_string()).to_string()
+                // What is wrong when something is, in the runtime's own terms
+                // rather than a path nobody can act on.
+                let facts = match (here, runtime.program_path(), runtime.engine_path()) {
+                    (true, _, _) => t!("runtime.ready").to_string(),
+                    (_, Err(why), _) | (_, _, Err(why)) => {
+                        t!("runtime.refused", why = why).to_string()
+                    }
+                    (_, Ok(program), _) => {
+                        t!("runtime.missing", path = program.display().to_string()).to_string()
+                    }
                 };
                 div()
                     .h_flex()

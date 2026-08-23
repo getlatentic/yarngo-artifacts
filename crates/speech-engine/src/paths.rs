@@ -99,7 +99,6 @@ pub fn places() -> crate::runtimes::Places {
         data: data_dir(),
         runtime: runtime_dir(),
         resources: resource_root(),
-        own: PathBuf::new(),
     }
 }
 

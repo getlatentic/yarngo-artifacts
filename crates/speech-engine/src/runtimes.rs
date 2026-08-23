@@ -10,144 +10,234 @@
 //! is described the same way as any other, so the path the application takes to
 //! its own engine is the path a third one would take.
 //!
+//! # A descriptor is downloaded data
+//!
+//! Which is the whole reason it does not say what to run. An earlier version
+//! carried `command`, `args` and `env` verbatim, which made it a second way to
+//! execute anything on the machine — `/bin/sh -c …` outright, or quietly
+//! through `PYTHONPATH` and `DYLD_INSERT_LIBRARIES`, without any of it looking
+//! like an instruction to run something.
+//!
+//! The application owns the launch. A descriptor chooses only from what the
+//! application already knows how to do:
+//!
 //! ```json
 //! {
+//!   "schema": 1,
 //!   "id": "mlx",
 //!   "name": "Apple silicon",
-//!   "command": "{runtime}/mlx/.venv/bin/python",
-//!   "args": ["{resources}/sidecar/engine.py"],
-//!   "env": { "YARNGO_DATA": "{data}" }
+//!   "engine": "own",
+//!   "program": "{venv}/bin/python3",
+//!   "arguments": ["{engine}"]
 //! }
 //! ```
 //!
-//! A descriptor is something the person installed, and it names a program to
-//! run. That is the same trust as any editor extension or language server: what
-//! it can do is what the person running it can do.
+//! `program` is either inside the environment the application installed for
+//! this runtime, or a path inside the runtime's own directory — never absolute,
+//! never climbing out. `{engine}` is whichever implementation the application
+//! resolved, its own or the one that shipped. The environment is the
+//! application's to set.
+//!
+//! None of this makes a runtime safe. Its code is executable and it was
+//! downloaded; that risk is answered by verifying who published it, not here.
+//! What this prevents is the descriptor being a *second* way in, and an archive
+//! quietly escaping the directory it was installed into.
 
-use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::Deserialize;
+
+/// The descriptor shapes this build knows how to read. A descriptor declaring
+/// a newer one describes an arrangement this application cannot honour, so it
+/// is refused rather than half-understood.
+pub const DESCRIPTOR_SCHEMA: u32 = 1;
 
 /// Where a descriptor's placeholders point.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Places {
     /// Everything the application keeps.
     pub data: PathBuf,
-    /// Where installed runtimes live.
+    /// Where the environments the application installs live.
     pub runtime: PathBuf,
     /// What shipped with the application.
     pub resources: PathBuf,
-    /// The directory this descriptor was read from.
-    pub own: PathBuf,
+}
+
+/// Which implementation of the protocol runs this runtime.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Engine {
+    /// The copy that ships with the application. For a runtime that installs
+    /// dependencies the shipped engine already knows how to drive.
+    #[default]
+    Bundled,
+    /// The runtime's own, in its own directory. Speaking the same protocol is
+    /// not the same as being the same implementation, so this is never
+    /// substituted for the bundled one: a runtime whose code is missing cannot
+    /// be started, rather than being started by something else.
+    Own,
 }
 
 /// How to start one runtime.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Descriptor {
+    #[serde(default = "one")]
+    pub schema: u32,
     pub id: String,
     pub name: String,
-    /// The program to run. Placeholders are substituted before it is used.
-    pub command: String,
     #[serde(default)]
-    pub args: Vec<String>,
+    pub engine: Engine,
+    /// Inside the installed environment when it begins `{venv}`, otherwise
+    /// inside the runtime's own directory. Never absolute, never climbing out.
+    pub program: String,
+    /// Passed through as written, except for `{engine}`, which is the
+    /// implementation the application resolved. Arguments are not paths the
+    /// application resolves: the program they are given to is already
+    /// constrained, so they are flags to it and nothing more.
     #[serde(default)]
-    pub env: BTreeMap<String, String>,
-    /// Skipped in the picker, and still startable by name — for a runtime that
-    /// is installed but not what the person wants used by default.
+    pub arguments: Vec<String>,
+    /// Skipped when choosing automatically, and still startable by name.
     #[serde(default)]
     pub hidden: bool,
     #[serde(skip)]
-    places: Option<Places>,
+    home: Option<Home>,
+}
+
+fn one() -> u32 {
+    1
+}
+
+/// Where one descriptor's own things are, filled in when it is read.
+#[derive(Clone, Debug, PartialEq)]
+struct Home {
+    places: Places,
+    own: PathBuf,
 }
 
 impl Descriptor {
-    /// Read one, remembering where it came from so `{self}` means something.
+    /// Read one, and refuse it if it asks for anything it may not have.
+    ///
+    /// `None` rather than an error for anything malformed: a directory of
+    /// runtimes is a place other things put files, and one unreadable entry is
+    /// not a reason to have no runtimes.
     pub fn read(path: &Path, places: &Places) -> Option<Self> {
         let text = std::fs::read_to_string(path).ok()?;
         let mut descriptor: Descriptor = serde_json::from_str(&text).ok()?;
-        if descriptor.id.trim().is_empty() || descriptor.command.trim().is_empty() {
-            return None;
-        }
-        descriptor.places = Some(Places {
-            own: path.parent().map(Path::to_path_buf).unwrap_or_default(),
-            ..places.clone()
-        });
+        let own = path.parent()?.to_path_buf();
+        descriptor.home = Some(Home { places: places.clone(), own });
+        descriptor.acceptable().ok()?;
         Some(descriptor)
     }
 
-    /// One described in code rather than read from a file — for a caller that
-    /// knows the command outright. Nothing is substituted into it, because
-    /// there is no file for `{self}` to mean anything relative to.
-    pub fn running(
-        id: impl Into<String>,
-        name: impl Into<String>,
-        command: impl Into<PathBuf>,
-        args: Vec<String>,
-    ) -> Self {
-        Self {
-            id: id.into(),
-            name: name.into(),
-            command: command.into().to_string_lossy().into_owned(),
-            args,
-            env: BTreeMap::new(),
-            hidden: false,
-            places: None,
+    /// Whether this is a descriptor this application will act on.
+    pub fn acceptable(&self) -> Result<(), String> {
+        if self.schema > DESCRIPTOR_SCHEMA {
+            return Err(format!(
+                "describes schema {} and this application knows {DESCRIPTOR_SCHEMA}",
+                self.schema
+            ));
         }
+        if self.id.is_empty()
+            || !self
+                .id
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+        {
+            // It becomes a directory name, and one that could contain a
+            // separator would decide where the runtime lives.
+            return Err(format!("{:?} is not a runtime name", self.id));
+        }
+        if self.name.trim().is_empty() {
+            return Err("has nothing to call itself".into());
+        }
+        self.program_path().map(|_| ())
     }
 
-    /// Something the runtime should be started with. Applied after whatever the
-    /// descriptor itself asked for, so a caller can be specific about the
-    /// environment a particular run needs.
-    pub fn with_env(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
-        self.env.insert(name.into(), value.into());
-        self
-    }
-
-    fn fill(&self, text: &str) -> String {
-        let Some(places) = &self.places else {
-            return text.to_string();
+    /// The program to run, refused if it names anywhere it may not.
+    pub fn program_path(&self) -> Result<PathBuf, String> {
+        let Some(home) = &self.home else {
+            return Err("was not read from anywhere".into());
         };
-        text.replace("{data}", &places.data.to_string_lossy())
-            .replace("{runtime}", &places.runtime.to_string_lossy())
-            .replace("{resources}", &places.resources.to_string_lossy())
-            .replace("{self}", &places.own.to_string_lossy())
-    }
-
-    pub fn program(&self) -> PathBuf {
-        PathBuf::from(self.fill(&self.command))
-    }
-
-    /// Whether the program it names is actually there.
-    ///
-    /// Asked before it is offered, so a runtime whose interpreter has been
-    /// removed is absent from the list rather than an error at first use.
-    pub fn available(&self) -> bool {
-        let program = self.program();
-        // A bare name is looked up on PATH, which is not this to resolve.
-        if program.components().count() == 1 {
-            return true;
+        let (root, rest) = match self.program.strip_prefix("{venv}/") {
+            // The environment the application installed for this runtime. Its
+            // location is the application's, not the descriptor's.
+            Some(rest) => (home.places.runtime.join(&self.id).join(".venv"), rest),
+            None => (home.own.clone(), self.program.as_str()),
+        };
+        if self.program.contains('{') && !self.program.starts_with("{venv}/") {
+            return Err(format!("program {:?} uses a placeholder there is no such thing as", self.program));
         }
-        program.exists()
+        inside(&root, Path::new(rest)).map_err(|why| format!("program {why}"))
     }
 
-    /// The command that starts it, ready to spawn.
-    pub fn command(&self) -> Command {
-        let mut command = Command::new(self.program());
-        command.args(self.args.iter().map(|arg| self.fill(arg)));
-        for (name, value) in &self.env {
-            command.env(name, self.fill(value));
-        }
-        // The working directory is the runtime's own, so a relative path in a
-        // descriptor means what its author meant.
-        if let Some(places) = &self.places {
-            if places.own.is_dir() {
-                command.current_dir(&places.own);
+    /// The implementation of the protocol that runs it.
+    pub fn engine_path(&self) -> Result<PathBuf, String> {
+        let Some(home) = &self.home else {
+            return Err("was not read from anywhere".into());
+        };
+        match self.engine {
+            Engine::Own => {
+                let own = home.own.join("engine.py");
+                if !own.exists() {
+                    // Never the bundled one instead. Speaking this protocol is
+                    // not the same as knowing this runtime, and starting the
+                    // wrong implementation is worse than not starting.
+                    return Err(format!(
+                        "says it brought its own engine and {} is not there",
+                        own.display()
+                    ));
+                }
+                Ok(own)
             }
+            Engine::Bundled => Ok(home.places.resources.join("sidecar").join("engine.py")),
         }
-        command
     }
+
+    /// Whether everything it needs is actually here.
+    pub fn available(&self) -> bool {
+        self.program_path().is_ok_and(|p| p.exists()) && self.engine_path().is_ok()
+    }
+
+    /// The command that starts it.
+    ///
+    /// The environment is the application's: a downloaded descriptor setting
+    /// `PYTHONPATH` or `DYLD_INSERT_LIBRARIES` would be running its own code
+    /// without ever naming a program.
+    pub fn command(&self) -> Result<Command, String> {
+        let home = self.home.as_ref().ok_or("was not read from anywhere")?;
+        let engine = self.engine_path()?;
+        let mut command = Command::new(self.program_path()?);
+        for argument in &self.arguments {
+            command.arg(argument.replace("{engine}", &engine.to_string_lossy()));
+        }
+        command.env("YARNGO_DATA", &home.places.data);
+        command.current_dir(&home.own);
+        Ok(command)
+    }
+}
+
+/// Where a relative path lands under a root, or why it may not land at all.
+fn inside(root: &Path, path: &Path) -> Result<PathBuf, String> {
+    use std::path::Component;
+    if path.is_absolute() {
+        return Err(format!("{} is an absolute path", path.display()));
+    }
+    let mut landing = root.to_path_buf();
+    for part in path.components() {
+        match part {
+            Component::Normal(part) => landing.push(part),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                return Err(format!("{} climbs out of the runtime", path.display()))
+            }
+            other => return Err(format!("{} contains {other:?}", path.display())),
+        }
+    }
+    if !landing.starts_with(root) {
+        return Err(format!("{} resolves outside the runtime", path.display()));
+    }
+    Ok(landing)
 }
 
 /// Every runtime this machine offers, the shipped one first.
@@ -156,10 +246,8 @@ impl Descriptor {
 /// is a folder somebody can add or remove without the application knowing it
 /// was coming.
 pub fn discover(places: &Places) -> Vec<Descriptor> {
-    let mut found = Vec::new();
-    let shipped = places.resources.join("runtimes");
-    let installed = places.data.join("runtimes");
-    for root in [shipped, installed] {
+    let mut found: Vec<Descriptor> = Vec::new();
+    for root in [places.resources.join("runtimes"), places.data.join("runtimes")] {
         let Ok(entries) = std::fs::read_dir(&root) else {
             continue;
         };
@@ -178,7 +266,7 @@ pub fn discover(places: &Places) -> Vec<Descriptor> {
             };
             // First wins: a shipped runtime is not silently replaced by an
             // installed one that took its name.
-            if !found.iter().any(|other: &Descriptor| other.id == descriptor.id) {
+            if !found.iter().any(|other| other.id == descriptor.id) {
                 found.push(descriptor);
             }
         }
@@ -194,136 +282,5 @@ pub fn choose(runtimes: &[Descriptor], preferred: Option<&str>) -> Option<Descri
             return Some(found.clone());
         }
     }
-    runtimes
-        .iter()
-        .find(|r| !r.hidden && r.available())
-        .cloned()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{choose, discover, Descriptor, Places};
-    use std::path::PathBuf;
-
-    fn places(root: &std::path::Path) -> Places {
-        Places {
-            data: root.join("data"),
-            runtime: root.join("data/runtime"),
-            resources: root.join("resources"),
-            own: PathBuf::new(),
-        }
-    }
-
-    fn write(path: &std::path::Path, body: &str) {
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(path, body).unwrap();
-    }
-
-    #[test]
-    fn a_descriptor_says_where_its_placeholders_point() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("resources/runtimes/mlx.json");
-        write(
-            &path,
-            r#"{"id":"mlx","name":"Apple silicon","command":"{runtime}/bin/python",
-                "args":["{resources}/sidecar/engine.py"],"env":{"YARNGO_DATA":"{data}"}}"#,
-        );
-        let descriptor = Descriptor::read(&path, &places(dir.path())).expect("read");
-        assert_eq!(descriptor.program(), dir.path().join("data/runtime/bin/python"));
-        let command = descriptor.command();
-        let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(args, [dir.path().join("resources/sidecar/engine.py").to_string_lossy()]);
-        let env: Vec<_> = command
-            .get_envs()
-            .map(|(k, v)| (k.to_string_lossy().into_owned(), v.map(|v| v.to_string_lossy().into_owned())))
-            .collect();
-        assert_eq!(
-            env,
-            [("YARNGO_DATA".to_string(), Some(dir.path().join("data").to_string_lossy().into_owned()))]
-        );
-    }
-
-    /// `{self}` is what lets a runtime ship its own interpreter beside itself
-    /// without knowing where it will be installed.
-    #[test]
-    fn a_runtime_can_point_at_its_own_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("data/runtimes/piper/runtime.json");
-        write(&path, r#"{"id":"piper","name":"Piper","command":"{self}/bin/piper"}"#);
-        let descriptor = Descriptor::read(&path, &places(dir.path())).expect("read");
-        assert_eq!(
-            descriptor.program(),
-            dir.path().join("data/runtimes/piper/bin/piper")
-        );
-    }
-
-    #[test]
-    fn installed_runtimes_are_found_beside_the_shipped_one() {
-        let dir = tempfile::tempdir().unwrap();
-        write(
-            &dir.path().join("resources/runtimes/mlx.json"),
-            r#"{"id":"mlx","name":"Apple silicon","command":"/usr/bin/true"}"#,
-        );
-        write(
-            &dir.path().join("data/runtimes/piper/runtime.json"),
-            r#"{"id":"piper","name":"Piper","command":"/usr/bin/true"}"#,
-        );
-        let found = discover(&places(dir.path()));
-        assert_eq!(
-            found.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
-            ["mlx", "piper"],
-            "the shipped runtime comes first"
-        );
-    }
-
-    /// A name is not a claim on it. An installed runtime calling itself `mlx`
-    /// must not quietly become the engine the application starts.
-    #[test]
-    fn an_installed_runtime_cannot_take_the_shipped_ones_name() {
-        let dir = tempfile::tempdir().unwrap();
-        write(
-            &dir.path().join("resources/runtimes/mlx.json"),
-            r#"{"id":"mlx","name":"Shipped","command":"/usr/bin/true"}"#,
-        );
-        write(
-            &dir.path().join("data/runtimes/mlx/runtime.json"),
-            r#"{"id":"mlx","name":"Impostor","command":"/usr/bin/false"}"#,
-        );
-        let found = discover(&places(dir.path()));
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].name, "Shipped");
-    }
-
-    #[test]
-    fn a_runtime_whose_program_is_gone_is_not_offered() {
-        let dir = tempfile::tempdir().unwrap();
-        write(
-            &dir.path().join("resources/runtimes/here.json"),
-            r#"{"id":"here","name":"Here","command":"/usr/bin/true"}"#,
-        );
-        write(
-            &dir.path().join("resources/runtimes/gone.json"),
-            r#"{"id":"gone","name":"Gone","command":"/nowhere/at/all"}"#,
-        );
-        let found = discover(&places(dir.path()));
-        assert_eq!(found.len(), 2, "both are described");
-        assert_eq!(choose(&found, None).expect("one works").id, "here");
-        assert!(
-            choose(&found, Some("gone")).is_some_and(|r| r.id == "here"),
-            "a preference for something that is not there falls back rather than failing"
-        );
-    }
-
-    #[test]
-    fn nonsense_is_skipped_rather_than_fatal() {
-        let dir = tempfile::tempdir().unwrap();
-        write(&dir.path().join("resources/runtimes/broken.json"), "not json at all");
-        write(&dir.path().join("resources/runtimes/empty.json"), r#"{"id":"","command":""}"#);
-        write(
-            &dir.path().join("resources/runtimes/fine.json"),
-            r#"{"id":"fine","name":"Fine","command":"/usr/bin/true"}"#,
-        );
-        let found = discover(&places(dir.path()));
-        assert_eq!(found.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["fine"]);
-    }
+    runtimes.iter().find(|r| !r.hidden && r.available()).cloned()
 }

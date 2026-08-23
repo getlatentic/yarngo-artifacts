@@ -7,6 +7,8 @@
 
 mod common;
 
+use yarngo_testing::standin;
+
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -145,7 +147,7 @@ fn the_reference_transcript_reaches_the_engine() {
 
     handle.prepare_voice("bea", None).expect("prepare");
     let conditioning: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(sandbox.root().join("conditioning.asked.json"))
+        &std::fs::read_to_string(standin::beside(sandbox.root(), "stand-in", "conditioning.asked.json"))
             .expect("the engine was never asked to condition"),
     )
     .expect("json");
@@ -167,7 +169,7 @@ fn the_reference_transcript_reaches_the_engine() {
         })
         .expect("generate");
     let asked: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(sandbox.root().join("generate.asked.json"))
+        &std::fs::read_to_string(standin::beside(sandbox.root(), "stand-in", "generate.asked.json"))
             .expect("the engine recorded nothing"),
     )
     .expect("json");

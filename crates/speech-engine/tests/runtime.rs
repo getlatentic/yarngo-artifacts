@@ -633,16 +633,13 @@ fn the_download_url_names_the_pinned_version() {
     }
 }
 
-/// A runtime the application installed is found the same way as one somebody
-/// else put there: by its descriptor.
-///
-/// Nothing is bundled, so this is the step that turns a downloaded interpreter
-/// into a runtime. Without it an install finishes and the application still has
-/// nothing it can start.
+/// An installed runtime is found and started the way the application finds one.
 #[test]
 fn installing_a_runtime_leaves_a_descriptor_where_runtimes_are_looked_for() {
     let sandbox = yarngo_testing::Sandbox::empty();
     let interpreter = sandbox.root().join("runtime/mlx/.venv/bin/python3");
+    std::fs::create_dir_all(interpreter.parent().unwrap()).expect("bin");
+    std::fs::write(&interpreter, b"#!/bin/sh\n").expect("interpreter");
 
     let written = speech_engine::runtime::MLX
         .describe_in(sandbox.root(), &interpreter)
@@ -653,26 +650,25 @@ fn installing_a_runtime_leaves_a_descriptor_where_runtimes_are_looked_for() {
         "a descriptor was written somewhere runtimes are not looked for"
     );
 
-    let places = speech_engine::runtimes::Places {
+    let found = speech_engine::runtimes::discover(&places(&sandbox));
+    assert_eq!(found.len(), 1, "the installed runtime was not discovered");
+    assert_eq!(found[0].id, "mlx");
+    assert_eq!(found[0].program_path().expect("program"), interpreter);
+    // With no code of its own it is run by the copy that ships, which is what
+    // a first install has always done.
+    assert_eq!(found[0].engine, speech_engine::runtimes::Engine::Bundled);
+    assert_eq!(
+        found[0].engine_path().expect("engine"),
+        sandbox.root().join("resources/sidecar/engine.py")
+    );
+}
+
+fn places(sandbox: &yarngo_testing::Sandbox) -> speech_engine::runtimes::Places {
+    speech_engine::runtimes::Places {
         data: sandbox.root().to_path_buf(),
         runtime: sandbox.root().join("runtime"),
         resources: sandbox.root().join("resources"),
-        own: std::path::PathBuf::new(),
-    };
-    let found = speech_engine::runtimes::discover(&places);
-    assert_eq!(found.len(), 1, "the installed runtime was not discovered");
-    assert_eq!(found[0].id, "mlx");
-    assert_eq!(
-        found[0].program(),
-        interpreter,
-        "the descriptor points somewhere other than what was installed"
-    );
-    // With no code of its own it is run by the copy that ships with the
-    // application, which is what a first install has always done.
-    assert_eq!(
-        found[0].command().get_args().next().map(|a| a.to_string_lossy().into_owned()),
-        Some(sandbox.root().join("resources/sidecar/engine.py").to_string_lossy().into_owned())
-    );
+    }
 }
 
 /// A runtime that published its own implementation is started from it.
@@ -680,94 +676,153 @@ fn installing_a_runtime_leaves_a_descriptor_where_runtimes_are_looked_for() {
 fn a_runtime_that_brought_its_own_code_is_started_from_it() {
     let sandbox = yarngo_testing::Sandbox::empty();
     let interpreter = sandbox.root().join("runtime/mlx/.venv/bin/python3");
+    std::fs::create_dir_all(interpreter.parent().unwrap()).expect("bin");
+    std::fs::write(&interpreter, b"#!/bin/sh\n").expect("interpreter");
     let folder = speech_engine::runtime::MLX.folder_in(sandbox.root());
     std::fs::create_dir_all(&folder).expect("folder");
-    // What the archive would have left behind.
     std::fs::write(folder.join("engine.py"), b"# the runtime's own").expect("engine");
 
     speech_engine::runtime::MLX
         .describe_in(sandbox.root(), &interpreter)
         .expect("describe");
 
-    let places = speech_engine::runtimes::Places {
-        data: sandbox.root().to_path_buf(),
-        runtime: sandbox.root().join("runtime"),
-        resources: sandbox.root().join("resources"),
-        own: std::path::PathBuf::new(),
-    };
-    let found = speech_engine::runtimes::discover(&places);
+    let found = speech_engine::runtimes::discover(&places(&sandbox));
+    assert_eq!(found[0].engine, speech_engine::runtimes::Engine::Own);
     assert_eq!(
-        found[0].command().get_args().next().map(|a| a.to_string_lossy().into_owned()),
-        Some(folder.join("engine.py").to_string_lossy().into_owned()),
-        "a runtime with its own code was still started from the application's"
+        found[0].engine_path().expect("engine"),
+        folder.join("engine.py"),
+        "a runtime with its own code was started from the application's"
     );
 }
 
-/// A runtime that published a descriptor as well is the authority on how it
-/// starts, and nothing writes over it.
+/// A runtime that said it brought its own code and has none is not started by
+/// something else. Speaking the same protocol is not being the same
+/// implementation.
 #[test]
-fn a_published_descriptor_is_not_overwritten() {
+fn a_runtime_missing_its_own_engine_is_not_run_by_the_bundled_one() {
     let sandbox = yarngo_testing::Sandbox::empty();
-    let folder = speech_engine::runtime::MLX.folder_in(sandbox.root());
-    std::fs::create_dir_all(&folder).expect("folder");
-    std::fs::write(folder.join("engine.py"), b"# its own").expect("engine");
-    let theirs = br#"{"id":"mlx","name":"As published","command":"/usr/bin/true",
-                     "args":["{self}/engine.py","--their-flag"]}"#;
-    std::fs::write(folder.join("runtime.json"), theirs).expect("descriptor");
+    let own = sandbox.root().join("runtimes/mlx");
+    std::fs::create_dir_all(&own).expect("folder");
+    std::fs::write(
+        own.join("runtime.json"),
+        br#"{"schema":1,"id":"mlx","name":"Apple silicon","engine":"own",
+             "program":"{venv}/bin/python3","arguments":["{engine}"]}"#,
+    )
+    .expect("descriptor");
+    let bin = sandbox.root().join("runtime/mlx/.venv/bin");
+    std::fs::create_dir_all(&bin).expect("bin");
+    std::fs::write(bin.join("python3"), b"#!/bin/sh\n").expect("interpreter");
 
-    speech_engine::runtime::MLX
-        .describe_in(sandbox.root(), &sandbox.root().join("ours"))
-        .expect("describe");
-
-    let kept = std::fs::read_to_string(folder.join("runtime.json")).expect("read");
-    assert!(kept.contains("--their-flag"), "the published descriptor was overwritten");
-    assert!(kept.contains("As published"));
+    let found = speech_engine::runtimes::discover(&places(&sandbox));
+    assert_eq!(found.len(), 1, "it was not read at all");
+    assert!(found[0].engine_path().is_err(), "it was given an engine it did not bring");
+    assert!(!found[0].available(), "a runtime with no engine was offered");
+    assert!(
+        speech_engine::runtimes::choose(&found, Some("mlx")).is_none(),
+        "a runtime with no engine was chosen"
+    );
 }
 
-/// Every host gets exactly one runtime, and it is the right one.
-///
-/// Checked for hosts this machine is not, because a machine can only tell you
-/// about itself and "does this pack run on Windows" is not a question a Mac can
-/// answer by running the code. A pack offered where it cannot run is a download
-/// of several hundred megabytes that ends in an error.
+/// A descriptor is downloaded data, and may not become a second way to run
+/// anything on the machine.
 #[test]
-fn each_host_is_offered_the_one_runtime_that_serves_it() {
-    use speech_engine::runtime::PACKS;
-    for (os, arch, expected) in [
-        ("macos", "aarch64", "mlx"),
-        ("macos", "x86_64", "torch"),
-        ("windows", "x86_64", "torch"),
-        ("linux", "x86_64", "torch"),
-        ("linux", "aarch64", "torch"),
+fn a_descriptor_cannot_name_a_program_outside_the_runtime() {
+    let sandbox = yarngo_testing::Sandbox::empty();
+    let own = sandbox.root().join("runtimes/rogue");
+    std::fs::create_dir_all(&own).expect("folder");
+    std::fs::write(own.join("engine.py"), b"# own").expect("engine");
+
+    for (what, program) in [
+        ("a shell", "/bin/sh"),
+        ("anything absolute", "/usr/bin/python3"),
+        ("climbing out", "../../../../bin/sh"),
+        ("climbing out of the environment", "{venv}/../../../../bin/sh"),
+        ("a placeholder there is no such thing as", "{data}/sh"),
     ] {
-        let serving: Vec<&str> = PACKS
-            .iter()
-            .filter(|pack| pack.runs_on(os, arch))
-            .map(|pack| pack.id)
-            .collect();
-        assert_eq!(
-            serving,
-            [expected],
-            "{os}/{arch} is offered {serving:?}, which is not exactly the one that serves it"
+        std::fs::write(
+            own.join("runtime.json"),
+            serde_json::json!({
+                "schema": 1, "id": "rogue", "name": "Rogue", "engine": "own",
+                "program": program, "arguments": [],
+            })
+            .to_string(),
+        )
+        .expect("descriptor");
+        assert!(
+            speech_engine::runtimes::discover(&places(&sandbox)).is_empty(),
+            "{what} was accepted: {program}"
         );
     }
 }
 
-/// Every runtime offered is one this machine can actually run.
+/// And the environment is the application's. A descriptor that could set one
+/// would be running its own code without ever naming a program.
 #[test]
-fn only_runtimes_this_machine_can_run_are_offered() {
-    let offered = speech_engine::runtime::offered();
-    assert!(!offered.is_empty(), "this machine is offered nothing at all");
-    assert!(
-        offered.iter().all(|pack| pack.runs_here()),
-        "a runtime was offered that this machine cannot run"
-    );
-    // A download of several hundred megabytes that ends in an error is the
-    // thing this prevents.
-    assert!(
-        speech_engine::runtime::host_supported().is_ok() == offered.iter().any(|p| p.id == "mlx"),
-        "what is offered disagrees with what the host check says"
-    );
+fn a_descriptor_cannot_set_the_environment() {
+    let sandbox = yarngo_testing::Sandbox::empty();
+    let own = sandbox.root().join("runtimes/mlx");
+    std::fs::create_dir_all(&own).expect("folder");
+    std::fs::write(own.join("engine.py"), b"# own").expect("engine");
+    let bin = sandbox.root().join("runtime/mlx/.venv/bin");
+    std::fs::create_dir_all(&bin).expect("bin");
+    std::fs::write(bin.join("python3"), b"#!/bin/sh\n").expect("interpreter");
+    std::fs::write(
+        own.join("runtime.json"),
+        br#"{"schema":1,"id":"mlx","name":"Apple silicon","engine":"own",
+             "program":"{venv}/bin/python3","arguments":["{engine}"],
+             "env":{"PYTHONPATH":"/tmp/attacker","DYLD_INSERT_LIBRARIES":"/tmp/evil.dylib"}}"#,
+    )
+    .expect("descriptor");
+
+    let found = speech_engine::runtimes::discover(&places(&sandbox));
+    assert_eq!(found.len(), 1, "an unknown field made it unreadable");
+    let command = found[0].command().expect("command");
+    let named: Vec<String> = command
+        .get_envs()
+        .map(|(k, _)| k.to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(named, ["YARNGO_DATA"], "the descriptor set the environment");
+}
+
+/// A descriptor from a newer application describes an arrangement this one
+/// cannot honour, and is refused rather than half-understood.
+#[test]
+fn a_descriptor_from_a_newer_application_is_refused() {
+    let sandbox = yarngo_testing::Sandbox::empty();
+    let own = sandbox.root().join("runtimes/future");
+    std::fs::create_dir_all(&own).expect("folder");
+    std::fs::write(own.join("engine.py"), b"# own").expect("engine");
+    std::fs::write(
+        own.join("runtime.json"),
+        br#"{"schema":99,"id":"future","name":"Future","engine":"own",
+             "program":"{venv}/bin/python3","arguments":[]}"#,
+    )
+    .expect("descriptor");
+    assert!(speech_engine::runtimes::discover(&places(&sandbox)).is_empty());
+}
+
+/// An id becomes a directory name, so it may not decide where anything lives.
+#[test]
+fn a_runtime_name_that_is_a_path_is_refused() {
+    let sandbox = yarngo_testing::Sandbox::empty();
+    let own = sandbox.root().join("runtimes/sneaky");
+    std::fs::create_dir_all(&own).expect("folder");
+    std::fs::write(own.join("engine.py"), b"# own").expect("engine");
+    for id in ["../escape", "/absolute", "with space", "Upper", "dots.and.dots"] {
+        std::fs::write(
+            own.join("runtime.json"),
+            serde_json::json!({
+                "schema": 1, "id": id, "name": "Sneaky", "engine": "own",
+                "program": "{venv}/bin/python3", "arguments": [],
+            })
+            .to_string(),
+        )
+        .expect("descriptor");
+        assert!(
+            speech_engine::runtimes::discover(&places(&sandbox)).is_empty(),
+            "{id:?} was accepted as a runtime name"
+        );
+    }
 }
 
 /// A runtime archive is executable code arriving over a network. The digest in

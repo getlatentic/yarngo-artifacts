@@ -88,15 +88,19 @@ pub fn engine_without(
     grace: Duration,
     without: &[&str],
 ) -> Arc<EngineHandle> {
-    let script = standin::limited(sandbox.root(), behaviour, without);
-    let runtime = Descriptor::running(
-        "stand-in",
-        "Stand-in",
-        standin::python(),
-        vec![script.to_string_lossy().into_owned()],
+    standin::install(sandbox.root(), "stand-in", &standin::python(), behaviour, without);
+    let places = speech_engine::runtimes::Places {
+        data: sandbox.root().to_path_buf(),
+        runtime: sandbox.root().join("runtime"),
+        resources: sandbox.root().join("resources"),
+    };
+    // Found and validated the way the application finds one, rather than
+    // handed a descriptor no file ever had to satisfy.
+    let runtime = speech_engine::runtimes::choose(
+        &speech_engine::runtimes::discover(&places),
+        Some("stand-in"),
     )
-    .with_env("YARNGO_DATA", sandbox.root().to_string_lossy())
-    .with_env("YARNGO_TEST_MODE", "1");
+    .expect("the stand-in runtime was not usable");
     let spawn = Spawn { runtime, data_dir: sandbox.root().to_path_buf() };
     let database = sandbox.database();
     let data = sandbox.root().to_path_buf();

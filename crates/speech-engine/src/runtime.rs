@@ -185,13 +185,17 @@ impl Pack {
         if path.exists() && folder.join("engine.py").exists() {
             return Ok(path);
         }
-        let own = folder.join("engine.py");
+        let _ = interpreter;
         let descriptor = serde_json::json!({
+            "schema": crate::runtimes::DESCRIPTOR_SCHEMA,
             "id": self.id,
             "name": self.name,
-            "command": interpreter.to_string_lossy(),
-            "args": [if own.exists() { "{self}/engine.py" } else { "{resources}/sidecar/engine.py" }],
-            "env": { "YARNGO_DATA": "{data}" },
+            // What it is run by, stated rather than inferred from what happens
+            // to be on disk: a runtime that said it brought its own code and
+            // has none must not be started by a different implementation.
+            "engine": if folder.join("engine.py").exists() { "own" } else { "bundled" },
+            "program": "{venv}/bin/python3",
+            "arguments": ["{engine}"],
         });
         std::fs::write(&path, serde_json::to_string_pretty(&descriptor).unwrap_or_default())
             .map_err(|e| e.to_string())?;

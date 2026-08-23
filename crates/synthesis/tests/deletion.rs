@@ -7,6 +7,8 @@
 
 mod common;
 
+use yarngo_testing::standin;
+
 use std::time::Duration;
 
 use speech_engine::EngineError;
@@ -107,7 +109,7 @@ fn an_engine_that_will_not_stop_is_ended_and_the_deletion_finishes() {
 #[test]
 fn a_replacement_that_will_not_start_does_not_keep_the_recording() {
     let (sandbox, recording) = seeded();
-    let refuse = sandbox.root().join("refuse");
+    let refuse = standin::beside(sandbox.root(), "stand-in", "refuse");
     let handle = engine(&sandbox, "    time.sleep(600)", Duration::from_secs(2));
 
     let generating = generating(&handle);

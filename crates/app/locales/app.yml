@@ -915,6 +915,9 @@ runtime:
   ready:
     en: ready
     sk: pripravený
+  refused:
+    en: "cannot be used — %{why}"
+    sk: "nedá sa použiť — %{why}"
   missing:
     en: "not here — %{path}"
     sk: "chýba — %{path}"

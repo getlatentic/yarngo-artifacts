@@ -49,6 +49,38 @@ fn python() -> PathBuf {
     })
 }
 
+/// The real engine, laid out and described the way an install leaves it — the
+/// interpreter inside the environment, the engine inside the runtime, and a
+/// descriptor that has to satisfy the same rules any downloaded one does.
+fn mlx_runtime(data: &Path) -> speech_engine::runtimes::Descriptor {
+    let own = data.join("runtimes/mlx");
+    std::fs::create_dir_all(&own).expect("runtime directory");
+    std::fs::copy(repo().join("sidecar/engine.py"), own.join("engine.py")).expect("engine");
+    std::fs::copy(repo().join("sidecar/protocol.py"), own.join("protocol.py")).expect("protocol");
+    let bin = data.join("runtime/mlx/.venv/bin");
+    std::fs::create_dir_all(&bin).expect("bin");
+    let linked = bin.join("python3");
+    let _ = std::fs::remove_file(&linked);
+    std::os::unix::fs::symlink(python(), &linked).expect("interpreter");
+    std::fs::write(
+        own.join("runtime.json"),
+        serde_json::json!({
+            "schema": 1, "id": "mlx", "name": "Apple silicon", "engine": "own",
+            "program": "{venv}/bin/python3", "arguments": ["{engine}"],
+        })
+        .to_string(),
+    )
+    .expect("descriptor");
+
+    let places = speech_engine::runtimes::Places {
+        data: data.to_path_buf(),
+        runtime: data.join("runtime"),
+        resources: repo().join("packaging"),
+    };
+    speech_engine::runtimes::choose(&speech_engine::runtimes::discover(&places), Some("mlx"))
+        .expect("the mlx runtime was not usable")
+}
+
 fn repo() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -307,14 +339,7 @@ fn the_durable_engine_answers_for_the_library_and_the_machine() {
         &dir.path().join("app.db"),
         &data_dir(),
         Spawn {
-            runtime: Descriptor::running(
-                "mlx",
-                "Apple silicon",
-                python(),
-                vec![repo().join("sidecar/engine.py").to_string_lossy().into_owned()],
-            )
-            .with_env("YARNGO_DATA", data_dir().to_string_lossy())
-            .with_env("YARNGO_TEST_MODE", "1"),
+            runtime: mlx_runtime(&data_dir()),
             data_dir: data_dir(),
         },
     )
@@ -375,14 +400,7 @@ fn the_engine_answers_through_the_handle_while_it_is_generating() {
     let database = dir.path().join("app.db");
     let data = data_dir();
     let spawn = Spawn {
-            runtime: Descriptor::running(
-                "mlx",
-                "Apple silicon",
-                python(),
-                vec![repo().join("sidecar/engine.py").to_string_lossy().into_owned()],
-            )
-            .with_env("YARNGO_DATA", data.clone().to_string_lossy())
-            .with_env("YARNGO_TEST_MODE", "1"),
+            runtime: mlx_runtime(&data),
             data_dir: data.clone(),
         };
     let handle = Arc::new(
@@ -501,14 +519,7 @@ fn deleting_a_voice_during_real_inference_stops_it_and_removes_the_recording() {
     assert!(takes_before > 0, "no existing takes, so nothing to prove survives");
 
     let spawn = Spawn {
-            runtime: Descriptor::running(
-                "mlx",
-                "Apple silicon",
-                python(),
-                vec![repo().join("sidecar/engine.py").to_string_lossy().into_owned()],
-            )
-            .with_env("YARNGO_DATA", data.clone().to_string_lossy())
-            .with_env("YARNGO_TEST_MODE", "1"),
+            runtime: mlx_runtime(&data),
             data_dir: data.clone(),
         };
     let opened = database.clone();
