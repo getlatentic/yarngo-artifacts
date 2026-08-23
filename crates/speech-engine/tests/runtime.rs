@@ -837,3 +837,170 @@ fn an_archive_without_an_engine_in_it_is_refused() {
     .expect_err("an archive with no engine in it was accepted as a runtime");
     assert!(refused.contains("engine.py"), "{refused}");
 }
+
+/// Fetches that overlap must not read each other's bytes.
+///
+/// They did: the download went to a file named for the process, so two at once
+/// were the same file. The symptom is a digest mismatch on bytes that are
+/// perfectly good, which is unexplainable from the message and would have been
+/// found in the field rather than here. Concurrent, because sequential fetches
+/// never collided and that is what was tested.
+#[test]
+fn overlapping_fetches_do_not_read_each_others_bytes() {
+    use sha2::{Digest, Sha256};
+    let served = tempfile::tempdir().expect("tempdir");
+
+    // Several distinguishable archives, published at once.
+    let published: Vec<(String, String)> = (0..6)
+        .map(|n| {
+            let dir = served.path().join(format!("r{n}"));
+            std::fs::create_dir_all(&dir).expect("dir");
+            std::fs::write(dir.join("engine.py"), format!("# runtime {n}\n")).expect("engine");
+            let archive = served.path().join(format!("r{n}.tar.gz"));
+            std::process::Command::new("tar")
+                .arg("-czf").arg(&archive).arg("-C").arg(&dir).arg("engine.py")
+                .status()
+                .expect("tar");
+            let digest = format!("{:x}", Sha256::digest(std::fs::read(&archive).expect("read")));
+            (format!("file://{}", archive.display()), digest)
+        })
+        .collect();
+
+    let landing = tempfile::tempdir().expect("landing");
+    std::thread::scope(|scope| {
+        for (n, (url, digest)) in published.iter().enumerate() {
+            let into = landing.path().join(format!("r{n}"));
+            scope.spawn(move || {
+                speech_engine::runtime::unpack_engine(&format!("r{n}"), &into, url, digest)
+                    .unwrap_or_else(|e| panic!("runtime {n} was refused: {e}"));
+            });
+        }
+    });
+
+    for n in 0..6 {
+        assert_eq!(
+            std::fs::read_to_string(landing.path().join(format!("r{n}/engine.py"))).expect("read"),
+            format!("# runtime {n}\n"),
+            "runtime {n} was installed with another runtime's code"
+        );
+    }
+}
+
+/// Building an archive from a description, including the things a well-behaved
+/// tool will not produce. `(name, kind, body)` where kind is "file", "dir",
+/// "symlink" or "hardlink"; for links, `body` is the link target.
+fn crafted(entries: &[(&str, &str, &str)]) -> (tempfile::TempDir, String, String) {
+    use sha2::{Digest, Sha256};
+    let dir = tempfile::tempdir().expect("tempdir");
+    let script = dir.path().join("build.py");
+    let archive = dir.path().join("crafted.tar.gz");
+    let spec: Vec<String> = entries
+        .iter()
+        .map(|(n, k, b)| format!("({n:?}, {k:?}, {b:?})"))
+        .collect();
+    std::fs::write(
+        &script,
+        format!(
+            r#"
+import tarfile, io, sys
+t = tarfile.open(sys.argv[1], "w:gz")
+for name, kind, body in [{spec}]:
+    if kind == "dir":
+        i = tarfile.TarInfo(name); i.type = tarfile.DIRTYPE
+        t.addfile(i)
+    elif kind == "symlink":
+        i = tarfile.TarInfo(name); i.type = tarfile.SYMTYPE; i.linkname = body
+        t.addfile(i)
+    elif kind == "hardlink":
+        i = tarfile.TarInfo(name); i.type = tarfile.LNKTYPE; i.linkname = body
+        t.addfile(i)
+    else:
+        data = body.encode()
+        i = tarfile.TarInfo(name); i.size = len(data)
+        t.addfile(i, io.BytesIO(data))
+t.close()
+"#,
+            spec = spec.join(", ")
+        ),
+    )
+    .expect("script");
+    let ok = std::process::Command::new("/usr/bin/python3")
+        .arg(&script)
+        .arg(&archive)
+        .status()
+        .expect("python");
+    assert!(ok.success(), "could not build the archive");
+    let digest = format!("{:x}", Sha256::digest(std::fs::read(&archive).expect("read")));
+    let url = format!("file://{}", archive.display());
+    (dir, url, digest)
+}
+
+fn unpacking(entries: &[(&str, &str, &str)]) -> (tempfile::TempDir, Result<(), String>) {
+    let (_served, url, digest) = crafted(entries);
+    let landing = tempfile::tempdir().expect("landing");
+    let outcome = speech_engine::runtime::unpack_engine("mlx", landing.path(), &url, &digest);
+    (landing, outcome)
+}
+
+/// Nothing an archive contains may be created outside the runtime it is being
+/// installed into.
+///
+/// Measured on this machine before this was written: the host tar refused `..`,
+/// silently stripped a leading slash so the entry landed somewhere else inside,
+/// created a symlink pointing at /etc/hosts without complaint, and extracted
+/// the rest of the archive anyway after reporting the errors — so a caller
+/// checking only that its own file had appeared would have seen success.
+#[test]
+fn an_archive_cannot_write_outside_the_runtime() {
+    for (what, entries) in [
+        ("climbing out", vec![("../escaped", "file", "pwned"), ("engine.py", "file", "#")]),
+        ("climbing further", vec![("a/../../escaped", "file", "pwned"), ("engine.py", "file", "#")]),
+        ("an absolute path", vec![("/tmp/yarngo-escape-test", "file", "pwned"), ("engine.py", "file", "#")]),
+        ("a symlink out", vec![("engine.py", "file", "#"), ("link", "symlink", "/etc/hosts")]),
+        ("a hard link out", vec![("engine.py", "file", "#"), ("link", "hardlink", "/etc/hosts")]),
+        ("a symlink to a parent", vec![("engine.py", "file", "#"), ("up", "symlink", "..")]),
+    ] {
+        let (landing, outcome) = unpacking(&entries);
+        assert!(outcome.is_err(), "{what} was accepted");
+        assert!(
+            !landing.path().join("link").exists() && !landing.path().join("up").exists(),
+            "{what}: a link was created before the archive was refused"
+        );
+    }
+    assert!(
+        !std::path::Path::new("/tmp/yarngo-escape-test").exists(),
+        "an absolute entry was written outside the runtime"
+    );
+}
+
+/// An archive that unpacks to far more than it appears to is refused rather
+/// than filling the disk.
+#[test]
+fn an_archive_that_unpacks_to_too_much_is_refused() {
+    let big = "x".repeat(2 * 1024 * 1024);
+    let mut entries: Vec<(&str, &str, &str)> = vec![("engine.py", "file", "#")];
+    let names: Vec<String> = (0..40).map(|n| format!("pad{n}")).collect();
+    for name in &names {
+        entries.push((name.as_str(), "file", big.as_str()));
+    }
+    let (_landing, outcome) = unpacking(&entries);
+    let refused = outcome.expect_err("an archive unpacking to 80 MB was accepted");
+    assert!(refused.contains("bytes"), "{refused}");
+}
+
+/// And an ordinary runtime, with directories, still installs.
+#[test]
+fn an_ordinary_runtime_archive_installs() {
+    let (landing, outcome) = unpacking(&[
+        ("engine.py", "file", "# the engine\n"),
+        ("backend", "dir", ""),
+        ("backend/dots_mlx.py", "file", "# the backend\n"),
+        ("./pyproject.toml", "file", "[project]\n"),
+    ]);
+    outcome.expect("an ordinary runtime was refused");
+    assert_eq!(
+        std::fs::read_to_string(landing.path().join("backend/dots_mlx.py")).expect("read"),
+        "# the backend\n"
+    );
+    assert!(landing.path().join("pyproject.toml").exists(), "./ was not handled");
+}

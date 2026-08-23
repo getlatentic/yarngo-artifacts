@@ -10,9 +10,18 @@ thiserror.workspace = true
 # Verifying the uv download. The digest is compiled in, so a tampered release
 # fails here rather than being installed and signed for.
 sha2 = "0.10"
+tempfile = "3"
+# Unpacking a runtime is a security boundary, so the rules are ours rather
+# than whichever tar the host happens to ship.
+tar = "0.4"
+flate2 = "1"
 
 [dev-dependencies]
 tempfile = "3"
+# Unpacking a runtime is a security boundary, so the rules are ours rather
+# than whichever tar the host happens to ship.
+tar = "0.4"
+flate2 = "1"
 yarngo-testing = { path = "../testing" }
 
 [[example]]
