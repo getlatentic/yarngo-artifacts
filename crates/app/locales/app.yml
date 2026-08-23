@@ -618,11 +618,11 @@ setup:
     en: Quit
     sk: Ukončiť
   stopped:
-    en: The runtime download stopped
-    sk: Sťahovanie enginu sa zastavilo
+    en: Setting up stopped
+    sk: Nastavovanie sa zastavilo
   stopped_detail:
-    en: The connection dropped. What was downloaded is kept, so resuming picks up where it stopped. Nothing was installed yet.
-    sk: Spojenie sa prerušilo. Stiahnuté dáta zostávajú, takže pokračovanie nadviaže tam, kde skončilo. Zatiaľ sa nič nenainštalovalo.
+    en: Nothing was installed. Whatever was already downloaded is kept, so resuming picks up where it stopped.
+    sk: Nič sa nenainštalovalo. Čokoľvek už stiahnuté zostáva, takže pokračovanie nadviaže tam, kde skončilo.
   resume:
     en: Resume download
     sk: Pokračovať v sťahovaní

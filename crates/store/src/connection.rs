@@ -4,7 +4,7 @@ use std::path::Path;
 
 use rusqlite::Connection;
 
-use crate::{migrations, Result};
+use crate::{migrations, Result, StoreError};
 
 pub struct Store {
     connection: Connection,
@@ -12,6 +12,16 @@ pub struct Store {
 
 impl Store {
     pub fn open(path: &Path) -> Result<Self> {
+        // The directory before the file. On a machine that has never run this
+        // application there is nothing here at all, and rusqlite reports that
+        // as "unable to open database file" — which reads as a corrupt store
+        // rather than an empty disk. Every caller wants the same thing, so it
+        // happens here rather than in each of them.
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                StoreError::Invalid(format!("cannot create {}: {e}", parent.display()))
+            })?;
+        }
         Self::prepare(Connection::open(path)?)
     }
 
@@ -36,5 +46,26 @@ impl Store {
 
     pub fn raw_mut(&mut self) -> &mut Connection {
         &mut self.connection
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A machine that has never run this application has no directory to put a
+    /// database in, and the failure it produced read as a corrupt store rather
+    /// than an empty disk. Found by installing on one.
+    #[test]
+    fn a_store_opens_where_nothing_has_ever_been() {
+        let scratch = tempfile::tempdir().expect("tempdir");
+        let never = scratch.path().join("Application Support/Yarngo Studio/yarngo.db");
+        assert!(!never.parent().expect("parent").exists());
+
+        crate::Store::open(&never).expect("a first run must not need a directory to exist");
+        assert!(never.exists(), "no database was created");
+
+        // And opening it again is the ordinary case, not a second first run.
+        crate::Store::open(&never).expect("reopen");
     }
 }
