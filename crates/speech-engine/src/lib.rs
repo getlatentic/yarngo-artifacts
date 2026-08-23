@@ -13,6 +13,7 @@ pub mod catalogue;
 pub mod handle;
 pub mod paths;
 pub mod protocol;
+pub mod published;
 pub mod runtime;
 pub mod runtimes;
 pub mod trust;

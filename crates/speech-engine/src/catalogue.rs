@@ -15,7 +15,8 @@
 //! Names in a release are TUF target names rather than URLs, and carry no
 //! digests. Where a target lives and what it hashes to are the repository's to
 //! say; repeating either here would be a second answer to a question that
-//! already has one.
+//! already has one. The names are flat, without path components — a name that
+//! reads as a path is a name somebody will eventually make point somewhere.
 
 use std::collections::HashMap;
 

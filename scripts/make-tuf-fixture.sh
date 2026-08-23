@@ -38,23 +38,36 @@ build() {
   "runtimes": {
     "mlx": [
       { "version": "1.0.0", "min_app_version": "0.1.0-alpha.1", "engine_api": 1,
-        "lock": "mlx/1.0.0/uv.lock", "pyproject": "mlx/1.0.0/pyproject.toml" },
+        "lock": "mlx-1.0.0.uv.lock", "pyproject": "mlx-1.0.0.pyproject.toml",
+        "engine": "mlx-1.0.0.engine.tar.gz" },
       { "version": "2.0.0", "min_app_version": "9.0.0", "engine_api": 1,
-        "lock": "mlx/2.0.0/uv.lock", "pyproject": "mlx/2.0.0/pyproject.toml" }
+        "lock": "mlx-2.0.0.uv.lock", "pyproject": "mlx-2.0.0.pyproject.toml" }
     ]
   }
 }
 JSON
 
-  tuftool root init "$dir/root.json"
-  tuftool root expire "$dir/root.json" "$far"
-  for role in root targets snapshot timestamp; do
-    tuftool root set-threshold "$dir/root.json" "$role" 1
-    # One key per role: losing the timestamp key must not mean losing the
-    # ability to say which targets are ours.
-    tuftool root gen-rsa-key "$dir/root.json" "$dir/keys/$role.pem" --role "$role"
-  done
-  tuftool root sign "$dir/root.json" -k "$dir/keys/root.pem"
+  # The release the catalogue points at, so the whole path can be walked: read
+  # the catalogue, choose, fetch what it named.
+  mkdir -p "$dir/in/engine"
+  printf 'version = 1\nrequires-python = ">=3.13"\n' > "$dir/in/mlx-1.0.0.uv.lock"
+  printf '[project]\nname = "mlx-runtime"\nversion = "1.0.0"\n' \
+    > "$dir/in/mlx-1.0.0.pyproject.toml"
+  printf '# the published engine\n' > "$dir/in/engine/engine.py"
+  tar -czf "$dir/in/mlx-1.0.0.engine.tar.gz" -C "$dir/in/engine" engine.py
+  rm -rf "$dir/in/engine"
+
+  if [ ! -f "$dir/root.json" ]; then
+    tuftool root init "$dir/root.json"
+    tuftool root expire "$dir/root.json" "$far"
+    for role in root targets snapshot timestamp; do
+      tuftool root set-threshold "$dir/root.json" "$role" 1
+      # One key per role: losing the timestamp key must not mean losing the
+      # ability to say which targets are ours.
+      tuftool root gen-rsa-key "$dir/root.json" "$dir/keys/$role.pem" --role "$role"
+    done
+    tuftool root sign "$dir/root.json" -k "$dir/keys/root.pem"
+  fi
 
   tuftool create \
     --root "$dir/root.json" \
@@ -63,7 +76,8 @@ JSON
     --targets-expires "$expires" --targets-version "$version" \
     --snapshot-expires "$expires" --snapshot-version "$version" \
     --timestamp-expires "$expires" --timestamp-version "$version" \
-    --outdir "$out/$name"
+    --outdir "$out/$name.new"
+  rm -rf "$out/$name" && mv "$out/$name.new" "$out/$name"
   cp "$dir/root.json" "$out/$name/root.json"
 
   # tuftool links a target back to where it was read from, and where it was read
@@ -81,6 +95,12 @@ build repo 'a runtime archive, as far as this test is concerned' "$far" 1
 build impostor 'a runtime archive, as far as this test is concerned' "$far" 1
 # Correctly signed, and stale.
 build stale 'a runtime archive, as far as this test is concerned' "$past" 1
+
+# The same publisher's earlier metadata, kept so that being served last week's
+# repository is something a test can do. Built from repo's keys, which is the
+# point: replaying an old snapshot needs no keys at all.
+cp -R "$out/repo" "$out/rollback"
+build repo 'a runtime archive, as far as this test is concerned' "$far" 2
 
 echo "wrote $out"
 find "$out" -type f | sed "s|$out/|  |" | sort

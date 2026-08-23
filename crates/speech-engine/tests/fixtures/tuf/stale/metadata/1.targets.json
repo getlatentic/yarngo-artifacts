@@ -5,16 +5,34 @@
     "version": 1,
     "expires": "2020-01-01T00:00:00Z",
     "targets": {
+      "mlx-1.0.0.pyproject.toml": {
+        "length": 49,
+        "hashes": {
+          "sha256": "ed477ef0d52c8ca246c7d702872f2768d71df708483d21c5f216e5504e60ac4e"
+        }
+      },
+      "catalogue.json": {
+        "length": 416,
+        "hashes": {
+          "sha256": "479c6638e16d8e5dd371b2a7acfca8a7797c952e60e3c449377b16dad98dfaa6"
+        }
+      },
+      "mlx-1.0.0.engine.tar.gz": {
+        "length": 367,
+        "hashes": {
+          "sha256": "3bd3cd7253f3719451af129e4c81be2bbd74da682cf154630477d2ce9d8f3902"
+        }
+      },
+      "mlx-1.0.0.uv.lock": {
+        "length": 39,
+        "hashes": {
+          "sha256": "df61c198e4a2c40d5504c0060fb08ba7de65c16803de26c5367cdb7d5ec8041f"
+        }
+      },
       "yarngo-runtime-spike.tar.gz": {
         "length": 51,
         "hashes": {
           "sha256": "d18a1b367b6862d384bbe9db81551d5cb1a3eeef6386a2a5e329a07fdf6d68d8"
-        }
-      },
-      "catalogue.json": {
-        "length": 371,
-        "hashes": {
-          "sha256": "cf0a767ca9a0a92d08de217e9e3c557ee123a53578141b3a519bf2b3568f8b46"
         }
       }
     },
@@ -25,8 +43,8 @@
   },
   "signatures": [
     {
-      "keyid": "ee6ce25e3e4d134f8ac94777a0613e1500919597df6f99c8491620b44bfba2cb",
-      "sig": "31d03892d080ca71fe3bf3d7b8459fbc9be989f5fbf1042f0c4ba14c087cf8d28298c0abbc76d5d239e3084e131b06f8d52efe35a2bb5cea3ba14fe22b2f1d36f444f042670738f41d2d0c1a548f30b10b29c5beefe808b096bdc9098df8783a6e9e9b1130dceeb6d887d92facae2a9a0bd33aeaf3625c268c0290b8b353c7b782be6c7d3b3906d553abe7b382e5f8851dbf390b65e25deac2737086acdd613b6fe2ba491cbed4b60d273dd5252a13445d434662e9e7bf4b51245f10eb8e2bacf7b792c8612b0c53ddc466f25830d7a69f624f794a47d97e722b6ddf7f7762aa7a531968e943bfa3bb65cecb06d36ed490fb3c6a976e3e0630123a97167d038a"
+      "keyid": "26af7801dd9a1f802f7e965e18d1d168286e7e3a57c4456f34e59929fc1fca01",
+      "sig": "9dd4f1c49294f305005a1d5afe296a8bb152de35391f63a6fd9b7fc8da4879f49d08ce4c4e7201138628dff9c68e2a041ecfb1a856bd00c0d5b46cd980c41496514a136deeadbdf1c6a9f765cc3ca68149b2ade9e18de3c8e67d24941d85eca7000e2789d4d0770d10b0096e457bd392ff0f72895f6669e1f8de63f65b3875c9e501557d80bcbd0fcdacc56367f424c3d2af940850ffd3fe511feb73e0f215e7e18eafd546798c07229b1d2b9e4882ecdf259722c9adc50212e952ba6d7aaf63416740322b2f23742496da15fef5a46afa7800a02d535ec5675fbeeecb762db06f6d4f0b3d8eb0cd8c45db45205858d92d4a7701d1053a85644d88ebf887eb5f"
     }
   ]
 }

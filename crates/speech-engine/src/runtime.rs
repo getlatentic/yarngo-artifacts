@@ -559,218 +559,18 @@ fn remove_pre_pack_runtime(runtime: &Path) {
     }
 }
 
-/// Where the published recipes live. The only URL this app knows; everything it
-/// names is pinned to an immutable tag and carries a digest.
-const MANIFEST_URL: &str = concat!(
-    "https://github.com/getlatentic/yarngo-artifacts",
-    "/releases/download/latest/manifest.json"
-);
-
-/// What this build can honour. A published recipe declaring a higher number
-/// describes an environment this sidecar does not know how to drive, so it is
-/// refused rather than half-understood — that refusal is what makes updating
-/// the runtime without updating the app safe.
-pub const SIDECAR_API: u32 = 1;
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct Recipe {
-    pub lock_url: String,
-    pub lock_sha256: String,
-    pub pyproject_url: String,
-    pub pyproject_sha256: String,
-    /// The runtime's own code: its implementation of this protocol, and
-    /// optionally the descriptor that starts it, as one archive.
-    ///
-    /// Absent means it has none of its own and is run by the copy that ships
-    /// with the application — which is what the first runtime does, and what
-    /// any of them falls back to when the manifest cannot be reached. Present
-    /// means a runtime can be published, corrected or added without the
-    /// application being rebuilt, which is the point of describing one at all.
-    #[serde(default)]
-    pub engine_url: Option<String>,
-    #[serde(default)]
-    pub engine_sha256: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct Manifest {
-    pub schema: u32,
-    pub min_app_version: String,
-    pub sidecar_api: u32,
-    pub tag: String,
-    pub runtimes: std::collections::HashMap<String, Recipe>,
-}
-
-/// `1.2.3` against `1.10.0`, without pulling in a version crate.
+/// Unpack one runtime's archive into its folder.
 ///
-/// Two rules that a string comparison gets wrong. Numbers compare as numbers,
-/// or `1.10` sorts below `1.9`. And a pre-release is *older* than the release
-/// it precedes — `0.1.0-alpha` comes before `0.1.0` — which matters the moment
-/// an alpha is published, because the naive reading has it the other way round
-/// and would hand alpha users recipes meant for the finished version.
-pub fn version_at_least(have: &str, need: &str) -> bool {
-    fn split(v: &str) -> (Vec<u32>, bool) {
-        let (numbers, pre) = match v.split_once('-') {
-            Some((n, _)) => (n, true),
-            None => (v, false),
-        };
-        (numbers.split('.').map(|p| p.trim().parse().unwrap_or(0)).collect(), pre)
-    }
-    let (have_n, have_pre) = split(have);
-    let (need_n, need_pre) = split(need);
-    for i in 0..have_n.len().max(need_n.len()) {
-        let (h, n) = (have_n.get(i).copied().unwrap_or(0), need_n.get(i).copied().unwrap_or(0));
-        if h != n {
-            return h > n;
-        }
-    }
-    // Same numbers: a pre-release satisfies a pre-release floor, but not a
-    // finished one.
-    !have_pre || need_pre
-}
-
-/// Whether this build may act on a published manifest.
-pub fn manifest_usable(manifest: &Manifest) -> Result<(), String> {
-    if manifest.schema != 1 {
-        return Err(format!("manifest schema {} is not one this build reads", manifest.schema));
-    }
-    if manifest.sidecar_api > SIDECAR_API {
-        return Err(format!(
-            "the published runtime needs sidecar api {}, this build implements {SIDECAR_API}",
-            manifest.sidecar_api
-        ));
-    }
-    let ours = env!("CARGO_PKG_VERSION");
-    if !version_at_least(ours, &manifest.min_app_version) {
-        return Err(format!(
-            "the published runtime needs yarngo {} or newer; this is {ours}",
-            manifest.min_app_version
-        ));
-    }
-    Ok(())
-}
-
-fn fetch_text(url: &str) -> Result<Vec<u8>, String> {
-    // Created exclusively by the operating system rather than named by us. A
-    // name built from the process id collided when two fetches ran at once and
-    // each read what the other had downloaded — a digest mismatch on perfectly
-    // good bytes. Composing a more unique name is the same bet with longer
-    // odds; the fix is not to choose the name at all.
-    let into = tempfile::NamedTempFile::new().map_err(|e| e.to_string())?;
-    let mut curl = Command::new("curl");
-    curl.args(["-fL", "-sS", "--retry", "2", "--max-time", "30", "-o"])
-        .arg(into.path())
-        .arg(url);
-    run_streaming(curl, &mut |_| {})?;
-    std::fs::read(into.path()).map_err(|e| e.to_string())
-}
-
-/// The published manifest, or why it cannot be used. Never fatal: every caller
-/// carries on with what it shipped with.
-pub fn fetch_manifest() -> Result<Manifest, String> {
-    let url = std::env::var("YARNGO_MANIFEST_URL").unwrap_or_else(|_| MANIFEST_URL.into());
-    let bytes = fetch_text(&url).map_err(|e| format!("could not reach the manifest: {e}"))?;
-    let manifest: Manifest =
-        serde_json::from_slice(&bytes).map_err(|e| format!("manifest is not readable: {e}"))?;
-    manifest_usable(&manifest)?;
-    Ok(manifest)
-}
-
-/// Replace this pack's staged recipe with the published one, if there is a
-/// usable newer one. Returns the tag when something changed.
+/// Whether these are the bytes that were published is settled before this is
+/// called, by the repository that vouched for them. What is left is the part
+/// that is ours: an archive decides what it materialises and where, and this is
+/// code that will be executed.
 ///
-/// The digest is checked before anything is written, so a truncated or swapped
-/// download leaves the staged recipe untouched rather than half-replaced.
-/// Fetch a runtime's own code, if the published recipe names any.
-///
-/// The archive is unpacked into the runtime's own folder, which is where its
-/// descriptor points with `{self}`. Verified before it is unpacked: this is
-/// executable code arriving over the network, and the digest in the manifest is
-/// the only thing that says it is the code that was published.
-///
-/// Reports whether the runtime now has an implementation of its own. A recipe
-/// that names none is not a failure — it means this runtime is run by the copy
-/// that ships with the application.
-pub fn fetch_engine(pack: &Pack, report: &mut dyn FnMut(Progress)) -> Result<bool, String> {
-    let manifest = match fetch_manifest() {
-        Ok(manifest) => manifest,
-        // Offline, or nothing published yet. The shipped copy is what a first
-        // install has always used, and it is still there.
-        Err(_) => return Ok(false),
-    };
-    let Some(recipe) = manifest.runtimes.get(pack.id) else {
-        return Ok(false);
-    };
-    engine_from(recipe, pack.id, &pack.folder(), report)
-}
-
-/// Install a runtime's own code from one recipe, if it names any and if it may
-/// be trusted.
-///
-/// Told the recipe and the folder rather than reaching for a manifest and the
-/// environment, so what it decides can be tested.
-pub fn engine_from(
-    recipe: &Recipe,
-    id: &str,
-    folder: &Path,
-    report: &mut dyn FnMut(Progress),
-) -> Result<bool, String> {
-    let (Some(url), Some(expected)) = (&recipe.engine_url, &recipe.engine_sha256) else {
-        return Ok(false);
-    };
-
-    // Off until the manifest can be shown to have come from us.
-    //
-    // A digest proves the bytes are the bytes the manifest named. It says
-    // nothing about who wrote the manifest, so whoever can publish to the
-    // artifact repository can name any archive and any digest and have it run.
-    // That was tolerable while a recipe could only change which packages are
-    // installed; it is not, now that it can deliver the program itself.
-    //
-    // The answer is signed metadata, and inventing that is not the way to get
-    // it. Until it is in, this path exists and is not taken: a runtime is run
-    // by the engine that shipped, which is signed with the application.
-    if std::env::var_os("YARNGO_UNVERIFIED_RUNTIME_CODE").is_none() {
-        report(Progress::Step(
-            "This runtime publishes its own engine, which cannot be verified yet — \
-             using the one that ships."
-                .into(),
-        ));
-        return Ok(false);
-    }
-
-    report(Progress::Step("Fetching the runtime…".into()));
-    unpack_engine(id, folder, url, expected)?;
-    Ok(true)
-}
-
-/// Fetch one runtime's archive into a folder, having checked it is the archive
-/// that was published.
-///
-/// Verified before anything is written, and certainly before anything is
-/// unpacked: this is code that will be executed, arriving over a network, and
-/// the digest in the manifest is the only thing that says it is the code
-/// somebody published rather than what a network handed back.
-///
-/// Told its folder and its digest rather than reading them from a manifest and
-/// the environment, so the check itself can be tested.
-pub fn unpack_engine(
-    id: &str,
-    folder: &Path,
-    url: &str,
-    expected: &str,
-) -> Result<(), String> {
-    let archive = fetch_text(url)?;
-    use sha2::{Digest, Sha256};
-    let actual = format!("{:x}", Sha256::digest(&archive));
-    if actual != expected {
-        return Err(format!(
-            "the {id} runtime does not match its digest (wanted {expected}, got {actual})"
-        ));
-    }
-
+/// Told its folder and its bytes rather than reaching for them, so what it
+/// refuses can be tested.
+pub fn unpack_engine(id: &str, folder: &Path, archive: &[u8]) -> Result<(), String> {
     std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
-    extract_under(&archive, folder).map_err(|e| format!("the {id} runtime {e}"))?;
+    extract_under(archive, folder).map_err(|e| format!("the {id} runtime {e}"))?;
 
     if !folder.join("engine.py").exists() {
         return Err(format!("the {id} runtime archive has no engine.py in it"));
@@ -891,57 +691,19 @@ fn under(root: &Path, path: &Path) -> Result<PathBuf, String> {
     Ok(destination)
 }
 
-pub fn refresh_recipe(project: &Path) -> Result<Option<String>, String> {
-    let manifest = fetch_manifest()?;
-    let recipe = manifest
-        .runtimes
-        .get(pack().id)
-        .ok_or_else(|| format!("the manifest has no runtime for the {} pack", pack().id))?;
-
-    let lock = fetch_text(&recipe.lock_url)?;
-    let pyproject = fetch_text(&recipe.pyproject_url)?;
-    for (what, bytes, expected) in [
-        ("uv.lock", &lock, &recipe.lock_sha256),
-        ("pyproject.toml", &pyproject, &recipe.pyproject_sha256),
-    ] {
-        use sha2::{Digest, Sha256};
-        let actual = format!("{:x}", Sha256::digest(bytes));
-        if &actual != expected {
-            return Err(format!("{what} does not match its digest (wanted {expected}, got {actual})"));
-        }
-    }
-
-    // Nothing to do if the published recipe is the one already installed.
-    let staged = project.join("uv.lock");
-    if staged.exists() && sha256_of(&staged)? == recipe.lock_sha256 {
-        return Ok(None);
-    }
-
-    std::fs::create_dir_all(project).map_err(|e| e.to_string())?;
-    std::fs::write(project.join("uv.lock"), &lock).map_err(|e| e.to_string())?;
-    std::fs::write(project.join("pyproject.toml"), &pyproject).map_err(|e| e.to_string())?;
-    Ok(Some(manifest.tag))
-}
-
-/// Whether a published runtime differs from the one installed. Answers without
-/// changing anything, so the app can offer rather than act.
-pub fn runtime_update() -> Result<Option<String>, String> {
-    let manifest = fetch_manifest()?;
-    let recipe = manifest
-        .runtimes
-        .get(pack().id)
-        .ok_or_else(|| format!("the manifest has no runtime for the {} pack", pack().id))?;
-    let staged = paths::runtime_dir().join(pack().manifest).join("uv.lock");
-    if !staged.exists() {
-        return Ok(None);
-    }
-    Ok((sha256_of(&staged)? != recipe.lock_sha256).then_some(manifest.tag))
-}
-
-/// Put this pack's manifest and lock where `uv sync` can build beside them.
+/// Replace this pack's staged recipe with the published one, if the repository
+/// offers a release this build can use.
 ///
-/// Both files, always: a `pyproject.toml` without its lock would make uv
-/// resolve from scratch, which is the behaviour the lock exists to replace.
+/// Returns the version when something changed. Never fatal: every caller has
+/// the recipe that shipped, which is what a machine with no network installs
+/// from.
+pub fn refresh_recipe(project: &Path) -> Result<Option<String>, String> {
+    let published = crate::published::Published::newest(pack().id)?;
+    Ok(published
+        .stage_recipe(project)?
+        .then(|| published.version().to_string()))
+}
+
 fn stage_manifest(project: &Path) -> Result<(), String> {
     std::fs::create_dir_all(project).map_err(|e| format!("cannot create {}: {e}", project.display()))?;
     for file in ["pyproject.toml", "uv.lock"] {
@@ -1055,14 +817,16 @@ pub fn install_pack(
         report(Progress::Failed(err));
         return;
     }
-    // Then the published one, if it is reachable, digest-matching, and does not
-    // need a newer sidecar than this build implements. Any failure here is
-    // reported and stepped over — an unreachable manifest must not stop an
-    // install that the bundled recipe can complete on its own.
+    // Then the published one, if the repository is reachable, vouched for, and
+    // offering a release this build can use. Any failure here is reported and
+    // stepped over — an unreachable repository must not stop an install that
+    // the recipe that shipped can complete on its own.
     match refresh_recipe(&project) {
-        Ok(Some(tag)) => report(Progress::Step(format!("Using the published runtime {tag}…"))),
+        Ok(Some(version)) => {
+            report(Progress::Step(format!("Using the published runtime {version}…")))
+        }
         Ok(None) => {}
-        Err(err) => eprintln!("keeping the bundled runtime recipe: {err}"),
+        Err(err) => eprintln!("keeping the runtime recipe that shipped: {err}"),
     }
 
     let uv = match ensure_uv(&runtime, &mut report) {
@@ -1108,10 +872,12 @@ pub fn install_pack(
 
     // Its own code, if it publishes any. Failing here is failing the install:
     // a runtime that names an implementation and cannot produce the one that
-    // was published should not quietly fall back to a different one.
-    if let Err(reason) = fetch_engine(pack, &mut report) {
-        report(Progress::Failed(reason));
-        return;
+    // was published must not quietly fall back to a different one.
+    if let Ok(published) = crate::published::Published::newest(pack.id) {
+        if let Err(reason) = published.stage_engine(pack.id, &pack.folder()) {
+            report(Progress::Failed(reason));
+            return;
+        }
     }
 
     // The last step, and the one that makes it a runtime rather than an

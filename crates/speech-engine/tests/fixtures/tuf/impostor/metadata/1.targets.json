@@ -11,10 +11,28 @@
           "sha256": "d18a1b367b6862d384bbe9db81551d5cb1a3eeef6386a2a5e329a07fdf6d68d8"
         }
       },
-      "catalogue.json": {
-        "length": 371,
+      "mlx-1.0.0.engine.tar.gz": {
+        "length": 367,
         "hashes": {
-          "sha256": "cf0a767ca9a0a92d08de217e9e3c557ee123a53578141b3a519bf2b3568f8b46"
+          "sha256": "c4701585f1fd89547564e9d5839db80d63c1bef1cd97746dab442075acb3c18a"
+        }
+      },
+      "catalogue.json": {
+        "length": 416,
+        "hashes": {
+          "sha256": "479c6638e16d8e5dd371b2a7acfca8a7797c952e60e3c449377b16dad98dfaa6"
+        }
+      },
+      "mlx-1.0.0.uv.lock": {
+        "length": 39,
+        "hashes": {
+          "sha256": "df61c198e4a2c40d5504c0060fb08ba7de65c16803de26c5367cdb7d5ec8041f"
+        }
+      },
+      "mlx-1.0.0.pyproject.toml": {
+        "length": 49,
+        "hashes": {
+          "sha256": "ed477ef0d52c8ca246c7d702872f2768d71df708483d21c5f216e5504e60ac4e"
         }
       }
     },
@@ -25,8 +43,8 @@
   },
   "signatures": [
     {
-      "keyid": "ccd8f6f41019f8cc12404251b80627d4e829c5bd0a726900d00eb6ba19e7f59d",
-      "sig": "28173ae46c21b669b55d88b697b16540693a64dc1913704d7f434fdae21832265f5316c9ef740eeea7c15ee152d63c5bb5a1b5eab1f5e934f3529733dbb922794cba367bdb68bc76cb80be5148fe5682e9b320aa1ed825c9ab6e2f398b28c09b773c0c2ab44b13edbe8ccfc38381b84eb69c5b57fe3f61712cbd1ebbbb3da05e6a11f19d03284cc638a2317cba17e82fda3844659ac91e780b897349229755d7365465292b1020dacd83921a5574a4d82fb65e5915dac9af40c195b63aab058a1d8324e66ec82fa8bc544b855db193be6a90360fd2c8f544575f0d7c1e9d85d174ebdb0f10c1bf5c6e7b99741b154a76f5a67da1aee411e1e157a07ef4990460"
+      "keyid": "9fa39118738e88eb3bbed12d44bb298bf555e3cc6f199a2a3781e8893cc4d822",
+      "sig": "8a9c300913e60ac1cd86bc07c74d361e97a0ced57c60ff81cb5043acaaa1a30f8f694a4aaa388755cf4831926062919cb9fffda362ddb0125296462c90e267a6ee2b2e7364f20a956f92b87a2c8bd50281920903143dd0d9b0c3dc053473c40362327fbb44da052df735cb07b78989288a885339c721dbd1b32eac1ac6b2d8ef7f0354bb54326f042db33a1755c0a65b620c4b7b47e75d255954d0fd9fd52de452b0a49d7851137d5764ea233b34d6f8e907c53468960ed3f22a477ede19cb60a7a3a369b8b206bd0de58598b73263c0cb5e0226efdd9325fda06f0feaec48af282d569e196bf211e867596614ad2484e33bf9588372e2b6c5cd4a46faed3d1b"
     }
   ]
 }

@@ -6,7 +6,7 @@
 //! `is_installed` accepts, and that a supplied archive is used where it lies
 //! rather than fetched.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use speech_engine::runtime::{self, Progress};
@@ -217,168 +217,6 @@ fn a_tampered_uv_download_is_refused() {
     let (_, expected) = runtime::uv_asset().unwrap();
     assert_ne!(checked, expected, "a planted file must not match the pinned digest");
     assert_eq!(checked.len(), 64);
-}
-
-/// A manifest on disk, served to the installer over `file://`, so the update
-/// path can be exercised without publishing anything.
-fn local_manifest(dir: &Path, lock: &Path, pyproject: &Path, api: u32, min_app: &str) -> PathBuf {
-    let digest = |p: &Path| runtime::sha256_of(p).unwrap();
-    let manifest = dir.join("manifest.json");
-    std::fs::write(
-        &manifest,
-        format!(
-            r#"{{"schema":1,"min_app_version":"{min_app}","sidecar_api":{api},
-                "tag":"test-tag","catalog":{{"url":"","sha256":""}},
-                "runtimes":{{"{pack}":{{
-                  "lock_url":"file://{lock}","lock_sha256":"{lock_sha}",
-                  "pyproject_url":"file://{py}","pyproject_sha256":"{py_sha}"}}}}}}"#,
-            pack = runtime::MLX.id,
-            lock = lock.display(),
-            lock_sha = digest(lock),
-            py = pyproject.display(),
-            py_sha = digest(pyproject),
-        ),
-    )
-    .unwrap();
-    manifest
-}
-
-fn bundled(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packaging/packs/mlx").join(name)
-}
-
-#[test]
-fn a_published_runtime_replaces_the_staged_one() {
-    let scratch = Scratch::new();
-    let project = scratch.path().join(runtime::MLX.manifest);
-    std::fs::create_dir_all(&project).unwrap();
-    // Something is already staged, and it is not what the manifest publishes.
-    std::fs::write(project.join("uv.lock"), b"an older lock").unwrap();
-
-    let manifest = local_manifest(
-        scratch.path(),
-        &bundled("uv.lock"),
-        &bundled("pyproject.toml"),
-        runtime::SIDECAR_API,
-        "0.0.1",
-    );
-    unsafe { std::env::set_var("YARNGO_MANIFEST_URL", format!("file://{}", manifest.display())) };
-
-    let applied = runtime::refresh_recipe(&project).expect("the published recipe should apply");
-    assert_eq!(applied.as_deref(), Some("test-tag"));
-    assert_eq!(
-        std::fs::read(project.join("uv.lock")).unwrap(),
-        std::fs::read(bundled("uv.lock")).unwrap(),
-        "the staged lock should now be the published one"
-    );
-    // Running again is a no-op: the installed lock already matches.
-    assert_eq!(runtime::refresh_recipe(&project).unwrap(), None);
-
-    unsafe { std::env::remove_var("YARNGO_MANIFEST_URL") };
-}
-
-#[test]
-fn a_recipe_needing_a_newer_sidecar_is_refused() {
-    // The gate that makes updating the runtime without updating the app safe:
-    // a lock describing an environment this engine.py cannot drive must never
-    // be installed, or a remote publication bricks working installs.
-    let scratch = Scratch::new();
-    let project = scratch.path().join(runtime::MLX.manifest);
-    std::fs::create_dir_all(&project).unwrap();
-    std::fs::write(project.join("uv.lock"), b"the lock we shipped with").unwrap();
-
-    let manifest = local_manifest(
-        scratch.path(),
-        &bundled("uv.lock"),
-        &bundled("pyproject.toml"),
-        runtime::SIDECAR_API + 1,
-        "0.0.1",
-    );
-    unsafe { std::env::set_var("YARNGO_MANIFEST_URL", format!("file://{}", manifest.display())) };
-
-    let refused = runtime::refresh_recipe(&project).expect_err("must refuse a newer api");
-    assert!(refused.contains("sidecar api"), "{refused}");
-    assert_eq!(
-        std::fs::read(project.join("uv.lock")).unwrap(),
-        b"the lock we shipped with",
-        "a refused manifest must leave the staged recipe alone"
-    );
-
-    unsafe { std::env::remove_var("YARNGO_MANIFEST_URL") };
-}
-
-#[test]
-fn a_recipe_for_a_newer_app_is_refused() {
-    let scratch = Scratch::new();
-    let project = scratch.path().join(runtime::MLX.manifest);
-    std::fs::create_dir_all(&project).unwrap();
-
-    let manifest = local_manifest(
-        scratch.path(),
-        &bundled("uv.lock"),
-        &bundled("pyproject.toml"),
-        runtime::SIDECAR_API,
-        "99.0.0",
-    );
-    unsafe { std::env::set_var("YARNGO_MANIFEST_URL", format!("file://{}", manifest.display())) };
-    let refused = runtime::refresh_recipe(&project).expect_err("must refuse a newer app floor");
-    assert!(refused.contains("99.0.0"), "{refused}");
-    unsafe { std::env::remove_var("YARNGO_MANIFEST_URL") };
-}
-
-#[test]
-fn a_recipe_whose_digest_does_not_match_is_refused() {
-    let scratch = Scratch::new();
-    let project = scratch.path().join(runtime::MLX.manifest);
-    std::fs::create_dir_all(&project).unwrap();
-    std::fs::write(project.join("uv.lock"), b"untouched").unwrap();
-
-    // Build the manifest against the real lock, then swap the file underneath
-    // it — which is what a tampered or truncated download looks like.
-    let lock = scratch.path().join("uv.lock");
-    std::fs::copy(bundled("uv.lock"), &lock).unwrap();
-    let manifest = local_manifest(
-        scratch.path(),
-        &lock,
-        &bundled("pyproject.toml"),
-        runtime::SIDECAR_API,
-        "0.0.1",
-    );
-    std::fs::write(&lock, b"something else entirely").unwrap();
-
-    unsafe { std::env::set_var("YARNGO_MANIFEST_URL", format!("file://{}", manifest.display())) };
-    let refused = runtime::refresh_recipe(&project).expect_err("must refuse a bad digest");
-    assert!(refused.contains("digest"), "{refused}");
-    assert_eq!(
-        std::fs::read(project.join("uv.lock")).unwrap(),
-        b"untouched",
-        "nothing may be written before the digest is checked"
-    );
-    unsafe { std::env::remove_var("YARNGO_MANIFEST_URL") };
-}
-
-#[test]
-fn a_pre_release_is_older_than_the_release_it_precedes() {
-    // Publishing an alpha makes this load-bearing: read the other way round,
-    // an alpha would qualify for recipes meant for the finished version.
-    assert!(!runtime::version_at_least("0.1.0-alpha.1", "0.1.0"));
-    assert!(runtime::version_at_least("0.1.0", "0.1.0-alpha.1"));
-    assert!(runtime::version_at_least("0.1.0-alpha.2", "0.1.0-alpha.1"));
-    assert!(runtime::version_at_least("0.1.0-alpha.1", "0.0.0"));
-    // And numbers still compare as numbers.
-    assert!(runtime::version_at_least("1.10.0", "1.9.0"));
-    assert!(!runtime::version_at_least("1.9.0", "1.10.0"));
-}
-
-#[test]
-fn versions_compare_by_number_not_by_text() {
-    // "1.10.0" sorts below "1.9.0" as a string, which would let an old app
-    // install a recipe meant for a newer one.
-    let m: runtime::Manifest = serde_json::from_str(
-        r#"{"schema":1,"min_app_version":"1.9.0","sidecar_api":1,"tag":"t","runtimes":{}}"#,
-    )
-    .unwrap();
-    assert!(runtime::manifest_usable(&m).is_err(), "0.1.0 is older than 1.9.0");
 }
 
 #[test]
@@ -825,46 +663,20 @@ fn a_runtime_name_that_is_a_path_is_refused() {
     }
 }
 
-/// A runtime archive is executable code arriving over a network. The digest in
-/// the manifest is the only thing that says it is what was published.
+/// The archive that was published goes in, and nothing of it is left behind.
 #[test]
-fn a_runtime_archive_that_does_not_match_its_digest_is_refused() {
-    use sha2::{Digest, Sha256};
-    let served = tempfile::tempdir().expect("tempdir");
-    let source = served.path().join("engine.py");
-    std::fs::write(&source, b"# the published runtime\n").expect("engine");
-    let archive = served.path().join("runtime.tar.gz");
-    let ok = std::process::Command::new("tar")
-        .arg("-czf")
-        .arg(&archive)
-        .arg("-C")
-        .arg(served.path())
-        .arg("engine.py")
-        .status()
-        .expect("tar");
-    assert!(ok.success());
-    let url = format!("file://{}", archive.display());
-    let real = format!("{:x}", Sha256::digest(std::fs::read(&archive).expect("read")));
+fn a_published_runtime_archive_is_unpacked() {
+    let (_built, archive) = crafted(&[("engine.py", "file", "# the published runtime\n")]);
 
-    // Something else answered, or the archive changed after it was published.
     let landing = tempfile::tempdir().expect("landing");
-    let wrong = "0".repeat(64);
-    let refused = speech_engine::runtime::unpack_engine("mlx", landing.path(), &url, &wrong)
-        .expect_err("an archive that does not match its digest was accepted");
-    assert!(refused.contains("digest"), "{refused}");
-    assert!(
-        !landing.path().join("engine.py").exists(),
-        "code was unpacked before it was found not to match"
-    );
+    speech_engine::runtime::unpack_engine("mlx", landing.path(), &archive).expect("accepted");
 
-    // And the one that was published goes in.
-    speech_engine::runtime::unpack_engine("mlx", landing.path(), &url, &real).expect("accepted");
     assert_eq!(
         std::fs::read_to_string(landing.path().join("engine.py")).expect("read"),
         "# the published runtime\n"
     );
     assert!(
-        !landing.path().join("runtime.tar.gz").exists(),
+        !landing.path().join("crafted.tar.gz").exists(),
         "the archive was left behind after unpacking"
     );
 }
@@ -872,80 +684,18 @@ fn a_runtime_archive_that_does_not_match_its_digest_is_refused() {
 /// An archive that is not a runtime is refused rather than half-installed.
 #[test]
 fn an_archive_without_an_engine_in_it_is_refused() {
-    use sha2::{Digest, Sha256};
-    let served = tempfile::tempdir().expect("tempdir");
-    std::fs::write(served.path().join("readme.txt"), b"nothing to run here\n").expect("write");
-    let archive = served.path().join("runtime.tar.gz");
-    std::process::Command::new("tar")
-        .arg("-czf").arg(&archive).arg("-C").arg(served.path()).arg("readme.txt")
-        .status()
-        .expect("tar");
-    let digest = format!("{:x}", Sha256::digest(std::fs::read(&archive).expect("read")));
+    let (_built, archive) = crafted(&[("readme.txt", "file", "nothing to run here\n")]);
 
     let landing = tempfile::tempdir().expect("landing");
-    let refused = speech_engine::runtime::unpack_engine(
-        "mlx",
-        landing.path(),
-        &format!("file://{}", archive.display()),
-        &digest,
-    )
-    .expect_err("an archive with no engine in it was accepted as a runtime");
+    let refused = speech_engine::runtime::unpack_engine("mlx", landing.path(), &archive)
+        .expect_err("an archive with no engine in it was accepted as a runtime");
     assert!(refused.contains("engine.py"), "{refused}");
-}
-
-/// Fetches that overlap must not read each other's bytes.
-///
-/// They did: the download went to a file named for the process, so two at once
-/// were the same file. The symptom is a digest mismatch on bytes that are
-/// perfectly good, which is unexplainable from the message and would have been
-/// found in the field rather than here. Concurrent, because sequential fetches
-/// never collided and that is what was tested.
-#[test]
-fn overlapping_fetches_do_not_read_each_others_bytes() {
-    use sha2::{Digest, Sha256};
-    let served = tempfile::tempdir().expect("tempdir");
-
-    // Several distinguishable archives, published at once.
-    let published: Vec<(String, String)> = (0..6)
-        .map(|n| {
-            let dir = served.path().join(format!("r{n}"));
-            std::fs::create_dir_all(&dir).expect("dir");
-            std::fs::write(dir.join("engine.py"), format!("# runtime {n}\n")).expect("engine");
-            let archive = served.path().join(format!("r{n}.tar.gz"));
-            std::process::Command::new("tar")
-                .arg("-czf").arg(&archive).arg("-C").arg(&dir).arg("engine.py")
-                .status()
-                .expect("tar");
-            let digest = format!("{:x}", Sha256::digest(std::fs::read(&archive).expect("read")));
-            (format!("file://{}", archive.display()), digest)
-        })
-        .collect();
-
-    let landing = tempfile::tempdir().expect("landing");
-    std::thread::scope(|scope| {
-        for (n, (url, digest)) in published.iter().enumerate() {
-            let into = landing.path().join(format!("r{n}"));
-            scope.spawn(move || {
-                speech_engine::runtime::unpack_engine(&format!("r{n}"), &into, url, digest)
-                    .unwrap_or_else(|e| panic!("runtime {n} was refused: {e}"));
-            });
-        }
-    });
-
-    for n in 0..6 {
-        assert_eq!(
-            std::fs::read_to_string(landing.path().join(format!("r{n}/engine.py"))).expect("read"),
-            format!("# runtime {n}\n"),
-            "runtime {n} was installed with another runtime's code"
-        );
-    }
 }
 
 /// Building an archive from a description, including the things a well-behaved
 /// tool will not produce. `(name, kind, body)` where kind is "file", "dir",
 /// "symlink" or "hardlink"; for links, `body` is the link target.
-fn crafted(entries: &[(&str, &str, &str)]) -> (tempfile::TempDir, String, String) {
-    use sha2::{Digest, Sha256};
+fn crafted(entries: &[(&str, &str, &str)]) -> (tempfile::TempDir, Vec<u8>) {
     let dir = tempfile::tempdir().expect("tempdir");
     let script = dir.path().join("build.py");
     let archive = dir.path().join("crafted.tar.gz");
@@ -985,15 +735,14 @@ t.close()
         .status()
         .expect("python");
     assert!(ok.success(), "could not build the archive");
-    let digest = format!("{:x}", Sha256::digest(std::fs::read(&archive).expect("read")));
-    let url = format!("file://{}", archive.display());
-    (dir, url, digest)
+    let bytes = std::fs::read(&archive).expect("read");
+    (dir, bytes)
 }
 
 fn unpacking(entries: &[(&str, &str, &str)]) -> (tempfile::TempDir, Result<(), String>) {
-    let (_served, url, digest) = crafted(entries);
+    let (_built, archive) = crafted(entries);
     let landing = tempfile::tempdir().expect("landing");
-    let outcome = speech_engine::runtime::unpack_engine("mlx", landing.path(), &url, &digest);
+    let outcome = speech_engine::runtime::unpack_engine("mlx", landing.path(), &archive);
     (landing, outcome)
 }
 
@@ -1059,50 +808,3 @@ fn an_ordinary_runtime_archive_installs() {
     );
     assert!(landing.path().join("pyproject.toml").exists(), "./ was not handled");
 }
-
-/// Runtime code is not fetched while the manifest naming it cannot be verified.
-///
-/// A digest proves the bytes match what the manifest said, and says nothing
-/// about who wrote the manifest. Whoever can publish to the artifact repository
-/// could name any archive and any digest. That is a different risk from being
-/// able to change which packages get installed, and the path stays shut until
-/// the metadata is signed.
-#[test]
-fn unverified_runtime_code_is_not_fetched() {
-    assert!(
-        std::env::var_os("YARNGO_UNVERIFIED_RUNTIME_CODE").is_none(),
-        "this test is meaningless with the escape hatch set"
-    );
-    // A recipe naming an archive that is genuinely there and genuinely matches
-    // its digest. What is missing is any reason to believe the recipe.
-    let (_served, url, digest) = crafted(&[("engine.py", "file", "# published\n")]);
-    let recipe = speech_engine::runtime::Recipe {
-        lock_url: String::new(),
-        lock_sha256: String::new(),
-        pyproject_url: String::new(),
-        pyproject_sha256: String::new(),
-        engine_url: Some(url),
-        engine_sha256: Some(digest),
-    };
-
-    let landing = tempfile::tempdir().expect("landing");
-    let mut said = Vec::new();
-    let brought = speech_engine::runtime::engine_from(
-        &recipe,
-        "mlx",
-        landing.path(),
-        &mut |p| said.push(format!("{p:?}")),
-    )
-    .expect("deciding not to fetch is not a failure");
-
-    assert!(!brought, "unverifiable runtime code was installed");
-    assert!(
-        !landing.path().join("engine.py").exists(),
-        "code was fetched from a manifest nothing had authenticated"
-    );
-    assert!(
-        said.iter().any(|s| s.contains("cannot be verified")),
-        "it declined without saying why: {said:?}"
-    );
-}
-

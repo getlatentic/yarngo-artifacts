@@ -20,16 +20,12 @@ reinventing all of it and getting some of it wrong quietly.
 
 ## Where this stands
 
-**Not yet trusted.** A recipe can name an archive holding a runtime's own
-implementation, and it is verified against the digest the recipe gave. That
-proves the bytes are the bytes the manifest named. It proves nothing about who
-wrote the manifest — so anyone who can publish to the artifact repository can
-name any archive and any digest.
-
-While a recipe could only change which packages `uv` installs, that was a
-tolerable amount of trust in the publishing account. Once it can deliver the
-program itself it is not, so the path is closed: a runtime that publishes its
-own engine is run by the one that ships, which is signed with the application.
+The digest-in-a-manifest machinery is gone. A release names TUF targets, and
+what those targets are and whether they are current is settled by metadata
+signed with keys the application ships trusting. `scripts/tuf-repo.sh` creates
+the repository and the root role; until a root role is shipped, nothing is
+published to this application and an install uses the recipe that shipped —
+which is what a machine with no network does anyway.
 
 ## What is already right, and stays
 
@@ -71,8 +67,11 @@ correctly and long expired — loading refuses:
 - a target edited after signing, and metadata edited after signing;
 - **a correctly signed repository whose keys were never ours**, serving the very
   same bytes we would have served;
-- metadata that has expired, which is how someone holds a machine on the version
-  they already know how to break.
+- metadata that has expired;
+- **last week's repository, replayed by the publisher who signed it** — every
+  signature genuine, nothing expired, and caught only because what was already
+  seen is remembered. Serving old metadata is how someone holds a machine on the
+  version they already know how to break, and it needs no keys at all.
 
 Each of those is asserted on the reason it was refused, not merely that it was,
 so a fixture that quietly went missing cannot satisfy them; and each tamper test

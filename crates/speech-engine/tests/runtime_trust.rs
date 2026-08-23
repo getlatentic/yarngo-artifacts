@@ -121,7 +121,7 @@ fn metadata_edited_after_signing_is_refused() {
     let (_scratch, repo) = copy_of("repo");
     fetch(&repo.join("root.json"), &repo).expect("the untouched copy should load");
 
-    flip_a_byte(&repo.join("metadata/1.targets.json"));
+    flip_a_byte(&target_file(&repo.join("metadata"), "targets.json"));
     refused(fetch(&repo.join("root.json"), &repo), "hash mismatch");
 }
 
@@ -181,9 +181,15 @@ fn a_target_the_repository_does_not_vouch_for_is_not_fetched() {
     let repo = fixtures().join("repo");
     let (_store, trusted) = open(&repo.join("root.json"), &repo).expect("open");
 
-    let mut vouched = trusted.names();
-    vouched.sort();
-    assert_eq!(vouched, vec![Catalogue::TARGET.to_string(), TARGET.to_string()]);
+    let vouched = trusted.names();
+    assert!(
+        vouched.contains(&Catalogue::TARGET.to_string()),
+        "the catalogue is not among {vouched:?}"
+    );
+    assert!(
+        !vouched.iter().any(|name| name == "something-else.tar.gz"),
+        "the repository claims to vouch for a target that was never published"
+    );
     let complaint = trusted.read("something-else.tar.gz").expect_err("no such target");
     assert!(
         complaint.contains("not in this repository"),
@@ -206,7 +212,7 @@ fn what_to_install_is_read_from_a_catalogue_the_repository_vouches_for() {
     // away, so the answer is the newest one that actually fits.
     let chosen = offered.best("mlx", "0.1.0-alpha.1").expect("a release");
     assert_eq!(chosen.version, "1.0.0");
-    assert_eq!(chosen.lock, "mlx/1.0.0/uv.lock");
+    assert_eq!(chosen.lock, "mlx-1.0.0.uv.lock");
 
     let later = offered.best("mlx", "9.0.0").expect("a release");
     assert_eq!(later.version, "2.0.0");
@@ -225,4 +231,136 @@ fn a_catalogue_edited_after_signing_is_refused() {
 
     let (_store, trusted) = open(&repo.join("root.json"), &repo).expect("open");
     refused(trusted.read(Catalogue::TARGET), "hash mismatch");
+}
+
+/// The whole wiring, from a signed repository to files on disk that `uv` and
+/// the engine loader will read.
+#[test]
+fn a_release_is_staged_from_the_repository_that_vouched_for_it() {
+    let repo = fixtures().join("repo");
+    let scratch = tempfile::tempdir().expect("temp dir");
+    let anchor = speech_engine::published::at(
+        directory(&repo).as_str(),
+        fs::read(repo.join("root.json")).expect("root"),
+        scratch.path().join("seen"),
+    )
+    .expect("anchor");
+
+    let published = speech_engine::published::Published::offered_by(anchor, "mlx", "0.1.0-alpha.1")
+        .expect("a release");
+    assert_eq!(published.version(), "1.0.0");
+
+    let project = scratch.path().join("project");
+    assert!(published.stage_recipe(&project).expect("stage"), "nothing changed");
+    assert!(
+        fs::read_to_string(project.join("uv.lock")).expect("lock").contains("requires-python"),
+        "the lock is not the published one"
+    );
+    assert!(
+        fs::read_to_string(project.join("pyproject.toml"))
+            .expect("pyproject")
+            .contains("mlx-runtime"),
+        "the pyproject is not the published one"
+    );
+
+    // Staging the same release again changes nothing, so an install already on
+    // it says nothing rather than announcing an update that did not happen.
+    assert!(!published.stage_recipe(&project).expect("stage again"));
+
+    let folder = scratch.path().join("runtime");
+    assert!(published.stage_engine("mlx", &folder).expect("engine"), "no engine staged");
+    assert_eq!(
+        fs::read_to_string(folder.join("engine.py")).expect("engine.py"),
+        "# the published engine\n"
+    );
+}
+
+/// Nothing is fetched from a repository the shipped root role did not sign,
+/// however well formed it is — which is the property the whole arrangement
+/// exists for.
+#[test]
+fn a_release_is_not_staged_from_someone_elses_repository() {
+    let scratch = tempfile::tempdir().expect("temp dir");
+    let anchor = speech_engine::published::at(
+        directory(&fixtures().join("impostor")).as_str(),
+        fs::read(fixtures().join("repo/root.json")).expect("our root"),
+        scratch.path().join("seen"),
+    )
+    .expect("anchor");
+
+    let complaint =
+        speech_engine::published::Published::offered_by(anchor, "mlx", "0.1.0-alpha.1")
+            .err()
+            .map(|e| e.to_lowercase())
+            .expect("another publisher's repository was accepted");
+    assert!(complaint.contains("signature threshold"), "{complaint}");
+}
+
+/// Fetches that overlap must not read each other's bytes.
+///
+/// They did, once: the download went to a file named for the process, so two at
+/// once were the same file. The symptom was a hash mismatch on bytes that were
+/// perfectly good — unexplainable from the message, and the sort of thing found
+/// in the field rather than here. Fetching moved when TUF came in, so the risk
+/// moved with it. Concurrent, because sequential fetches never collided and
+/// sequential is what had been tested.
+#[test]
+fn overlapping_fetches_do_not_read_each_others_bytes() {
+    let repo = fixtures().join("repo");
+    let wanted = [
+        (TARGET, CONTENTS),
+        (Catalogue::TARGET, "\"schema\": 1"),
+        ("mlx-1.0.0.uv.lock", "requires-python"),
+        ("mlx-1.0.0.pyproject.toml", "mlx-runtime"),
+    ];
+
+    std::thread::scope(|scope| {
+        for _ in 0..3 {
+            for (target, expected) in wanted {
+                let repo = repo.clone();
+                scope.spawn(move || {
+                    let (_store, trusted) = open(&repo.join("root.json"), &repo).expect("open");
+                    let got = trusted.read(target).expect("read");
+                    assert!(
+                        String::from_utf8_lossy(&got).contains(expected),
+                        "{target} came back as somebody else's bytes"
+                    );
+                });
+            }
+        }
+    });
+}
+
+/// Being served last week's repository, by the publisher who signed it.
+///
+/// Every signature is genuine and nothing has expired, so nothing about the
+/// metadata itself gives it away — the only thing that does is remembering what
+/// was already seen. Replaying old metadata is how someone holds a machine on
+/// the version they know how to break, and it needs no keys at all.
+#[test]
+fn metadata_older_than_what_was_already_seen_is_refused() {
+    let store = tempfile::tempdir().expect("temp dir");
+    let seen = store.path().join("seen");
+
+    let anchor = |served: PathBuf| {
+        speech_engine::published::at(
+            directory(&served).as_str(),
+            fs::read(fixtures().join("repo/root.json")).expect("root"),
+            seen.clone(),
+        )
+        .expect("anchor")
+        .open()
+    };
+
+    anchor(fixtures().join("repo")).expect("this week's repository");
+
+    // The same keys, the same runtime, an earlier version of the metadata.
+    let complaint = anchor(fixtures().join("rollback"))
+        .err()
+        .map(|why| why.to_lowercase())
+        .expect("last week's repository was accepted");
+    assert!(
+        complaint.contains("previously fetched"),
+        "refused, but not as a rollback: {complaint}"
+    );
 }
