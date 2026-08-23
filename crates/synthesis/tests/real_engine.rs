@@ -57,11 +57,18 @@ fn mlx_runtime(data: &Path) -> speech_engine::runtimes::Descriptor {
     std::fs::create_dir_all(&home).expect("runtime directory");
     std::fs::copy(repo().join("sidecar/engine.py"), home.join("engine.py")).expect("engine");
     std::fs::copy(repo().join("sidecar/protocol.py"), home.join("protocol.py")).expect("protocol");
-    let bin = home.join(".venv/bin");
-    std::fs::create_dir_all(&bin).expect("bin");
-    let linked = bin.join("python3");
+    // The whole environment, not its interpreter. Python finds `pyvenv.cfg`
+    // relative to the executable it was launched as, so a symlink to the
+    // binary alone lands outside the environment and imports nothing that was
+    // installed into it — which is why these tests had never actually run.
+    let venv = python()
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("an interpreter inside an environment")
+        .to_path_buf();
+    let linked = home.join(".venv");
     let _ = std::fs::remove_file(&linked);
-    std::os::unix::fs::symlink(python(), &linked).expect("interpreter");
+    std::os::unix::fs::symlink(&venv, &linked).expect("environment");
     std::fs::write(
         home.join("runtime.json"),
         serde_json::json!({

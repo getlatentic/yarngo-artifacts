@@ -64,11 +64,10 @@ resources = [
   { src = "../../packaging/catalog.json", target = "catalog.json" },
   { src = "../../packaging/packs/mlx/*", target = "packs/mlx" },
   { src = "../../packaging/packs/torch/*", target = "packs/torch" },
-  # The TUF root role, once scripts/tuf-repo.sh init has been run and its
-  # root.json committed here. Until it ships, nothing is published to this
-  # application and installs use the recipe above — uncomment when it exists,
-  # because a named resource that is missing fails packaging on purpose.
-  # { src = "../../packaging/tuf/root.json", target = "tuf/root.json" },
+  # The TUF root role is deliberately not here. A named resource that does not
+  # exist fails the build, and this one does not exist until somebody has run a
+  # signing ceremony — so scripts/package.sh copies it when it is there and
+  # says plainly when it is not.
 ]
 # Cut from the brand mark by scripts/make-app-icon.py. Without this the app
 # ships with the generic binary icon.

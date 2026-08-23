@@ -138,6 +138,38 @@ answering, untouched by any network failure; a machine with nothing installed
 installs the recipe that ships; the repository is consulted only to offer
 something newer, and offering is not acting.
 
+## The ceremony, once
+
+Everything above is inert until a root role ships. Until then this application
+installs the runtime recipe inside it and can never be sent a published one —
+the safe state, and a permanent one for anybody who installs that build.
+
+    scripts/tuf-repo.sh init  <keys-dir> <repo-dir>
+    cp <repo-dir>/root.json packaging/tuf/root.json      # and commit it
+
+`scripts/package.sh` copies that file into the bundle before signing, so the
+trust anchor is covered by the application's own signature — a root role anyone
+could replace is not one. It is copied by the script rather than named in the
+packager's resource list because a named resource that does not exist fails the
+build, and this one does not exist until the ceremony has happened. Every
+package run says which of the two states it is in.
+
+Publishing after that is one command per release:
+
+    cp packaging/packs/mlx/uv.lock       <targets>/mlx-<version>.uv.lock
+    cp packaging/packs/mlx/pyproject.toml <targets>/mlx-<version>.pyproject.toml
+    # name them in <targets>/catalogue.json, then
+    scripts/tuf-repo.sh build <keys-dir> <repo-dir> <targets>
+
+and serving `<repo-dir>` at the address in `speech-engine::published`.
+
+Proven end to end before it was written down: ceremony, publish the real mlx
+recipe as `2026.08.23.1`, install into an empty machine. It fetched the
+published release rather than the one inside the application, built the
+environment, and the engine answered with thirteen methods. Pointed at another
+publisher's repository with the same root shipped, it fell back to the recipe
+that ships instead — which is the whole point of the arrangement.
+
 ## Keys
 
 `init` gives the root role three keys with a threshold of two — one lost is

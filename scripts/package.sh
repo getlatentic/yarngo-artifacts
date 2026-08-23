@@ -62,6 +62,31 @@ fi
 pack app "$@"
 [[ -d "$APP" ]] || { echo "no bundle at $APP" >&2; exit 1; }
 
+# The TUF root role, if this checkout has one. Copied here rather than named in
+# the packager's resource list, because that list fails the build on a missing
+# file — which would mean nobody could package until the signing keys existed.
+# Copied before signing, so the trust anchor is covered by the app's signature:
+# a root role anyone could replace is not a trust anchor.
+ROOT="packaging/tuf/root.json"
+if [[ -f "$ROOT" ]]; then
+  mkdir -p "$APP/Contents/Resources/tuf"
+  cp "$ROOT" "$APP/Contents/Resources/tuf/root.json"
+  echo "trust anchor: $ROOT — this build can install published runtimes"
+else
+  cat >&2 <<'NOROOT'
+
+  No trust anchor at packaging/tuf/root.json, so this build installs only the
+  runtime recipe inside it and can never be sent a published one. That is the
+  safe state, not a broken one — but it is also permanent for anyone who
+  installs this build. To change it:
+
+      scripts/tuf-repo.sh init <keys-dir> <repo-dir>
+
+  and commit the root.json it writes to packaging/tuf/.
+
+NOROOT
+fi
+
 # cargo-packager ad-hoc signs without entitlements and derives an identifier
 # from the binary name. Both matter here: without the audio-input entitlement
 # recording silently produces nothing, and a derived identifier changes between
