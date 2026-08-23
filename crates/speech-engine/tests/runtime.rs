@@ -642,11 +642,11 @@ fn the_download_url_names_the_pinned_version() {
 #[test]
 fn installing_a_runtime_leaves_a_descriptor_where_runtimes_are_looked_for() {
     let sandbox = yarngo_testing::Sandbox::empty();
-    let previous = std::env::var_os("YARNGO_DATA");
-    std::env::set_var("YARNGO_DATA", sandbox.root());
-    std::env::set_var("YARNGO_RUNTIME_DIR", sandbox.root().join("runtime"));
+    let interpreter = sandbox.root().join("runtime/mlx/.venv/bin/python3");
 
-    let written = speech_engine::runtime::MLX.describe().expect("describe");
+    let written = speech_engine::runtime::MLX
+        .describe_in(sandbox.root(), &interpreter)
+        .expect("describe");
     assert_eq!(
         written,
         sandbox.root().join("runtimes/mlx/runtime.json"),
@@ -664,15 +664,64 @@ fn installing_a_runtime_leaves_a_descriptor_where_runtimes_are_looked_for() {
     assert_eq!(found[0].id, "mlx");
     assert_eq!(
         found[0].program(),
-        speech_engine::runtime::MLX.interpreter(),
+        interpreter,
         "the descriptor points somewhere other than what was installed"
     );
+    // With no code of its own it is run by the copy that ships with the
+    // application, which is what a first install has always done.
+    assert_eq!(
+        found[0].command().get_args().next().map(|a| a.to_string_lossy().into_owned()),
+        Some(sandbox.root().join("resources/sidecar/engine.py").to_string_lossy().into_owned())
+    );
+}
 
-    match previous {
-        Some(value) => std::env::set_var("YARNGO_DATA", value),
-        None => std::env::remove_var("YARNGO_DATA"),
-    }
-    std::env::remove_var("YARNGO_RUNTIME_DIR");
+/// A runtime that published its own implementation is started from it.
+#[test]
+fn a_runtime_that_brought_its_own_code_is_started_from_it() {
+    let sandbox = yarngo_testing::Sandbox::empty();
+    let interpreter = sandbox.root().join("runtime/mlx/.venv/bin/python3");
+    let folder = speech_engine::runtime::MLX.folder_in(sandbox.root());
+    std::fs::create_dir_all(&folder).expect("folder");
+    // What the archive would have left behind.
+    std::fs::write(folder.join("engine.py"), b"# the runtime's own").expect("engine");
+
+    speech_engine::runtime::MLX
+        .describe_in(sandbox.root(), &interpreter)
+        .expect("describe");
+
+    let places = speech_engine::runtimes::Places {
+        data: sandbox.root().to_path_buf(),
+        runtime: sandbox.root().join("runtime"),
+        resources: sandbox.root().join("resources"),
+        own: std::path::PathBuf::new(),
+    };
+    let found = speech_engine::runtimes::discover(&places);
+    assert_eq!(
+        found[0].command().get_args().next().map(|a| a.to_string_lossy().into_owned()),
+        Some(folder.join("engine.py").to_string_lossy().into_owned()),
+        "a runtime with its own code was still started from the application's"
+    );
+}
+
+/// A runtime that published a descriptor as well is the authority on how it
+/// starts, and nothing writes over it.
+#[test]
+fn a_published_descriptor_is_not_overwritten() {
+    let sandbox = yarngo_testing::Sandbox::empty();
+    let folder = speech_engine::runtime::MLX.folder_in(sandbox.root());
+    std::fs::create_dir_all(&folder).expect("folder");
+    std::fs::write(folder.join("engine.py"), b"# its own").expect("engine");
+    let theirs = br#"{"id":"mlx","name":"As published","command":"/usr/bin/true",
+                     "args":["{self}/engine.py","--their-flag"]}"#;
+    std::fs::write(folder.join("runtime.json"), theirs).expect("descriptor");
+
+    speech_engine::runtime::MLX
+        .describe_in(sandbox.root(), &sandbox.root().join("ours"))
+        .expect("describe");
+
+    let kept = std::fs::read_to_string(folder.join("runtime.json")).expect("read");
+    assert!(kept.contains("--their-flag"), "the published descriptor was overwritten");
+    assert!(kept.contains("As published"));
 }
 
 /// Every host gets exactly one runtime, and it is the right one.
@@ -719,4 +768,72 @@ fn only_runtimes_this_machine_can_run_are_offered() {
         speech_engine::runtime::host_supported().is_ok() == offered.iter().any(|p| p.id == "mlx"),
         "what is offered disagrees with what the host check says"
     );
+}
+
+/// A runtime archive is executable code arriving over a network. The digest in
+/// the manifest is the only thing that says it is what was published.
+#[test]
+fn a_runtime_archive_that_does_not_match_its_digest_is_refused() {
+    use sha2::{Digest, Sha256};
+    let served = tempfile::tempdir().expect("tempdir");
+    let source = served.path().join("engine.py");
+    std::fs::write(&source, b"# the published runtime\n").expect("engine");
+    let archive = served.path().join("runtime.tar.gz");
+    let ok = std::process::Command::new("tar")
+        .arg("-czf")
+        .arg(&archive)
+        .arg("-C")
+        .arg(served.path())
+        .arg("engine.py")
+        .status()
+        .expect("tar");
+    assert!(ok.success());
+    let url = format!("file://{}", archive.display());
+    let real = format!("{:x}", Sha256::digest(std::fs::read(&archive).expect("read")));
+
+    // Something else answered, or the archive changed after it was published.
+    let landing = tempfile::tempdir().expect("landing");
+    let wrong = "0".repeat(64);
+    let refused = speech_engine::runtime::unpack_engine("mlx", landing.path(), &url, &wrong)
+        .expect_err("an archive that does not match its digest was accepted");
+    assert!(refused.contains("digest"), "{refused}");
+    assert!(
+        !landing.path().join("engine.py").exists(),
+        "code was unpacked before it was found not to match"
+    );
+
+    // And the one that was published goes in.
+    speech_engine::runtime::unpack_engine("mlx", landing.path(), &url, &real).expect("accepted");
+    assert_eq!(
+        std::fs::read_to_string(landing.path().join("engine.py")).expect("read"),
+        "# the published runtime\n"
+    );
+    assert!(
+        !landing.path().join("runtime.tar.gz").exists(),
+        "the archive was left behind after unpacking"
+    );
+}
+
+/// An archive that is not a runtime is refused rather than half-installed.
+#[test]
+fn an_archive_without_an_engine_in_it_is_refused() {
+    use sha2::{Digest, Sha256};
+    let served = tempfile::tempdir().expect("tempdir");
+    std::fs::write(served.path().join("readme.txt"), b"nothing to run here\n").expect("write");
+    let archive = served.path().join("runtime.tar.gz");
+    std::process::Command::new("tar")
+        .arg("-czf").arg(&archive).arg("-C").arg(served.path()).arg("readme.txt")
+        .status()
+        .expect("tar");
+    let digest = format!("{:x}", Sha256::digest(std::fs::read(&archive).expect("read")));
+
+    let landing = tempfile::tempdir().expect("landing");
+    let refused = speech_engine::runtime::unpack_engine(
+        "mlx",
+        landing.path(),
+        &format!("file://{}", archive.display()),
+        &digest,
+    )
+    .expect_err("an archive with no engine in it was accepted as a runtime");
+    assert!(refused.contains("engine.py"), "{refused}");
 }

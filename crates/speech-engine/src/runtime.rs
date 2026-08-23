@@ -152,20 +152,45 @@ impl Pack {
         python.exists() && can_speak(&python)
     }
 
+    /// Where this runtime's own files live, if it brought any.
+    pub fn folder(&self) -> PathBuf {
+        self.folder_in(&paths::data_dir())
+    }
+
+    /// The same, against a stated directory rather than the one this process
+    /// happens to be pointed at. What makes any of this testable without
+    /// setting an environment variable the whole process shares.
+    pub fn folder_in(&self, data_dir: &Path) -> PathBuf {
+        data_dir.join("runtimes").join(self.id)
+    }
+
     /// How to start it, written where a runtime is looked for.
     ///
-    /// The installer writes this rather than the application shipping one, so
-    /// an installed runtime means the same thing however it arrived — a folder
-    /// with a descriptor in it.
+    /// Left alone if the runtime published a descriptor of its own: a runtime
+    /// that brought its own code is the authority on how to run it, and this
+    /// would only be guessing over the top of it.
+    ///
+    /// Otherwise written here, pointing at the runtime's own implementation
+    /// when it has one and at the copy that ships with the application when it
+    /// does not.
     pub fn describe(&self) -> Result<PathBuf, String> {
-        let folder = paths::data_dir().join("runtimes").join(self.id);
+        self.describe_in(&paths::data_dir(), &self.interpreter())
+    }
+
+    /// The same, told where things are rather than reading it from the process.
+    pub fn describe_in(&self, data_dir: &Path, interpreter: &Path) -> Result<PathBuf, String> {
+        let folder = self.folder_in(data_dir);
         std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
         let path = folder.join("runtime.json");
+        if path.exists() && folder.join("engine.py").exists() {
+            return Ok(path);
+        }
+        let own = folder.join("engine.py");
         let descriptor = serde_json::json!({
             "id": self.id,
             "name": self.name,
-            "command": self.interpreter().to_string_lossy(),
-            "args": ["{resources}/sidecar/engine.py"],
+            "command": interpreter.to_string_lossy(),
+            "args": [if own.exists() { "{self}/engine.py" } else { "{resources}/sidecar/engine.py" }],
             "env": { "YARNGO_DATA": "{data}" },
         });
         std::fs::write(&path, serde_json::to_string_pretty(&descriptor).unwrap_or_default())
@@ -550,6 +575,18 @@ pub struct Recipe {
     pub lock_sha256: String,
     pub pyproject_url: String,
     pub pyproject_sha256: String,
+    /// The runtime's own code: its implementation of this protocol, and
+    /// optionally the descriptor that starts it, as one archive.
+    ///
+    /// Absent means it has none of its own and is run by the copy that ships
+    /// with the application — which is what the first runtime does, and what
+    /// any of them falls back to when the manifest cannot be reached. Present
+    /// means a runtime can be published, corrected or added without the
+    /// application being rebuilt, which is the point of describing one at all.
+    #[serde(default)]
+    pub engine_url: Option<String>,
+    #[serde(default)]
+    pub engine_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -611,7 +648,13 @@ pub fn manifest_usable(manifest: &Manifest) -> Result<(), String> {
 }
 
 fn fetch_text(url: &str) -> Result<Vec<u8>, String> {
-    let into = std::env::temp_dir().join(format!("yarngo-fetch-{}", std::process::id()));
+    // One file per fetch, not one per process. Two fetches at once wrote to the
+    // same path and each read what the other had downloaded — which is a
+    // digest mismatch on perfectly good bytes, and unexplainable from the
+    // message.
+    static FETCHES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nth = FETCHES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let into = std::env::temp_dir().join(format!("yarngo-fetch-{}-{nth}", std::process::id()));
     let mut curl = Command::new("curl");
     curl.args(["-fL", "-sS", "--retry", "2", "--max-time", "30", "-o"]).arg(&into).arg(url);
     run_streaming(curl, &mut |_| {})?;
@@ -636,6 +679,75 @@ pub fn fetch_manifest() -> Result<Manifest, String> {
 ///
 /// The digest is checked before anything is written, so a truncated or swapped
 /// download leaves the staged recipe untouched rather than half-replaced.
+/// Fetch a runtime's own code, if the published recipe names any.
+///
+/// The archive is unpacked into the runtime's own folder, which is where its
+/// descriptor points with `{self}`. Verified before it is unpacked: this is
+/// executable code arriving over the network, and the digest in the manifest is
+/// the only thing that says it is the code that was published.
+///
+/// Reports whether the runtime now has an implementation of its own. A recipe
+/// that names none is not a failure — it means this runtime is run by the copy
+/// that ships with the application.
+pub fn fetch_engine(pack: &Pack, report: &mut dyn FnMut(Progress)) -> Result<bool, String> {
+    let manifest = match fetch_manifest() {
+        Ok(manifest) => manifest,
+        // Offline, or nothing published yet. The shipped copy is what a first
+        // install has always used, and it is still there.
+        Err(_) => return Ok(false),
+    };
+    let Some(recipe) = manifest.runtimes.get(pack.id) else {
+        return Ok(false);
+    };
+    let (Some(url), Some(expected)) = (&recipe.engine_url, &recipe.engine_sha256) else {
+        return Ok(false);
+    };
+
+    report(Progress::Step("Fetching the runtime…".into()));
+    unpack_engine(pack.id, &pack.folder(), url, expected)?;
+    Ok(true)
+}
+
+/// Fetch one runtime's archive into a folder, having checked it is the archive
+/// that was published.
+///
+/// Verified before anything is written, and certainly before anything is
+/// unpacked: this is code that will be executed, arriving over a network, and
+/// the digest in the manifest is the only thing that says it is the code
+/// somebody published rather than what a network handed back.
+///
+/// Told its folder and its digest rather than reading them from a manifest and
+/// the environment, so the check itself can be tested.
+pub fn unpack_engine(
+    id: &str,
+    folder: &Path,
+    url: &str,
+    expected: &str,
+) -> Result<(), String> {
+    let archive = fetch_text(url)?;
+    use sha2::{Digest, Sha256};
+    let actual = format!("{:x}", Sha256::digest(&archive));
+    if actual != expected {
+        return Err(format!(
+            "the {id} runtime does not match its digest (wanted {expected}, got {actual})"
+        ));
+    }
+
+    std::fs::create_dir_all(folder).map_err(|e| e.to_string())?;
+    let staged = folder.join("runtime.tar.gz");
+    std::fs::write(&staged, &archive).map_err(|e| e.to_string())?;
+    let mut tar = Command::new("tar");
+    tar.arg("-xzf").arg(&staged).arg("-C").arg(folder);
+    let unpacked = run_streaming(tar, &mut |_| {});
+    let _ = std::fs::remove_file(&staged);
+    unpacked.map_err(|e| format!("unpacking the {id} runtime failed: {e}"))?;
+
+    if !folder.join("engine.py").exists() {
+        return Err(format!("the {id} runtime archive has no engine.py in it"));
+    }
+    Ok(())
+}
+
 pub fn refresh_recipe(project: &Path) -> Result<Option<String>, String> {
     let manifest = fetch_manifest()?;
     let recipe = manifest
@@ -848,6 +960,14 @@ pub fn install_pack(
 
     if !pack.installed() {
         report(Progress::Failed("install finished but the engine did not import".into()));
+        return;
+    }
+
+    // Its own code, if it publishes any. Failing here is failing the install:
+    // a runtime that names an implementation and cannot produce the one that
+    // was published should not quietly fall back to a different one.
+    if let Err(reason) = fetch_engine(pack, &mut report) {
+        report(Progress::Failed(reason));
         return;
     }
 

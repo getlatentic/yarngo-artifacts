@@ -72,6 +72,18 @@ runtimes live, `{resources}` what shipped with the application, and `{self}` the
 descriptor's own directory — which is what lets a runtime carry its own
 interpreter without knowing where it will be installed.
 
+A runtime can bring its own code. The published manifest names, per runtime, an
+archive holding its implementation of this protocol and optionally the
+descriptor that starts it. The archive is verified against the digest in the
+manifest before anything is unpacked — it is code that will be executed,
+arriving over a network — and lands in the runtime's own folder, which is what
+`{self}` points at. A runtime that publishes a descriptor is the authority on
+how it starts, and nothing writes over it.
+
+Without one, a runtime is run by the copy of the engine that ships with the
+application. That is what the first runtime does today, and what any of them
+falls back to when the manifest cannot be reached.
+
 Nothing about a runtime ships with the application — an interpreter and its
 speech packages are hundreds of megabytes and update on their own cadence — so a
 new installation has none and is shown what it can fetch for this machine. The
