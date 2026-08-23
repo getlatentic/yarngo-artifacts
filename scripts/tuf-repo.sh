@@ -79,6 +79,11 @@ rotate them, that is a different and more careful job than this command."
   tuftool root sign "$KEYS/root.json" -k "$KEYS/root-1.pem" -k "$KEYS/root-2.pem"
   chmod 600 "$KEYS"/*.pem
 
+  # Nothing has been published from these keys, and recording that is what
+  # separates "the first publish" from "the counter went missing" — which are
+  # the same absence and need opposite treatment.
+  echo 0 > "$KEYS/metadata-version"
+
   mkdir -p "$(dirname "$ANCHOR")"
   cp "$KEYS/root.json" "$ANCHOR"
 
@@ -219,23 +224,43 @@ DONE
   ;;
 
 status)
-  echo "signing keys:  $KEYS"
-  if [ -f "$KEYS/root.json" ]; then
-    echo "               present — published at metadata version $(cat "$KEYS/metadata-version" 2>/dev/null || echo 'never')"
+  # A checklist with one next action, rather than a list of things that are
+  # absent. Two of the three are absent *because* the first is, and reporting
+  # them as separate problems reads like three failures when it is one step.
+  have_keys=false;   [ -f "$KEYS/root.json" ] && have_keys=true
+  have_anchor=false; [ -f "$ANCHOR" ]         && have_anchor=true
+  have_built=false;  [ -d "$OUT" ]            && have_built=true
+
+  mark() { if [ "$1" = true ]; then printf '  done  '; else printf '  todo  '; fi; }
+
+  if $have_keys && $have_anchor; then
+    echo "Runtime publishing: set up."
+  elif $have_keys; then
+    echo "Runtime publishing: keys exist, anchor not committed."
   else
-    echo "               MISSING — run: scripts/tuf-repo.sh init"
+    echo "Runtime publishing: not set up. Nothing is broken — this is where"
+    echo "every checkout starts, and the application installs the runtime"
+    echo "recipe inside it until the three steps below are done."
   fi
-  echo "trust anchor:  $ANCHOR"
-  if [ -f "$ANCHOR" ]; then
-    echo "               present — builds can install published runtimes"
-  else
-    echo "               MISSING — builds install only the recipe inside them"
+  echo
+
+  mark $have_keys;   echo "signing keys    $KEYS"
+  mark $have_anchor; echo "trust anchor    $ANCHOR"
+  mark $have_built;  printf 'published       %s' "$OUT"
+  if $have_built; then
+    printf ' (metadata version %s)' "$(cat "$KEYS/metadata-version" 2>/dev/null || echo '?')"
   fi
-  echo "built output:  $OUT"
-  if [ -d "$OUT" ]; then
-    echo "               present — serve it at $SERVED_AT"
+  echo; echo
+
+  if ! $have_keys; then
+    echo "Next:  scripts/tuf-repo.sh init"
+  elif ! $have_anchor; then
+    echo "Next:  cp $KEYS/root.json $ANCHOR && git add $ANCHOR"
+  elif ! $have_built; then
+    echo "Next:  scripts/tuf-repo.sh publish $(date +%Y.%-m.%-d).1"
   else
-    echo "               not built yet"
+    echo "Next:  serve $OUT at $SERVED_AT"
+    echo "       and re-publish within 7 days — timestamp metadata expires."
   fi
   ;;
 
