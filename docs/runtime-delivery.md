@@ -183,8 +183,18 @@ repository at them — they refuse it and quietly keep what they had. Deleting
 lacks the counter is not, and is refused with instructions rather than
 published.
 
-Timestamp metadata expires in seven days by design: metadata nobody has
-re-signed lately stops being believed. Republishing is what refreshes it.
+Timestamp metadata expires in thirty days: metadata nobody has re-signed
+lately stops being believed, and republishing is what refreshes it.
+`scripts/tuf-repo.sh status` shows the date.
+
+A day or two is the textbook window, and it assumes an online service holding
+the timestamp key and nothing else. There is no such service here, and
+`tuftool` cannot re-sign the timestamp without the targets and snapshot keys as
+well — so automating a short window would put every key on an unattended
+machine, which is the thing the roles are separated to prevent. A month is what
+one person with the keys in their own hands can keep up with, and an expiry
+nobody meets is not a freshness guarantee but an outage with a delay on it.
+Shorten it when there is something to sign with that is not a laptop.
 
 ## What was proven
 
@@ -218,11 +228,13 @@ answering is untouched until the moment it is replaced. The engine is ended
 before the new one starts — the install itself does not need it down, but two
 of them holding a model at once is gigabytes for no reason.
 
-**`raw.githubusercontent.com` caches for five minutes.** A publication is not
-visible to anybody until that expires, which is worth knowing before concluding
-that a push did not work. It is also worth knowing that this host is not
-intended as a production CDN; moving to GitHub Pages, R2 or any static host is
-a change of address in `speech-engine::published` and nothing else.
+**`raw.githubusercontent.com` caches for five minutes** (`cache-control:
+max-age=300`, measured). A publication is invisible until that expires, which is
+worth knowing before concluding a push did not work. That host is also not
+meant as a production CDN — it is rate-limited and GitHub says not to use it as
+one. Moving to GitHub Pages, R2, or any static host is a change of one address
+in `speech-engine::published` and nothing else, and it is free to do until a
+build has shipped pointing at the old one.
 
 ## Keys
 

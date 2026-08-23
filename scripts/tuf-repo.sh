@@ -38,9 +38,19 @@ command -v tuftool >/dev/null || {
 # Root expires furthest out because rotating it means shipping an application.
 # Timestamp expires soonest because that is what freshness means: metadata
 # nobody has re-signed lately stops being believed.
+#
+# A day or two would be the textbook timestamp window, and it assumes an online
+# service holding the timestamp key alone. There is no such service here, and
+# `tuftool` cannot re-sign the timestamp without the targets and snapshot keys
+# as well — so automating a short window would mean an unattended machine
+# holding every key, which is the thing the roles are separated to prevent.
+# A month is what one person with the keys in their own hands can actually
+# keep up with, and an expiry nobody meets is not a freshness guarantee, it is
+# an outage with a delay on it. Shorten it when there is something to sign with
+# that is not a laptop.
 ROOT_EXPIRY='in 52 weeks'
 ROLE_EXPIRY='in 26 weeks'
-TIMESTAMP_EXPIRY='in 7 days'
+TIMESTAMP_EXPIRY='in 30 days'
 
 die() { echo "$*" >&2; exit 1; }
 
@@ -218,8 +228,11 @@ which for a GitHub repository means copying them in and pushing:
 
 Until that lands, applications keep installing the recipe inside them.
 
-Note: timestamp metadata expires $TIMESTAMP_EXPIRY. Re-run this command before
-then — expired metadata is refused, which is the point of it.
+This publication is believed until $(python3 -c "
+import datetime
+print((datetime.date.today() + datetime.timedelta(days=30)).isoformat())"). Re-publishing before
+then is what keeps it believed; expired metadata is refused, which is the point
+of it. "scripts/tuf-repo.sh status" shows the date.
 DONE
   ;;
 
@@ -250,7 +263,14 @@ status)
   if $have_built; then
     printf ' (metadata version %s)' "$(cat "$KEYS/metadata-version" 2>/dev/null || echo '?')"
   fi
-  echo; echo
+  echo
+  if $have_built && [ -f "$OUT/metadata/timestamp.json" ]; then
+    expires="$(python3 -c "
+import json,sys
+print(json.load(open('$OUT/metadata/timestamp.json'))['signed']['expires'])" 2>/dev/null || echo '')"
+    [ -n "$expires" ] && echo "                believed until $expires"
+  fi
+  echo
 
   if ! $have_keys; then
     echo "Next:  scripts/tuf-repo.sh init"
@@ -260,7 +280,7 @@ status)
     echo "Next:  scripts/tuf-repo.sh publish $(date +%Y.%-m.%-d).1"
   else
     echo "Next:  serve $OUT at $SERVED_AT"
-    echo "       and re-publish within 7 days — timestamp metadata expires."
+    echo "       and re-publish before the date above, which is what keeps it believed."
   fi
   ;;
 
