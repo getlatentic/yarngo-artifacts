@@ -1947,7 +1947,11 @@ impl VoiceStudio {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let here = pack.installed();
-        let busy = matches!(self.status, Status::Installing { .. });
+        // Under way, not merely "the setup screen is showing": this screen is
+        // reached by the status being Installing, so treating that as busy hid
+        // the button that starts it.
+        let started =
+            matches!(&self.status, Status::Installing { fraction, .. } if *fraction > 0.0);
         let interrupted = matches!(self.status, Status::Failed(_));
 
         div()
@@ -2012,7 +2016,9 @@ impl VoiceStudio {
                         .child(t!("setup.runtime_ready").to_string()),
                 )
             })
-            .when(!here && !busy && runtime::host_supported().is_ok(), |d| {
+            .when(
+                !here && !started && !self.runtime_done && runtime::host_supported().is_ok(),
+                |d| {
                 d.child(
                     div()
                         .h(px(36.0))
@@ -2041,7 +2047,8 @@ impl VoiceStudio {
                             this.install_runtime(pack, None, cx)
                         })),
                 )
-            })
+            },
+            )
             .into_any_element()
     }
 
@@ -2061,9 +2068,18 @@ impl VoiceStudio {
             .v_flex()
             .flex_1()
             .min_h(px(0.0))
-            .items_center()
-            .px(px(40.0))
-            .pt(px(30.0))
+            // The body scrolls and is inset; the footer is not. Padding on
+            // the page rather than on the body is what put a bar meant to
+            // span the window forty pixels short of each edge.
+            .child(
+                div()
+                    .v_flex()
+                    .flex_1()
+                    .min_h(px(0.0))
+                    .w_full()
+                    .items_center()
+                    .px(px(40.0))
+                    .pt(px(30.0))
             .child(
                 div()
                     .v_flex()
@@ -2192,68 +2208,83 @@ impl VoiceStudio {
                                     .into_iter()
                                     .map(|pack| self.runtime_offer(pack, cx)),
                             )
-                            .child(
-                                div()
-                                    .v_flex()
-                                    .w_full()
-                                    .gap(px(10.0))
-                                    .px(px(18.0))
-                                    .py(px(14.0))
-                                    .when(started, |d| {
-                                        d.child(div().text_size(px(12.5)).child(step.clone()))
+                            // The lower half of the card: how far a download has got, or what
+                            // cannot be done until it finishes. Neither once it has, and an
+                            // empty half still draws its divider and its padding.
+                            .when(started || !self.runtime_done, |d| {
+                                d
+                                .child(
+                                    div()
+                                        .v_flex()
+                                        .w_full()
+                                        .gap(px(10.0))
+                                        .px(px(18.0))
+                                        .py(px(14.0))
+                                        .when(started, |d| {
+                                            d.child(div().text_size(px(12.5)).child(step.clone()))
+                                                .child(
+                                                    div()
+                                                        .w_full()
+                                                        .h(px(5.0))
+                                                        .rounded_full()
+                                                        .bg(theme::hex(0xEBE4D9))
+                                                        .child(
+                                                            div()
+                                                                .h_full()
+                                                                .rounded_full()
+                                                                .bg(theme::hex(0xFF8A1F))
+                                                                .w(relative(fraction)),
+                                                        ),
+                                                )
+                                        })
+                                        // What is blocked and what still works, so the wait has a shape
+                                        // rather than being a blanket "not ready". Gone once it is
+                                        // installed: a list of what cannot be done yet, beside a row
+                                        // saying it is running, contradicts itself.
+                                        .when(!self.runtime_done, |d| {
+                                            d
+                                            .child(ui::section_label(
+                                                t!("setup.until_installed").to_string().to_uppercase(),
+                                            ))
                                             .child(
                                                 div()
+                                                    .h_flex()
                                                     .w_full()
-                                                    .h(px(5.0))
-                                                    .rounded_full()
-                                                    .bg(theme::hex(0xEBE4D9))
+                                                    .gap(px(22.0))
                                                     .child(
                                                         div()
-                                                            .h_full()
-                                                            .rounded_full()
-                                                            .bg(theme::hex(0xFF8A1F))
-                                                            .w(relative(fraction)),
+                                                            .v_flex()
+                                                            .gap(px(7.0))
+                                                            .child(self.capability(false, t!("setup.cap_generate").to_string(), cx))
+                                                            .child(self.capability(false, t!("setup.cap_models").to_string(), cx)),
+                                                    )
+                                                    .child(
+                                                        div()
+                                                            .v_flex()
+                                                            .gap(px(7.0))
+                                                            // Recording is not on this
+                                                            // side: setup owns the
+                                                            // screen until the engine
+                                                            // is up, and a take could
+                                                            // not be saved without it
+                                                            // anyway.
+                                                            .child(self.capability(false, t!("setup.cap_record").to_string(), cx))
+                                                            .child(self.capability(true, t!("setup.cap_play").to_string(), cx)),
                                                     ),
                                             )
-                                    })
-                                    // What is blocked and what still works, so
-                                    // the wait has a shape rather than being a
-                                    // blanket "not ready".
-                                    .child(ui::section_label(
-                                        t!("setup.until_installed").to_string().to_uppercase(),
-                                    ))
-                                    .child(
-                                        div()
-                                            .h_flex()
-                                            .w_full()
-                                            .gap(px(22.0))
-                                            .child(
-                                                div()
-                                                    .v_flex()
-                                                    .gap(px(7.0))
-                                                    .child(self.capability(false, t!("setup.cap_generate").to_string(), cx))
-                                                    .child(self.capability(false, t!("setup.cap_models").to_string(), cx)),
-                                            )
-                                            .child(
-                                                div()
-                                                    .v_flex()
-                                                    .gap(px(7.0))
-                                                    // Recording is not on this
-                                                    // side: setup owns the
-                                                    // screen until the engine
-                                                    // is up, and a take could
-                                                    // not be saved without it
-                                                    // anyway.
-                                                    .child(self.capability(false, t!("setup.cap_record").to_string(), cx))
-                                                    .child(self.capability(true, t!("setup.cap_play").to_string(), cx)),
-                                            ),
-                                    ),
-                            ),
+                                        }),
+                                )
+                            }),
                     )
                     // For a machine that cannot reach the release host: the
                     // real archive URL, not a branded redirect, and a way to
-                    // use a copy fetched somewhere else.
-                    .when_some(runtime::download_url(), |this, url| {
+                    // use a copy fetched somewhere else. Both are ways to get
+                    // something, so both go once it is here — advice on how to
+                    // install what is installed is advice that reads as an
+                    // error somebody has not noticed.
+                    .when_some(
+                        runtime::download_url().filter(|_| !self.runtime_done),
+                        |this, url| {
                         this.child(
                             div()
                                 .h_flex()
@@ -2349,15 +2380,21 @@ impl VoiceStudio {
                                         ),
                                 ),
                         )
+                    },
+                    )
+                    // A promise about a download that has not finished, which
+                    // there is no longer one of.
+                    .when(!self.runtime_done, |d| {
+                        d.child(
+                            div()
+                                .text_size(px(11.5))
+                                .text_color(theme::hex(0x857D72))
+                                .child(t!("setup.picked_up_next_time").to_string()),
+                        )
                     })
-                    .child(
-                        div()
-                            .text_size(px(11.5))
-                            .text_color(theme::hex(0x857D72))
-                            .child(t!("setup.picked_up_next_time").to_string()),
-                    ),
             )
             .child(div().flex_1())
+            )
             // A download is a wait you are allowed to walk away from.
             .child(
                 div()
