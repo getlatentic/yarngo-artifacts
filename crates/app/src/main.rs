@@ -205,6 +205,11 @@ pub struct VoiceStudio {
     /// Which runtime to start, when more than one is installed. `None` takes
     /// the first that works, which is what one runtime means.
     pub(crate) preferred_runtime: Option<String>,
+    /// A published release newer than the one answering, once the repository
+    /// has been asked. `None` means either nothing newer or not asked yet —
+    /// the difference does not matter to anything that reads it, because both
+    /// mean there is nothing to offer.
+    pub(crate) runtime_update: Option<String>,
     /// What the running runtime said it can do. Empty until one has answered,
     /// which is also what it should look like when none has.
     pub(crate) capabilities: speech_engine::Capabilities,
@@ -334,6 +339,7 @@ impl VoiceStudio {
             expected_s: 0.0,
             generating_row: None,
             preferred_runtime: None,
+            runtime_update: None,
             capabilities: Default::default(),
             stopping: false,
             imported: None,
@@ -627,6 +633,43 @@ impl VoiceStudio {
             Err(err) => self.enrolment = Enrolment::Rejected(err),
         }
         cx.notify();
+    }
+
+    /// Ask the repository whether it has anything newer, without acting on it.
+    ///
+    /// Off the main thread and never fatal: this reaches the network, and a
+    /// settings pane that hangs or complains because a repository is
+    /// unreachable would be worse than one that quietly has nothing to offer.
+    pub(crate) fn look_for_runtime_update(&mut self, cx: &mut Context<Self>) {
+        cx.spawn(async move |this, cx| {
+            let found = cx
+                .background_spawn(async move {
+                    let places = speech_engine::paths::places();
+                    let store = yarngo_store::Store::open(&places.data.join("yarngo.db")).ok()?;
+                    yarngo_synthesis::runtimes::update_available(&store, runtime::pack())
+                        .ok()
+                        .flatten()
+                })
+                .await;
+            this.update(cx, |this, cx| {
+                this.runtime_update = found;
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
+    }
+
+    /// Install the offered release and start it.
+    ///
+    /// The engine keeps running throughout: an install writes only into the
+    /// new version's own directory, so what is answering is untouched until
+    /// the moment it is replaced — and if anything fails, it is never
+    /// replaced at all.
+    pub(crate) fn take_runtime_update(&mut self, cx: &mut Context<Self>) {
+        self.runtime_update = None;
+        self.settings_open = false;
+        self.install_runtime(runtime::pack(), None, cx);
     }
 
     /// Take the person to the one place a refusal can be undone.
@@ -1609,6 +1652,10 @@ impl VoiceStudio {
         archive: Option<PathBuf>,
         cx: &mut Context<Self>,
     ) {
+        // An update, rather than the first install, when something is already
+        // answering. The two end differently: one finishes step one of setup,
+        // the other returns to the workspace it was called from.
+        let updating = self.engine.is_some();
         self.status = Status::Installing { step: "Starting…".into(), fraction: 0.0 };
         cx.notify();
 
@@ -1670,8 +1717,17 @@ impl VoiceStudio {
             this.update(cx, |this, cx| {
                 if !matches!(this.status, Status::Failed(_)) {
                     this.status = Status::Idle;
-                    // Step one is finished, and says so until it is dismissed.
-                    this.runtime_done = true;
+                    if !updating {
+                        // Step one is finished, and says so until it is dismissed.
+                        this.runtime_done = true;
+                    }
+                    // Ended before the next one starts. The install left what
+                    // was answering alone — it writes only into the new
+                    // version's own directory — but two engines holding a
+                    // model at once is gigabytes for no reason, and only one
+                    // of them is the one now activated.
+                    this.engine = None;
+                    this.capabilities = Default::default();
                     this.start_engine(cx);
                 }
                 cx.notify();

@@ -197,6 +197,33 @@ already fetched version 3 working; removing the counter as well produced
 version 1, and that same machine refused it as a rollback — which is what the
 counter exists to prevent.
 
+## Taking delivery
+
+Publishing is half of it. An installed application asks the repository whether
+it has anything newer when its settings are opened — off the main thread and
+never fatally, because a settings pane that hangs on an unreachable repository
+is worse than one with nothing to offer — and shows the offer on the runtime it
+would replace, rather than as a banner somewhere else.
+
+Newer, not merely different. A repository naming an older release than the one
+installed is a publisher rolling something back, and whatever that is, it is
+not an update; offering it as one would put a downgrade behind somebody else's
+word. Nothing installed is not an update either — that is the first install,
+and the setup screen exists for it.
+
+Taking the offer runs the same install as the first one, so all of its
+guarantees hold: everything lands in the new version's own directory, an engine
+answers from that directory before anything is marked ready, and what was
+answering is untouched until the moment it is replaced. The engine is ended
+before the new one starts — the install itself does not need it down, but two
+of them holding a model at once is gigabytes for no reason.
+
+**`raw.githubusercontent.com` caches for five minutes.** A publication is not
+visible to anybody until that expires, which is worth knowing before concluding
+that a push did not work. It is also worth knowing that this host is not
+intended as a production CDN; moving to GitHub Pages, R2 or any static host is
+a change of address in `speech-engine::published` and nothing else.
+
 ## Keys
 
 `init` gives the root role three keys with a threshold of two — one lost is

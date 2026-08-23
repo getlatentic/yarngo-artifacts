@@ -721,6 +721,9 @@ runtime:
   switching:
     en: Starting the speech runtime…
     sk: Spúšťam rečový modul…
+  update_to:
+    en: "Update to %{version}"
+    sk: "Aktualizovať na %{version}"
   use:
     en: Use this
     sk: Použiť tento

@@ -369,10 +369,20 @@ fn retire(store: &Store, places: &Places, pack: &Pack, active: &str) {
 
 /// Whether the repository offers something newer than what answers. Answers
 /// without changing anything, so the application can offer rather than act.
+///
+/// Newer, not merely different. A repository naming an older release than the
+/// one installed is a publisher rolling something back, and whatever that is it
+/// is not an update — offering it as one would put a downgrade behind a button
+/// labelled with somebody else's word.
 pub fn update_available(store: &Store, pack: &Pack) -> Result<Option<String>, String> {
     let offered = Published::newest(pack.id)?.version().to_string();
-    let active = store.active_runtime(pack.id).map_err(|e| e.to_string())?;
-    Ok((active.as_deref() != Some(offered.as_str())).then_some(offered))
+    let Some(active) = store.active_runtime(pack.id).map_err(|e| e.to_string())? else {
+        // Nothing answers, so this is not an update either — it is the install
+        // the setup screen exists for.
+        return Ok(None);
+    };
+    let newer = active != offered && speech_engine::catalogue::at_least(&offered, &active);
+    Ok(newer.then_some(offered))
 }
 
 fn now() -> String {

@@ -323,6 +323,7 @@ impl VoiceStudio {
                             .id("settings")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.settings_open = true;
+                        this.look_for_runtime_update(cx);
                                 this.settings_pane = crate::settings::Pane::Models;
                                 this.model_menu = false;
                                 this.refresh_models(cx);
@@ -763,6 +764,7 @@ impl VoiceStudio {
                             .id("disk-row")
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.settings_open = true;
+                        this.look_for_runtime_update(cx);
                                 this.settings_pane = crate::settings::Pane::Storage;
                                 cx.notify();
                             })),

@@ -259,6 +259,7 @@ impl VoiceStudio {
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.model_menu = false;
                         this.settings_open = true;
+                        this.look_for_runtime_update(cx);
                         this.settings_pane = crate::settings::Pane::Models;
                         this.refresh_model_sizes(cx);
                         cx.notify();

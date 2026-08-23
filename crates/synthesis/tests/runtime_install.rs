@@ -521,6 +521,37 @@ fn an_update_is_offered_only_when_the_repository_has_something_newer() {
     );
 }
 
+/// A repository naming an older release than the one installed is not an
+/// update, whatever else it is.
+#[test]
+fn an_older_release_than_the_one_installed_is_not_offered_as_an_update() {
+    let rig = Rig::new("repo");
+    rig.install().expect("install 1.0.0");
+
+    // Pretend a later version is what answers, as it would after installing
+    // one and then rolling the repository back to an earlier release.
+    let store = rig.store();
+    store.runtime_installing("mlx", "9.0.0", 1, "t1").expect("row");
+    store.runtime_ready("mlx", "9.0.0", "t1").expect("ready");
+    store.activate_runtime("mlx", "9.0.0", "t1").expect("activate");
+
+    assert_eq!(
+        installer::update_available(&store, runtime::pack()).expect("read"),
+        None,
+        "a release older than the installed one was offered as an update"
+    );
+}
+
+/// Nothing installed is not an update either — it is the first install.
+#[test]
+fn nothing_installed_is_not_an_update() {
+    let rig = Rig::new("repo");
+    assert_eq!(
+        installer::update_available(&rig.store(), runtime::pack()).expect("read"),
+        None
+    );
+}
+
 fn copy_tree(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).expect("create dir");
     for entry in std::fs::read_dir(from).expect("read dir") {

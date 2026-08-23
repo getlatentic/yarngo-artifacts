@@ -860,6 +860,27 @@ impl VoiceStudio {
                     .when(!running.is_empty() && running == id, |d| {
                         d.child(ui::mono(t!("runtime.answering").to_string(), 11.0, theme::hex(0x2E7D32)))
                     })
+                    // An update is offered on the runtime it would replace,
+                    // rather than as a banner somewhere else, so what it acts
+                    // on is the thing it is sitting next to.
+                    .when_some(
+                        self.runtime_update.clone().filter(|_| id == runtime::pack().id),
+                        |d, offered| {
+                            d.child(
+                                ui::secondary_button(
+                                    None,
+                                    t!("runtime.update_to", version = offered).to_string(),
+                                )
+                                .h(px(30.0))
+                                .px(px(11.0))
+                                .rounded(px(7.0))
+                                .id("runtime-update")
+                                .on_click(cx.listener(move |this, _, _, cx| {
+                                    this.take_runtime_update(cx);
+                                })),
+                            )
+                        },
+                    )
                     .when(here && !chosen, |d| {
                         let id = id.clone();
                         d.child(
