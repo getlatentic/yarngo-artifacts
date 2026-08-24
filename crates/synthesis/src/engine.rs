@@ -237,8 +237,53 @@ impl DurableEngine {
             grace: GRACE,
         };
         engine.finish_what_was_left()?;
+        engine.check_references();
         Ok(engine)
     }
+
+    /// Bring old voices' reference text into line with their recordings.
+    ///
+    /// A voice enrolled before this was checked has the whole enrolment script
+    /// stored whether or not it was read, and a text claiming words the audio
+    /// lacks is spoken before everything the voice is later asked for. Done
+    /// here rather than asking people to record again for a mistake that was
+    /// never theirs.
+    ///
+    /// Each voice is looked at once. Never fatal, and never destructive beyond
+    /// shortening a recording to what its text covers: a runtime that cannot
+    /// listen back leaves everything exactly as it was.
+    fn check_references(&mut self) {
+        if !self.capabilities.can("audio.prepare_reference") {
+            return;
+        }
+        let waiting = self.store.unchecked_references().unwrap_or_default();
+        for (voice_id, audio, script) in waiting {
+            let prepared = self.call(
+                "audio.prepare_reference",
+                json!({ "source": audio, "output_path": audio, "script": script }),
+                BEHIND_THE_MODEL,
+            );
+            let heard = match &prepared {
+                Ok(prepared) => prepared["text"]
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|text| !text.is_empty()),
+                Err(why) => {
+                    eprintln!("could not check the reference for {voice_id}: {why}");
+                    continue;
+                }
+            };
+            if heard.is_some_and(|heard| heard != script) {
+                eprintln!(
+                    "{voice_id}: the recording is shorter than the script it was stored with"
+                );
+            }
+            if let Err(why) = self.store.reference_checked(&voice_id, heard, &now()) {
+                eprintln!("could not record the check for {voice_id}: {why}");
+            }
+        }
+    }
+
 
     /// How long a generation asked to stop is given before the process running
     /// it is ended. For tests, which cannot spend the real grace on every case
@@ -634,10 +679,18 @@ impl SpeechEngine for DurableEngine {
         let enrolled = Voice {
             reference_audio: stored,
             seconds: prepared["seconds"].as_f64().unwrap_or(0.0) as f32,
-            reference_text: heard.unwrap_or_else(|| voice.reference_text.clone()),
+            reference_text: heard.clone().unwrap_or_else(|| voice.reference_text.clone()),
             ..voice.clone()
         };
         library::register_voice(&mut self.store, &enrolled, &now()).map_err(store_error)?;
+        // Marked only when something actually listened. A runtime that could
+        // not leaves this voice waiting, so a later one repairs it rather than
+        // finding it already ticked off.
+        if heard.is_some() {
+            self.store
+                .reference_checked(&enrolled.voice_id, None, &now())
+                .map_err(store_error)?;
+        }
         write_consent_log(&self.store, &self.spawn.data_dir);
         Ok(())
     }

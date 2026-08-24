@@ -96,3 +96,47 @@ fn a_runtime_that_does_not_listen_back_leaves_the_script_alone() {
     let voices = enrol(&engine, &recording);
     assert_eq!(stored(&voices), SCRIPT);
 }
+
+/// A voice enrolled before any of this existed.
+///
+/// Its recording is whatever was read; its stored text is the whole script,
+/// because that is what the application asserted at the time. Nobody should
+/// have to record again for that, so it is repaired when the engine next
+/// starts.
+#[test]
+fn a_voice_enrolled_before_the_check_is_repaired_at_start() {
+    let (sandbox, recording) = common::seeded();
+
+    // Enrol against a runtime that cannot listen back, which is what the old
+    // ones were: the whole script goes in, unverified.
+    {
+        let engine = common::engine_hearing(&sandbox, GRACE, 0);
+        enrol(&engine, &recording);
+    }
+    let before = common::ask(&sandbox, "SELECT reference_text FROM voice_revisions WHERE voice_id = 'reader'");
+    assert!(before.ends_with("shape my words."), "{before}");
+    assert_eq!(
+        common::count(&sandbox, "SELECT COUNT(*) FROM voice_revisions WHERE voice_id = 'reader' AND reference_checked_at IS NOT NULL"),
+        0,
+        "an unverified voice should not be recorded as checked"
+    );
+
+    // Now a runtime that can, and a recording that stops at "my rhythm,".
+    let engine = common::engine_hearing(&sandbox, GRACE, 44);
+    let after = common::ask(&sandbox, "SELECT reference_text FROM voice_revisions WHERE voice_id = 'reader'");
+    assert!(
+        !after.contains("shape my words"),
+        "the old voice still claims words its recording does not contain: {after}"
+    );
+    assert_eq!(
+        common::count(&sandbox, "SELECT COUNT(*) FROM voice_revisions WHERE voice_id = 'reader' AND reference_checked_at IS NOT NULL"),
+        1,
+        "the repair did not record that it had happened"
+    );
+
+    // And it is not asked again at every start.
+    drop(engine);
+    let _engine = common::engine_hearing(&sandbox, GRACE, 10);
+    let again = common::ask(&sandbox, "SELECT reference_text FROM voice_revisions WHERE voice_id = 'reader'");
+    assert_eq!(again, after, "a checked reference was checked again and changed");
+}

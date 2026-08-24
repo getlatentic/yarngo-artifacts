@@ -74,6 +74,46 @@ impl Store {
     /// present is the person's, whatever it says, and is left alone. Reports
     /// whether it had anything to do, so a start-up can say so once rather than
     /// every time.
+    /// Voices whose reference text has never been checked against the
+    /// recording, oldest first. `(voice_id, audio_path, text)`.
+    pub fn unchecked_references(&self) -> Result<Vec<(String, String, String)>> {
+        let mut statement = self.raw().prepare(
+            "SELECT v.voice_id, a.path, v.reference_text
+               FROM voice_revisions v JOIN assets a ON a.id = v.source_asset_id
+              WHERE v.reference_checked_at IS NULL
+                AND v.reference_text IS NOT NULL AND v.reference_text <> ''
+                AND v.deleted_at IS NULL
+              ORDER BY v.created_at",
+        )?;
+        let found = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(found)
+    }
+
+    /// Record what the recording was found to say. `text` of `None` means it
+    /// could not be established — the text stands, and it is marked checked so
+    /// the same answer is not sought at every start.
+    pub fn reference_checked(
+        &self,
+        voice_id: &str,
+        text: Option<&str>,
+        at: &str,
+    ) -> Result<()> {
+        match text {
+            Some(text) => self.raw().execute(
+                "UPDATE voice_revisions SET reference_text = ?2, reference_checked_at = ?3
+                  WHERE voice_id = ?1",
+                rusqlite::params![voice_id, text, at],
+            )?,
+            None => self.raw().execute(
+                "UPDATE voice_revisions SET reference_checked_at = ?2 WHERE voice_id = ?1",
+                rusqlite::params![voice_id, at],
+            )?,
+        };
+        Ok(())
+    }
+
     pub fn fill_reference_text(&self, voice_id: &str, text: &str) -> Result<bool> {
         Ok(self.raw().execute(
             "UPDATE voice_revisions SET reference_text = ?2
