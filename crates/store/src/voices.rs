@@ -91,20 +91,29 @@ impl Store {
         Ok(found)
     }
 
-    /// Record what the recording was found to say. `text` of `None` means it
-    /// could not be established — the text stands, and it is marked checked so
-    /// the same answer is not sought at every start.
+    /// Record what the recording was found to say, and how long what is left
+    /// runs. `text` of `None` means it could not be established — the text
+    /// stands, and it is marked checked so the same answer is not sought at
+    /// every start.
+    ///
+    /// The duration is written with the text because checking shortens the
+    /// recording to what the text covers, and a stored length that no longer
+    /// matches the file is a number the interface shows and nothing produces.
     pub fn reference_checked(
         &self,
         voice_id: &str,
         text: Option<&str>,
+        seconds: Option<f32>,
         at: &str,
     ) -> Result<()> {
         match text {
             Some(text) => self.raw().execute(
-                "UPDATE voice_revisions SET reference_text = ?2, reference_checked_at = ?3
+                "UPDATE voice_revisions
+                    SET reference_text = ?2,
+                        duration_seconds = COALESCE(?3, duration_seconds),
+                        reference_checked_at = ?4
                   WHERE voice_id = ?1",
-                rusqlite::params![voice_id, text, at],
+                rusqlite::params![voice_id, text, seconds, at],
             )?,
             None => self.raw().execute(
                 "UPDATE voice_revisions SET reference_checked_at = ?2 WHERE voice_id = ?1",

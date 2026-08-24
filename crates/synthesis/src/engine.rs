@@ -263,11 +263,11 @@ impl DurableEngine {
                 json!({ "source": audio, "output_path": audio, "script": script }),
                 BEHIND_THE_MODEL,
             );
-            let heard = match &prepared {
-                Ok(prepared) => prepared["text"]
-                    .as_str()
-                    .map(str::trim)
-                    .filter(|text| !text.is_empty()),
+            let (heard, seconds) = match &prepared {
+                Ok(prepared) => (
+                    prepared["text"].as_str().map(str::trim).filter(|t| !t.is_empty()),
+                    prepared["seconds"].as_f64().map(|s| s as f32),
+                ),
                 Err(why) => {
                     eprintln!("could not check the reference for {voice_id}: {why}");
                     continue;
@@ -285,7 +285,9 @@ impl DurableEngine {
                     "{voice_id}: the recording is shorter than the script it was stored with"
                 );
             }
-            if let Err(why) = self.store.reference_checked(&voice_id, Some(heard), &now()) {
+            if let Err(why) =
+                self.store.reference_checked(&voice_id, Some(heard), seconds, &now())
+            {
                 eprintln!("could not record the check for {voice_id}: {why}");
             }
         }
@@ -695,7 +697,7 @@ impl SpeechEngine for DurableEngine {
         // finding it already ticked off.
         if heard.is_some() {
             self.store
-                .reference_checked(&enrolled.voice_id, None, &now())
+                .reference_checked(&enrolled.voice_id, None, None, &now())
                 .map_err(store_error)?;
         }
         write_consent_log(&self.store, &self.spawn.data_dir);
