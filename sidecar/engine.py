@@ -819,23 +819,27 @@ class _Reporting:
 ASR_MODEL = "mlx-community/whisper-base-mlx"
 
 
-def _heard(audio: Path, script: str | None) -> str | None:
-    """What the recording actually says, as far as it can be established.
+def _listen_back(audio: Path, script: str | None) -> tuple[str, float] | None:
+    """What the recording says, and how much of it to keep.
 
-    The reference text has to describe the reference audio. When it claims more
-    than the audio contains, the model speaks the difference before it speaks
-    anything it was asked for — the leftover words are in its prompt and it
-    finishes them first. That is not a rare edge: an application shows a script
-    and people stop reading a moment early, every time.
+    The reference text and the reference audio have to describe each other. The
+    model generates the rest of the reference and then what it was asked for,
+    so the boundary between the two is wherever the text and the audio stop
+    agreeing. Told about words the audio lacks, it speaks them first — the
+    defect this exists for. Given audio the text does not cover, it spends the
+    opening of the requested line accounting for it, and that line comes back
+    with its first words missing. Neither direction is safe.
 
-    With a script to compare against, what comes back is the script itself, cut
-    where the reader stopped — the script's own spelling and punctuation are
-    better than a transcript's, and only the endpoint is in question. Without
-    one, the transcript is all there is.
+    So both are cut, to the last sentence the reader actually finished. A
+    sentence boundary rather than the last word recognised, because a reference
+    ending mid-clause leaves the model a clause to close and it closes it with
+    the words it was asked to say. Measured on both: cutting text alone,
+    cutting audio alone, and cutting either mid-clause each broke one sentence
+    or the other; cutting both at a sentence boundary broke neither.
 
-    `None` when it cannot be established, which is not the same as an empty
-    string: the caller keeps whatever it already believed rather than being
-    told the recording is silent.
+    Returns the text and the seconds of audio it describes, or `None` when
+    nothing can be established — which is not an empty reference but no
+    opinion, leaving the caller with what it already believed.
     """
     try:
         import mlx_whisper
@@ -845,57 +849,70 @@ def _heard(audio: Path, script: str | None) -> str | None:
         return None
 
     try:
-        spoken = mlx_whisper.transcribe(
-            str(audio), path_or_hf_repo=ASR_MODEL, language="en"
-        )["text"]
+        listened = mlx_whisper.transcribe(
+            str(audio), path_or_hf_repo=ASR_MODEL, language="en", word_timestamps=True
+        )
     except Exception as failure:  # noqa: BLE001 - never fail enrolment over this
         _log(f"could not listen back to the reference: {failure}")
         return None
 
-    if not script or not script.strip():
-        return spoken.strip() or None
-    return _script_as_far_as_read(script, spoken)
+    heard = [
+        (_words(word["word"]), word["end"])
+        for segment in listened.get("segments", [])
+        for word in segment.get("words", [])
+    ]
+    heard = [(w[0], end) for w, end in heard if w]
+    if not heard or not script or not script.strip():
+        return None
+    return _up_to_the_last_finished_sentence(script, heard)
 
 
 def _words(text: str) -> list[str]:
     return re.findall(r"[a-z0-9']+", text.lower())
 
 
-def _script_as_far_as_read(script: str, spoken: str) -> str | None:
-    """The script, cut where the reader stopped.
+def _up_to_the_last_finished_sentence(
+    script: str, heard: list[tuple[str, float]]
+) -> tuple[str, float] | None:
+    """Align what was heard to the script, then back off to a sentence end.
 
-    Aligned as a subsequence rather than word by word, because recognition
-    mishears words and a walk that needs the next word exactly stops dead at
-    the first one it got wrong — which reads as "they said almost nothing" for
-    a recording of somebody reading fluently.
-
-    Erring short is the safe direction and is chosen deliberately: audio the
-    model was not told about costs nothing, while text with no audio behind it
-    is the whole defect.
+    Aligned as a subsequence rather than word by word: recognition mishears,
+    and a walk needing each next word exactly stops at the first mistake, which
+    reports a fluent reader as having said almost nothing.
     """
     script_words = _words(script)
     if not script_words:
         return None
-    reached = 0
-    for block in difflib.SequenceMatcher(
-        None, script_words, _words(spoken), autojunk=False
-    ).get_matching_blocks():
-        if block.size:
-            reached = max(reached, block.a + block.size)
-    if reached == 0:
-        # Nothing lined up. Something is wrong with the recording, the language
-        # or the script, and guessing between them would be worse than saying
-        # nothing.
+
+    blocks = [
+        b
+        for b in difflib.SequenceMatcher(
+            None, script_words, [w for w, _ in heard], autojunk=False
+        ).get_matching_blocks()
+        if b.size
+    ]
+    if not blocks:
+        # Nothing lined up: a bad recording, another language, another script.
+        # Guessing between those would be worse than having no opinion.
+        return None
+    reached = max(b.a + b.size for b in blocks)
+
+    # The sentences the reader got all the way through.
+    finished = [
+        (mark.end(), len(_words(script[: mark.end()])))
+        for mark in re.finditer(r"[.!?]", script)
+    ]
+    finished = [(chars, words) for chars, words in finished if words <= reached]
+    if not finished:
+        # Not one sentence completed. There is no clean pair to cut to, and a
+        # reference this short was not going to clone a voice anyway.
         return None
 
-    # Back to a character offset, so the script's punctuation survives. A full
-    # stop that closes the sentence they finished is kept; a comma they stopped
-    # at is not, because it promises a clause that never arrives.
-    positions = [m.end() for m in re.finditer(r"[A-Za-z0-9']+", script)]
-    end = positions[reached - 1]
-    if end < len(script) and script[end] in ".!?":
-        end += 1
-    return script[:end].strip()
+    cut_chars, cut_words = finished[-1]
+    keep_until = heard[min(cut_words, len(heard)) - 1][1]
+    # A breath of margin, so the last word is not clipped by a timestamp that
+    # lands a few milliseconds early.
+    return script[:cut_chars].strip(), keep_until + 0.2
 
 
 def m_audio_prepare_reference(params: dict, _ctx: protocol.Context) -> dict:
@@ -922,13 +939,19 @@ def m_audio_prepare_reference(params: dict, _ctx: protocol.Context) -> dict:
         _log(f"trimmed {lead}s lead-in and {tail}s tail from {out.name}")
     info = sf.info(out)
 
-    # After trimming, so what is heard is what will be used as the reference.
-    heard = _heard(out, params.get("script"))
-    if heard is not None and params.get("script"):
-        read = len(_words(heard))
-        whole = len(_words(params["script"]))
-        if read < whole:
-            _log(f"the reference stops after {read} of {whole} words of the script")
+    # After trimming, so what is listened to is what will be the reference.
+    listened = _listen_back(out, params.get("script"))
+    text = None
+    if listened is not None:
+        text, keep_until = listened
+        if keep_until < info.frames / info.samplerate:
+            audio, rate = sf.read(out, dtype="float32")
+            sf.write(out, audio[: int(keep_until * rate)], rate)
+            info = sf.info(out)
+            _log(
+                f"the reader stopped early: keeping {info.frames / info.samplerate:.1f}s "
+                f"and {len(_words(text))} of {len(_words(params['script']))} script words"
+            )
 
     prepared = {
         "output_path": str(out),
@@ -936,8 +959,8 @@ def m_audio_prepare_reference(params: dict, _ctx: protocol.Context) -> dict:
         "trimmed_lead_s": lead,
         "trimmed_tail_s": tail,
     }
-    if heard is not None:
-        prepared["text"] = heard
+    if text is not None:
+        prepared["text"] = text
     return prepared
 
 

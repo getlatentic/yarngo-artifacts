@@ -102,12 +102,22 @@ def prepare_reference(params, ctx):
                 "trimmed_lead_s": 0.0, "trimmed_tail_s": 0.0}}
     # A stand-in for listening back. `heard_words` says how much of the script
     # this recording is to be treated as containing, so a test can produce the
-    # reader who stopped early without needing a model.
+    # reader who stopped early without needing a model. The audio is shortened
+    # with it, because the real one does that and a reference whose text and
+    # audio disagree is the whole defect.
     script = params.get("script")
-    if script:
-        limit = {heard_words}
+    limit = {heard_words}
+    if script and limit != 0:
         words = script.split()
-        prepared["text"] = " ".join(words if limit < 0 else words[:limit])
+        kept = words if limit < 0 else words[:limit]
+        prepared["text"] = " ".join(kept)
+        if len(kept) < len(words):
+            whole = os.path.getsize(out)
+            with open(out, "rb") as reading:
+                shortened = reading.read(max(1, whole * len(kept) // len(words)))
+            with open(out, "wb") as writing:
+                writing.write(shortened)
+            prepared["seconds"] = round(len(shortened) / 48000.0, 2)
     return prepared
 
 def condition(params, ctx):

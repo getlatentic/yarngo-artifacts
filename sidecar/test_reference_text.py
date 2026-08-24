@@ -23,7 +23,15 @@ exec(  # noqa: S102 - reading our own source, to avoid importing a model runtime
     _source[_source.index("def _words(") : _source.index("def m_audio_prepare_reference")],
     _namespace,
 )
-as_far_as_read = _namespace["_script_as_far_as_read"]
+_cut = _namespace["_up_to_the_last_finished_sentence"]
+
+
+def as_far_as_read(script, spoken):
+    """The text half of the answer, for a reading with plausible timings."""
+    words = _namespace["_words"](spoken)
+    heard = [(w, 0.4 * (i + 1)) for i, w in enumerate(words)]
+    got = _cut(script, heard)
+    return None if got is None else got[0]
 
 SCRIPT = (
     "My name is spoken here, and this is how I sound when I speak naturally. "
@@ -52,7 +60,11 @@ def main() -> int:
         "fox jumps over an easy dog, while five wizards judge my calm voice. I'm recording "
         "this so the app can learn my accent, my rhythm",
     )
-    check("a truncated read is cut where it stopped", stopped.endswith("my rhythm"), failures)
+    # Back to the last sentence they finished, not to the last word recognised:
+    # a reference ending mid-clause leaves the model a clause to close, and it
+    # closes it with the words it was asked to say.
+    check("a truncated read falls back to a finished sentence",
+          stopped.endswith("judge my calm voice."), failures)
     check("and does not keep what was never said", "shape my words" not in stopped, failures)
 
     # Mishearing must not be read as stopping. A walk that needs each next word
@@ -70,6 +82,20 @@ def main() -> int:
     check("one sentence read is one sentence kept", one.endswith("naturally."), failures)
     check("the script's own punctuation survives", one.count(",") == 1, failures)
 
+    # Not one sentence finished: there is no clean pair to cut to, and a
+    # reference this short was never going to clone a voice.
+    check("half a sentence is no reference at all",
+          as_far_as_read(SCRIPT, "My name is spoken") is None, failures)
+
+    # The audio must be cut to the same place, or the model spends the opening
+    # of what it was asked for accounting for sound the text does not cover.
+    words = _namespace["_words"]("My name is spoken here and this is how I sound when I speak naturally. "
+                                 "The quick brown fox jumps over the lazy dog, while five wizards judge my calm voice.")
+    heard = [(w, 0.4 * (i + 1)) for i, w in enumerate(words)]
+    cut = _cut(SCRIPT, heard)
+    check("the audio is cut to where the text stops",
+          cut is not None and abs(cut[1] - (0.4 * len(words) + 0.2)) < 0.01, failures)
+
     # Cutting short costs conditioning quality; cutting long is the defect
     # itself. Everything unclear resolves towards short.
     for label, spoken in (
@@ -84,7 +110,7 @@ def main() -> int:
 
     check("an empty script cannot be read from", as_far_as_read("", "anything") is None, failures)
 
-    total = 9
+    total = 11
     print(f"{total - len(failures)}/{total} reference-text checks passed")
     return 1 if failures else 0
 

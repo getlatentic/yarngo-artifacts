@@ -49,6 +49,20 @@ fn a_reader_who_stopped_early_is_not_recorded_as_having_finished() {
     let engine = common::engine_hearing(&sandbox, GRACE, 44);
     let voices = enrol(&engine, &recording);
 
+    // The recording is shortened with the text. They describe each other or
+    // they describe nothing: text claiming words the audio lacks makes the
+    // model speak them first, and audio the text does not cover costs the
+    // opening words of every line the voice is later asked for. Cutting one
+    // and not the other trades one defect for the other, which is exactly
+    // what an earlier version of this fix did.
+    let voice = voices.iter().find(|v| v.voice_id == "reader").expect("the voice");
+    let whole = std::fs::metadata(&recording).expect("the take").len();
+    let kept = std::fs::metadata(&voice.reference_audio).expect("the reference").len();
+    assert!(
+        kept < whole,
+        "the text was cut and the audio was not: {kept} of {whole} bytes"
+    );
+
     // Where it was cut, not how it was punctuated — the engine's own rule for
     // trailing marks is checked in sidecar/test_reference_text.py, and the
     // stand-in here does not share it.
