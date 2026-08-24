@@ -273,12 +273,19 @@ impl DurableEngine {
                     continue;
                 }
             };
-            if heard.is_some_and(|heard| heard != script) {
+            // Nothing listened, so nothing was checked. Left for a runtime
+            // that can, rather than ticked off by one that cannot — the whole
+            // point of the mark is to say this voice has been looked at, and a
+            // runtime without speech recognition has not looked at it.
+            let Some(heard) = heard else {
+                continue;
+            };
+            if heard != script {
                 eprintln!(
                     "{voice_id}: the recording is shorter than the script it was stored with"
                 );
             }
-            if let Err(why) = self.store.reference_checked(&voice_id, heard, &now()) {
+            if let Err(why) = self.store.reference_checked(&voice_id, Some(heard), &now()) {
                 eprintln!("could not record the check for {voice_id}: {why}");
             }
         }

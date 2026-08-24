@@ -97,6 +97,41 @@ fn a_runtime_that_does_not_listen_back_leaves_the_script_alone() {
     assert_eq!(stored(&voices), SCRIPT);
 }
 
+/// A runtime that cannot listen must not tick a voice off as looked at.
+///
+/// It is the difference between "this has been checked" and "nothing here can
+/// check it". Marked by the second, the voice is stranded: every later runtime
+/// finds it already done and the recording is never compared to its text.
+#[test]
+fn a_runtime_that_cannot_listen_leaves_old_voices_for_one_that_can() {
+    let (sandbox, recording) = common::seeded();
+    {
+        let engine = common::engine_hearing(&sandbox, GRACE, 0);
+        enrol(&engine, &recording);
+    }
+    // Started again on the same deaf runtime, with the voice already there.
+    {
+        let _engine = common::engine_hearing(&sandbox, GRACE, 0);
+    }
+    assert_eq!(
+        common::count(
+            &sandbox,
+            "SELECT COUNT(*) FROM voice_revisions WHERE voice_id = 'reader' \
+             AND reference_checked_at IS NOT NULL"
+        ),
+        0,
+        "a runtime that cannot listen marked the voice as checked, stranding it"
+    );
+
+    // And a runtime that can still repairs it afterwards.
+    let _engine = common::engine_hearing(&sandbox, GRACE, 44);
+    let text = common::ask(
+        &sandbox,
+        "SELECT reference_text FROM voice_revisions WHERE voice_id = 'reader'",
+    );
+    assert!(!text.contains("shape my words"), "never repaired: {text}");
+}
+
 /// A voice enrolled before any of this existed.
 ///
 /// Its recording is whatever was read; its stored text is the whole script,
