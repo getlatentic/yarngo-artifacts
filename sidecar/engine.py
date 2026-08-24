@@ -857,11 +857,11 @@ def _listen_back(audio: Path, script: str | None) -> tuple[str, float] | None:
         return None
 
     heard = [
-        (_words(word["word"]), word["end"])
+        (_words(word["word"]), word["start"], word["end"])
         for segment in listened.get("segments", [])
         for word in segment.get("words", [])
     ]
-    heard = [(w[0], end) for w, end in heard if w]
+    heard = [(w[0], start, end) for w, start, end in heard if w]
     if not heard or not script or not script.strip():
         return None
     return _up_to_the_last_finished_sentence(script, heard)
@@ -872,7 +872,7 @@ def _words(text: str) -> list[str]:
 
 
 def _up_to_the_last_finished_sentence(
-    script: str, heard: list[tuple[str, float]]
+    script: str, heard: list[tuple[str, float, float]]
 ) -> tuple[str, float] | None:
     """Align what was heard to the script, then back off to a sentence end.
 
@@ -887,7 +887,7 @@ def _up_to_the_last_finished_sentence(
     blocks = [
         b
         for b in difflib.SequenceMatcher(
-            None, script_words, [w for w, _ in heard], autojunk=False
+            None, script_words, [w for w, _, _ in heard], autojunk=False
         ).get_matching_blocks()
         if b.size
     ]
@@ -909,10 +909,28 @@ def _up_to_the_last_finished_sentence(
         return None
 
     cut_chars, cut_words = finished[-1]
-    keep_until = heard[min(cut_words, len(heard)) - 1][1]
-    # A breath of margin, so the last word is not clipped by a timestamp that
-    # lands a few milliseconds early.
-    return script[:cut_chars].strip(), keep_until + 0.2
+
+    # Through the alignment, not by position: recognition inserts and drops
+    # words, so the nth word of the script is not the nth word of what was
+    # heard, and taking it by index kept a second of the following sentence.
+    #
+    # Cut where the next word begins rather than where the last one ended. The
+    # words at a sentence's end are exactly the ones recognition is likeliest
+    # to have missed — "calm voice" came back as "comfort" — and cutting at the
+    # last word it did catch stops the audio before the sentence is finished,
+    # which leaves the model a word of the reference to say first.
+    at_or_after = [
+        heard[block.b + (want - block.a)][1]
+        for want in range(cut_words, len(script_words))
+        for block in blocks
+        if block.a <= want < block.a + block.size
+    ]
+    if at_or_after:
+        return script[:cut_chars].strip(), at_or_after[0]
+
+    # Nothing was recognised after this sentence, so the recording ends with
+    # it. Keep all of it.
+    return script[:cut_chars].strip(), heard[-1][2] + 0.4
 
 
 def m_audio_prepare_reference(params: dict, _ctx: protocol.Context) -> dict:

@@ -29,7 +29,7 @@ _cut = _namespace["_up_to_the_last_finished_sentence"]
 def as_far_as_read(script, spoken):
     """The text half of the answer, for a reading with plausible timings."""
     words = _namespace["_words"](spoken)
-    heard = [(w, 0.4 * (i + 1)) for i, w in enumerate(words)]
+    heard = [(w, 0.4 * i, 0.4 * (i + 1)) for i, w in enumerate(words)]
     got = _cut(script, heard)
     return None if got is None else got[0]
 
@@ -89,12 +89,27 @@ def main() -> int:
 
     # The audio must be cut to the same place, or the model spends the opening
     # of what it was asked for accounting for sound the text does not cover.
-    words = _namespace["_words"]("My name is spoken here and this is how I sound when I speak naturally. "
-                                 "The quick brown fox jumps over the lazy dog, while five wizards judge my calm voice.")
-    heard = [(w, 0.4 * (i + 1)) for i, w in enumerate(words)]
+    read = ("My name is spoken here and this is how I sound when I speak naturally. "
+            "The quick brown fox jumps over the lazy dog, while five wizards judge my calm voice.")
+    words = _namespace["_words"](read)
+    heard = [(w, 0.4 * i, 0.4 * (i + 1)) for i, w in enumerate(words)]
     cut = _cut(SCRIPT, heard)
-    check("the audio is cut to where the text stops",
-          cut is not None and abs(cut[1] - (0.4 * len(words) + 0.2)) < 0.01, failures)
+    check("the audio is kept to the end of that sentence",
+          cut is not None and cut[1] >= 0.4 * len(words), failures)
+
+    # The words that end a sentence are the ones recognition is likeliest to
+    # miss — "calm voice" came back as "comfort". Rather than cut the audio at
+    # the last word it did catch, which would stop mid-sentence and leave the
+    # model a word of the reference to say first, it falls back to the sentence
+    # before. Less reference, and still a text and an audio that describe each
+    # other, which is the only thing that matters.
+    misheard_end = words[:-2] + ["comfort"]
+    heard = [(w, 0.4 * i, 0.4 * (i + 1)) for i, w in enumerate(misheard_end)]
+    text, until = _cut(SCRIPT, heard)
+    check("a misheard sentence ending falls back to the one before",
+          text.endswith("naturally."), failures)
+    check("and the audio is cut with it, not past it",
+          until <= 0.4 * (len(_namespace["_words"](text)) + 2), failures)
 
     # Cutting short costs conditioning quality; cutting long is the defect
     # itself. Everything unclear resolves towards short.
@@ -110,7 +125,7 @@ def main() -> int:
 
     check("an empty script cannot be read from", as_far_as_read("", "anything") is None, failures)
 
-    total = 11
+    total = 13
     print(f"{total - len(failures)}/{total} reference-text checks passed")
     return 1 if failures else 0
 
