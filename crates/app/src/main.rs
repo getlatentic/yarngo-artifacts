@@ -823,8 +823,10 @@ impl VoiceStudio {
                         voice_id,
                         label,
                         reference_audio: path,
-                        // The script is the transcript: reading a known sentence
-                        // removes any need for ASR in the enrolment path.
+                        // What we asked them to read, not a claim about what
+                        // they said. The engine listens back and returns as
+                        // much of it as the recording supports; that is what
+                        // gets stored.
                         reference_text: ENROLMENT_SCRIPT.into(),
                         // Measured by the engine once the file is stored.
                         seconds: 0.0,

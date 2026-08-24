@@ -43,6 +43,19 @@ pub fn script(dir: &Path, behaviour: &str) -> PathBuf {
 /// everything, which is the case capability negotiation exists for and the one
 /// a real engine cannot be asked to be.
 pub fn limited(dir: &Path, behaviour: &str, without: &[&str]) -> PathBuf {
+    heard_up_to(dir, behaviour, without, -1)
+}
+
+/// The same, with a stand-in for listening back to the reference: `heard_words`
+/// is how many words of the script this recording will be treated as
+/// containing, and `-1` is all of them. What makes "the reader stopped early"
+/// something a test can produce without a speech-recognition model.
+pub fn heard_up_to(
+    dir: &Path,
+    behaviour: &str,
+    without: &[&str],
+    heard_words: i32,
+) -> PathBuf {
     let program = format!(
         r#"
 import sys, os, time, json, struct, threading
@@ -85,8 +98,17 @@ def prepare_reference(params, ctx):
             writing.write(reading.read())
     # Measured from the bytes rather than invented: a stand-in for the audio
     # stack should still answer from the file it was given.
-    return {{"output_path": out, "seconds": round(os.path.getsize(out) / 48000.0, 2),
-             "trimmed_lead_s": 0.0, "trimmed_tail_s": 0.0}}
+    prepared = {{"output_path": out, "seconds": round(os.path.getsize(out) / 48000.0, 2),
+                "trimmed_lead_s": 0.0, "trimmed_tail_s": 0.0}}
+    # A stand-in for listening back. `heard_words` says how much of the script
+    # this recording is to be treated as containing, so a test can produce the
+    # reader who stopped early without needing a model.
+    script = params.get("script")
+    if script:
+        limit = {heard_words}
+        words = script.split()
+        prepared["text"] = " ".join(words if limit < 0 else words[:limit])
+    return prepared
 
 def condition(params, ctx):
     with open(os.path.join(HERE, "conditioning.asked.json"), "w") as asked:
@@ -117,6 +139,7 @@ protocol.serve(broker=BROKER, model=MODEL, capabilities={{"backend": "stand-in"}
         wave = WAVE,
         behaviour = behaviour,
         without = without,
+        heard_words = heard_words,
     );
     let path = dir.join("standin_engine.py");
     std::fs::write(&path, program).expect("write the stand-in engine");
@@ -142,9 +165,22 @@ pub const VERSION: &str = "test";
 /// because they live in the application's store and this crate stays beneath
 /// it.
 pub fn install(root: &Path, id: &str, python: &Path, behaviour: &str, without: &[&str]) {
+    install_hearing(root, id, python, behaviour, without, -1)
+}
+
+/// The same, with the stand-in told how much of a reference script its
+/// recordings contain.
+pub fn install_hearing(
+    root: &Path,
+    id: &str,
+    python: &Path,
+    behaviour: &str,
+    without: &[&str],
+    heard_words: i32,
+) {
     let home = home(root, id);
     std::fs::create_dir_all(&home).expect("runtime directory");
-    let script = limited(&home, behaviour, without);
+    let script = heard_up_to(&home, behaviour, without, heard_words);
     std::fs::rename(&script, home.join("engine.py")).expect("engine.py");
 
     // The interpreter inside the version's own environment, linked rather

@@ -594,8 +594,14 @@ impl SpeechEngine for DurableEngine {
     ///
     /// The recorder leaves its take in a temporary file, and a saved voice
     /// cannot depend on one. Where it goes is decided here; the engine cuts the
-    /// silence off it and says how long what is left runs, because that needs
-    /// an audio stack and nothing else here has one.
+    /// silence off it, says how long what is left runs, and listens back —
+    /// all of which need an audio stack, and nothing else here has one.
+    ///
+    /// What the caller sent as `reference_text` is what it believes was read.
+    /// What comes back is as much of it as the recording supports, and that is
+    /// what gets stored: a reference text claiming words the audio does not
+    /// contain makes the model speak them before everything it is later asked
+    /// for.
     fn register_voice(&mut self, voice: &Voice) -> Result<(), EngineError> {
         self.layout.prepare().map_err(|e| EngineError::Transport(e.to_string()))?;
         let stored = self.layout.reference(&voice.voice_id);
@@ -604,12 +610,31 @@ impl SpeechEngine for DurableEngine {
             json!({
                 "source": voice.reference_audio.to_string_lossy(),
                 "output_path": stored.to_string_lossy(),
+                "script": voice.reference_text,
             }),
             BEHIND_THE_MODEL,
         )?;
+        // Absent when the runtime could not listen back — an older one, or a
+        // recording nothing lined up against. Then what the caller believed
+        // stands, because it is the only account there is.
+        let heard = prepared["text"]
+            .as_str()
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_string);
+        if let Some(heard) = &heard {
+            if heard != &voice.reference_text {
+                eprintln!(
+                    "the reference stops short of the script: storing {} of {} characters",
+                    heard.len(),
+                    voice.reference_text.len()
+                );
+            }
+        }
         let enrolled = Voice {
             reference_audio: stored,
             seconds: prepared["seconds"].as_f64().unwrap_or(0.0) as f32,
+            reference_text: heard.unwrap_or_else(|| voice.reference_text.clone()),
             ..voice.clone()
         };
         library::register_voice(&mut self.store, &enrolled, &now()).map_err(store_error)?;

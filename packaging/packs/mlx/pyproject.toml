@@ -11,4 +11,18 @@ version = "0"
 # mlx-speech declares >=3.13. The torch pack declares <3.13. They cannot share
 # an interpreter, which is why each pack carries its own.
 requires-python = ">=3.13"
-dependencies = ["mlx-speech"]
+# mlx-whisper keeps one promise: the reference text must describe the reference
+# audio. The application shows a script, but people stop reading early, and a
+# model told about words it has no audio for speaks them into every clip
+# afterwards. Listening back is the only way to know where somebody stopped.
+dependencies = ["mlx-speech", "mlx-whisper"]
+
+[tool.uv]
+# mlx-whisper declares torch, and imports it in exactly one file —
+# `torch_whisper.py`, which converts original OpenAI checkpoints into MLX ones.
+# We load models that are already converted, so that path never runs. Verified
+# by transcribing with torch absent from the environment.
+#
+# Two gigabytes of tensor library to convert checkpoints we do not convert is
+# not a dependency, it is an accident, and this pack exists to keep torch out.
+override-dependencies = ["torch ; sys_platform == 'nonesuch'"]

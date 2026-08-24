@@ -84,6 +84,16 @@ pub fn engine(sandbox: &Sandbox, behaviour: &str, grace: Duration) -> Arc<Engine
     engine_without(sandbox, behaviour, grace, &[])
 }
 
+/// The same, over a runtime whose reference recording contains only the first
+/// `heard_words` words of the script it was given.
+pub fn engine_hearing(
+    sandbox: &Sandbox,
+    grace: Duration,
+    heard_words: i32,
+) -> Arc<EngineHandle> {
+    build(sandbox, "    pass", grace, &[], heard_words)
+}
+
 /// The same, over a runtime that does not answer everything.
 pub fn engine_without(
     sandbox: &Sandbox,
@@ -91,7 +101,34 @@ pub fn engine_without(
     grace: Duration,
     without: &[&str],
 ) -> Arc<EngineHandle> {
-    standin::install(sandbox.root(), "stand-in", &standin::python(), behaviour, without);
+    build_inner(sandbox, behaviour, grace, without, -1)
+}
+
+fn build(
+    sandbox: &Sandbox,
+    behaviour: &str,
+    grace: Duration,
+    without: &[&str],
+    heard_words: i32,
+) -> Arc<EngineHandle> {
+    build_inner(sandbox, behaviour, grace, without, heard_words)
+}
+
+fn build_inner(
+    sandbox: &Sandbox,
+    behaviour: &str,
+    grace: Duration,
+    without: &[&str],
+    heard_words: i32,
+) -> Arc<EngineHandle> {
+    standin::install_hearing(
+        sandbox.root(),
+        "stand-in",
+        &standin::python(),
+        behaviour,
+        without,
+        heard_words,
+    );
     let places = speech_engine::runtimes::Places {
         data: sandbox.root().to_path_buf(),
         resources: sandbox.root().join("resources"),

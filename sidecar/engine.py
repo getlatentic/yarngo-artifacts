@@ -25,6 +25,7 @@ from pathlib import Path
 
 import platform
 import random
+import difflib
 import re
 import threading
 
@@ -810,6 +811,93 @@ class _Reporting:
         self._thread.join(timeout=1.0)
 
 
+# Small on purpose. This is not transcription for a person to read — it only
+# has to find where a reader stopped inside a script we already have, and the
+# base model does that in under a second. Measured against this recording:
+# `small` reached the same answer seventeen times slower, and `tiny` overshot
+# the ending, which is the one direction that is not safe.
+ASR_MODEL = "mlx-community/whisper-base-mlx"
+
+
+def _heard(audio: Path, script: str | None) -> str | None:
+    """What the recording actually says, as far as it can be established.
+
+    The reference text has to describe the reference audio. When it claims more
+    than the audio contains, the model speaks the difference before it speaks
+    anything it was asked for — the leftover words are in its prompt and it
+    finishes them first. That is not a rare edge: an application shows a script
+    and people stop reading a moment early, every time.
+
+    With a script to compare against, what comes back is the script itself, cut
+    where the reader stopped — the script's own spelling and punctuation are
+    better than a transcript's, and only the endpoint is in question. Without
+    one, the transcript is all there is.
+
+    `None` when it cannot be established, which is not the same as an empty
+    string: the caller keeps whatever it already believed rather than being
+    told the recording is silent.
+    """
+    try:
+        import mlx_whisper
+    except ImportError:
+        # A runtime without speech recognition. Older ones had none, and the
+        # protocol has to keep working for them.
+        return None
+
+    try:
+        spoken = mlx_whisper.transcribe(
+            str(audio), path_or_hf_repo=ASR_MODEL, language="en"
+        )["text"]
+    except Exception as failure:  # noqa: BLE001 - never fail enrolment over this
+        _log(f"could not listen back to the reference: {failure}")
+        return None
+
+    if not script or not script.strip():
+        return spoken.strip() or None
+    return _script_as_far_as_read(script, spoken)
+
+
+def _words(text: str) -> list[str]:
+    return re.findall(r"[a-z0-9']+", text.lower())
+
+
+def _script_as_far_as_read(script: str, spoken: str) -> str | None:
+    """The script, cut where the reader stopped.
+
+    Aligned as a subsequence rather than word by word, because recognition
+    mishears words and a walk that needs the next word exactly stops dead at
+    the first one it got wrong — which reads as "they said almost nothing" for
+    a recording of somebody reading fluently.
+
+    Erring short is the safe direction and is chosen deliberately: audio the
+    model was not told about costs nothing, while text with no audio behind it
+    is the whole defect.
+    """
+    script_words = _words(script)
+    if not script_words:
+        return None
+    reached = 0
+    for block in difflib.SequenceMatcher(
+        None, script_words, _words(spoken), autojunk=False
+    ).get_matching_blocks():
+        if block.size:
+            reached = max(reached, block.a + block.size)
+    if reached == 0:
+        # Nothing lined up. Something is wrong with the recording, the language
+        # or the script, and guessing between them would be worse than saying
+        # nothing.
+        return None
+
+    # Back to a character offset, so the script's punctuation survives. A full
+    # stop that closes the sentence they finished is kept; a comma they stopped
+    # at is not, because it promises a clause that never arrives.
+    positions = [m.end() for m in re.finditer(r"[A-Za-z0-9']+", script)]
+    end = positions[reached - 1]
+    if end < len(script) and script[end] in ".!?":
+        end += 1
+    return script[:end].strip()
+
+
 def m_audio_prepare_reference(params: dict, _ctx: protocol.Context) -> dict:
     """Make a recording usable as a reference, at the path the caller names.
 
@@ -817,6 +905,9 @@ def m_audio_prepare_reference(params: dict, _ctx: protocol.Context) -> dict:
     measuring what is left needs the audio stack, and nothing else in the
     application has one. Where the file goes and what it then means are the
     caller's — this writes where it is told and reports what it wrote.
+
+    It also listens back. `script` is what the caller believes was read; what
+    comes back in `text` is as much of it as the recording supports.
     """
     source = Path(params["source"])
     if not source.exists():
@@ -830,12 +921,24 @@ def m_audio_prepare_reference(params: dict, _ctx: protocol.Context) -> dict:
     if lead or tail:
         _log(f"trimmed {lead}s lead-in and {tail}s tail from {out.name}")
     info = sf.info(out)
-    return {
+
+    # After trimming, so what is heard is what will be used as the reference.
+    heard = _heard(out, params.get("script"))
+    if heard is not None and params.get("script"):
+        read = len(_words(heard))
+        whole = len(_words(params["script"]))
+        if read < whole:
+            _log(f"the reference stops after {read} of {whole} words of the script")
+
+    prepared = {
         "output_path": str(out),
         "seconds": round(info.frames / info.samplerate, 1),
         "trimmed_lead_s": lead,
         "trimmed_tail_s": tail,
     }
+    if heard is not None:
+        prepared["text"] = heard
+    return prepared
 
 
 def m_synthesis_generate(params: dict, ctx: protocol.Context) -> dict:

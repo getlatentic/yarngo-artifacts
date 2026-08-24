@@ -51,7 +51,6 @@ impl Store {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     /// A machine that has never run this application has no directory to put a
     /// database in, and the failure it produced read as a corrupt store rather
