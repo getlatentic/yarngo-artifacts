@@ -982,6 +982,66 @@ def m_audio_prepare_reference(params: dict, _ctx: protocol.Context) -> dict:
     return prepared
 
 
+# The model starts speaking at the very first sample, and everything that
+# plays audio — DACs ramping up, Bluetooth waking, a transcriber deciding where
+# speech begins — eats an abrupt onset. A five-word clip audibly lost its "The"
+# to this; the word was in the file the whole time.
+LEAD_IN_S = 0.2
+
+# A pause longer than anyone leaves mid-sentence. The reference this was tuned
+# against pauses for 1.9s at its most deliberate; SOAR was measured leaving
+# seven seconds of nothing in a forty-word clip, which is a defect, not a
+# breath.
+DEAD_AIR_S = 2.0
+KEPT_PAUSE_S = 0.8
+TAIL_S = 0.4
+
+
+def _settle_edges_and_pauses(wav, sample_rate: int):
+    """Give the clip a lead-in, collapse dead air, and trim a dragging tail.
+
+    Pauses up to DEAD_AIR_S are delivery and are not touched. Beyond that they
+    are collapsed to KEPT_PAUSE_S rather than removed: the sentence around them
+    still needs its breath, it does not need the room to go silent.
+    """
+    window = max(1, int(0.05 * sample_rate))
+    frames = len(wav) // window
+    if frames == 0:
+        return wav
+    rms = np.sqrt(
+        (wav[: frames * window].reshape(frames, window) ** 2).mean(axis=1)
+    )
+    quiet = rms < max(1e-4, 0.03 * float(rms.max()))
+
+    keep = np.ones(len(wav), dtype=bool)
+    run_start = None
+    for index in range(frames + 1):
+        if index < frames and quiet[index]:
+            if run_start is None:
+                run_start = index
+            continue
+        if run_start is not None:
+            run_frames = index - run_start
+            if run_start == 0:
+                # The opening is not a pause. Whatever silence the model put
+                # before its first word says nothing — the lead-in added below
+                # is the onset, so none of this is worth keeping.
+                limit, kept = 0.0, 0.0
+            elif index == frames:
+                limit, kept = TAIL_S, TAIL_S
+            else:
+                limit, kept = DEAD_AIR_S, KEPT_PAUSE_S
+            if run_frames * 0.05 > limit:
+                cut_from = run_start * window + int(kept * sample_rate)
+                cut_to = index * window if index < frames else len(wav)
+                keep[cut_from:cut_to] = False
+            run_start = None
+    settled = wav[keep]
+
+    lead = np.zeros(int(LEAD_IN_S * sample_rate), dtype=wav.dtype)
+    return np.concatenate([lead, settled])
+
+
 def m_synthesis_generate(params: dict, ctx: protocol.Context) -> dict:
     """Speak the text into the file the caller named, and record nothing.
 
@@ -1035,6 +1095,7 @@ def m_synthesis_generate(params: dict, ctx: protocol.Context) -> dict:
     gen_s = time.perf_counter() - started
 
     wav = np.concatenate(pieces) if len(pieces) > 1 else pieces[0]
+    wav = _settle_edges_and_pauses(wav, sample_rate)
     # Normalise once over the whole utterance: per-chunk normalisation would
     # make the volume step at every join.
     peak = float(np.max(np.abs(wav)))
