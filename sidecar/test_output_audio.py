@@ -15,7 +15,13 @@ import numpy as np
 
 HERE = Path(__file__).resolve().parent
 _source = (HERE / "engine.py").read_text()
-_namespace = {"np": np}
+class _NoRead:
+    @staticmethod
+    def read(path, always_2d=False):
+        raise FileNotFoundError(path)
+
+
+_namespace = {"np": np, "sf": _NoRead}
 exec(  # noqa: S102 - our own source, without importing the model runtime
     _source[
         _source.index("LEAD_IN_S = ") : _source.index(
@@ -24,6 +30,7 @@ exec(  # noqa: S102 - our own source, without importing the model runtime
     ],
     _namespace,
 )
+ceiling_for = _namespace["_natural_pause_ceiling"]
 settle = _namespace["_settle_edges_and_pauses"]
 LEAD_IN_S = _namespace["LEAD_IN_S"]
 
@@ -98,7 +105,44 @@ def main() -> int:
     check("dead air before the first word does not survive",
           abs(len(out) - expected) < SR // 4, failures)
 
-    total = 7
+    # The pause bar is each voice's, from its own reference — a global number
+    # tuned on one speaker trims the delivery of anyone slower.
+    class Sf:
+        @staticmethod
+        def read(path, always_2d=False):
+            if path == "slow":
+                w = np.concatenate([tone(2.0), hush(2.8), tone(2.0)])
+            elif path == "brisk":
+                w = np.concatenate([tone(2.0), hush(0.4), tone(2.0)])
+            elif path == "leady":
+                # A long wait before speaking is not delivery, and a bar set
+                # by it would let real dead air through for this voice.
+                w = np.concatenate([hush(3.0), tone(2.0), hush(0.4), tone(2.0)])
+            else:
+                raise FileNotFoundError(path)
+            return w.reshape(-1, 1), SR
+
+    _namespace["sf"] = Sf
+    slow = ceiling_for("slow")
+    check("a deliberate speaker's own pause raises their bar",
+          4.0 < slow < 4.6, failures)
+    brisk = ceiling_for("brisk")
+    check("a brisk speaker keeps the floor", brisk == 2.0, failures)
+    check("no reference keeps the floor", ceiling_for(None) == 2.0, failures)
+    check("silence before they start speaking sets no bar",
+          ceiling_for("leady") == 2.0, failures)
+    check("an unreadable reference keeps the floor",
+          ceiling_for("gone-missing") == 2.0, failures)
+
+    # And the bar is actually obeyed: a 2.8s pause survives for the slow
+    # speaker and collapses for the brisk one.
+    speech = np.concatenate([tone(2.0), hush(2.8), tone(2.0)])
+    kept = settle(speech, SR, dead_air_s=slow)
+    collapsed = settle(speech, SR, dead_air_s=brisk)
+    check("the slow speaker's pause is their delivery",
+          len(kept) > len(collapsed) + SR, failures)
+
+    total = 13
     print(f"{total - len(failures)}/{total} output-audio checks passed")
     return 1 if failures else 0
 

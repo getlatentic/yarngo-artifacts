@@ -438,6 +438,62 @@ def _calibrated_target_words(
     return max(CHUNK_FLOOR_WORDS, min(CHUNK_TARGET_WORDS, int(speakable * PACE_SAFETY / pace)))
 
 
+def _speakable_seconds(
+    patch_seconds: float | None,
+    budget_patches: int,
+    reference_seconds: float,
+) -> float | None:
+    """The hard ceiling on one generation's output, in seconds.
+
+    Not an estimate: budget, patch size and reference length are all known, so
+    this is arithmetic. `None` where the backend has no such geometry.
+    """
+    if not patch_seconds or budget_patches <= 0:
+        return None
+    reference_patches = (
+        max(0, math.ceil(reference_seconds / patch_seconds) - 1)
+        if reference_seconds > 0
+        else 0
+    )
+    return max(0.0, (budget_patches - reference_patches - 2) * patch_seconds)
+
+
+def _hit_ceiling(piece_seconds: float, speakable: float | None, patch_seconds: float | None) -> bool:
+    """Whether a generation stopped because it ran out of budget.
+
+    Deterministic, which is the point: sizing chunks ahead of time rests on a
+    guess about pace, and a guess is not something correctness may rest on. A
+    piece that ends within one patch of the ceiling ended *at* the ceiling —
+    the model emits whole patches, so a finished utterance lands short of it.
+    """
+    if speakable is None or not patch_seconds:
+        return False
+    return piece_seconds >= speakable - patch_seconds
+
+
+def _split_for_retry(chunk: str) -> list[str] | None:
+    """Two halves of a chunk that proved too long, or `None` when it cannot
+    shrink.
+
+    Sentences stay whole while there is more than one. A single sentence that
+    alone exceeds the budget is split at a comma near its middle, and failing
+    that between words — an audible seam, but the alternative is an amputated
+    sentence, and the seam at least says everything it was asked to say.
+    """
+    sentences = [t.strip() for t in re.split(r"(?<=[.!?])\s+", chunk.strip()) if t.strip()]
+    if len(sentences) > 1:
+        middle = len(sentences) // 2
+        return [" ".join(sentences[:middle]), " ".join(sentences[middle:])]
+    words = chunk.split()
+    if len(words) < 8:
+        return None
+    commas = [i for i, w in enumerate(words) if w.endswith(",")]
+    middle = min(commas, key=lambda i: abs(i - len(words) // 2)) + 1 if commas else len(words) // 2
+    if middle <= 0 or middle >= len(words):
+        middle = len(words) // 2
+    return [" ".join(words[:middle]), " ".join(words[middle:])]
+
+
 def _patch_seconds(model) -> float | None:
     """One patch of output, in seconds, where the backend has such a thing."""
     try:
@@ -1041,16 +1097,52 @@ def m_audio_prepare_reference(params: dict, _ctx: protocol.Context) -> dict:
 # to this; the word was in the file the whole time.
 LEAD_IN_S = 0.2
 
-# A pause longer than anyone leaves mid-sentence. The reference this was tuned
-# against pauses for 1.9s at its most deliberate; SOAR was measured leaving
-# seven seconds of nothing in a forty-word clip, which is a defect, not a
-# breath.
+# The floor under "too long a pause", never the rule: each voice's own
+# reference raises it. A global number tuned on one speaker would trim the
+# delivery of anyone slower than that speaker, and being wrong in that
+# direction edits someone's speech.
 DEAD_AIR_S = 2.0
 KEPT_PAUSE_S = 0.8
 TAIL_S = 0.4
 
 
-def _settle_edges_and_pauses(wav, sample_rate: int):
+def _natural_pause_ceiling(reference_path: str | None) -> float:
+    """How long a pause this voice is allowed, from its own reference.
+
+    Half again the longest pause the person left while reading — beyond
+    anything they themselves did, so nothing of their delivery is ever
+    trimmed. `DEAD_AIR_S` is only the floor for voices that pause briefly, and
+    a reference that cannot be read falls back to it. There is deliberately no
+    upper bound: for a speaker of long silences the collapse simply stops
+    applying, and leaving dead air is recoverable where editing speech is not.
+    """
+    if not reference_path:
+        return DEAD_AIR_S
+    try:
+        wav, sample_rate = sf.read(reference_path, always_2d=True)
+        mono = np.mean(wav, axis=1)
+    except Exception:  # noqa: BLE001 - a floor exists for exactly this
+        return DEAD_AIR_S
+    window = max(1, int(0.05 * sample_rate))
+    frames = len(mono) // window
+    if frames == 0:
+        return DEAD_AIR_S
+    rms = np.sqrt((mono[: frames * window].reshape(frames, window) ** 2).mean(axis=1))
+    quiet = rms < max(1e-4, 0.03 * float(rms.max()))
+    longest, run = 0, 0
+    for index, q in enumerate(quiet):
+        if q:
+            run += 1
+            continue
+        # Runs touching the start are lead-in, not delivery.
+        if run and run != index:
+            longest = max(longest, run)
+        run = 0
+    # A trailing run is the tail, not delivery, and is left out.
+    return max(DEAD_AIR_S, 1.5 * longest * 0.05)
+
+
+def _settle_edges_and_pauses(wav, sample_rate: int, dead_air_s: float = DEAD_AIR_S):
     """Give the clip a lead-in, collapse dead air, and trim a dragging tail.
 
     Pauses up to DEAD_AIR_S are delivery and are not touched. Beyond that they
@@ -1083,7 +1175,7 @@ def _settle_edges_and_pauses(wav, sample_rate: int):
             elif index == frames:
                 limit, kept = TAIL_S, TAIL_S
             else:
-                limit, kept = DEAD_AIR_S, KEPT_PAUSE_S
+                limit, kept = dead_air_s, KEPT_PAUSE_S
             if run_frames * 0.05 > limit:
                 cut_from = run_start * window + int(kept * sample_rate)
                 cut_to = index * window if index < frames else len(wav)
@@ -1093,6 +1185,41 @@ def _settle_edges_and_pauses(wav, sample_rate: int):
 
     lead = np.zeros(int(LEAD_IN_S * sample_rate), dtype=wav.dtype)
     return np.concatenate([lead, settled])
+
+
+def _speak_whole(model, chunk, kwargs, speakable, patch_s, ctx, depth=0):
+    """Generate one chunk completely, splitting and retrying if it hit the
+    output ceiling.
+
+    Returns the finished pieces and the sample rate. Raises rather than
+    returning an amputated sentence when a fragment can shrink no further —
+    honest failure over silent loss, and nothing real gets there: the budget
+    would have to be a handful of patches.
+    """
+    result = model.generate(chunk, **kwargs)
+    sample_rate = result.sample_rate
+    piece = np.asarray(result.waveform, dtype=np.float32).squeeze()
+    if not _hit_ceiling(piece.shape[0] / sample_rate, speakable, patch_s):
+        return [piece], sample_rate
+
+    halves = _split_for_retry(chunk) if depth < 4 else None
+    if halves is None:
+        raise ValueError(
+            f"{len(chunk.split())} words cannot fit the {speakable:.0f}s this "
+            "reference leaves for output; a shorter text or a shorter reference "
+            "recording is needed"
+        )
+    _log(
+        f"chunk of {len(chunk.split())} words hit the {speakable:.0f}s ceiling; "
+        "regenerating in halves"
+    )
+    pieces = []
+    for half in halves:
+        if ctx.cancelled():
+            raise protocol.Cancelled("stopped while regenerating an oversized chunk")
+        parts, sample_rate = _speak_whole(model, half, kwargs, speakable, patch_s, ctx, depth + 1)
+        pieces.extend(parts)
+    return pieces, sample_rate
 
 
 def m_synthesis_generate(params: dict, ctx: protocol.Context) -> dict:
@@ -1153,17 +1280,27 @@ def m_synthesis_generate(params: dict, ctx: protocol.Context) -> dict:
     pieces = []
     sample_rate = None
     written_s = 0.0
+    # The ceiling this call can never exceed, from known quantities. The word
+    # target above is a guess about pace; this is not, and correctness rests
+    # here: a generation that hits the ceiling is regenerated in halves rather
+    # than kept, so a wrong guess costs time and never words.
+    patch_s = _patch_seconds(model)
+    speakable = _speakable_seconds(
+        patch_s, int(kwargs.get("max_audio_patches") or 0), reference_seconds
+    )
+
     with _Reporting(ctx, len(chunks)) as reporting:
         for index, chunk in enumerate(chunks):
             # Between chunks rather than mid-utterance: a chunk boundary is a
             # sentence end, and stopping inside one leaves half a sentence.
             if ctx.cancelled():
                 raise protocol.Cancelled(f"stopped before chunk {index + 1} of {len(chunks)}")
-            result = model.generate(chunk, **kwargs)
-            sample_rate = result.sample_rate
-            piece = np.asarray(result.waveform, dtype=np.float32).squeeze()
-            pieces.append(piece)
-            written_s += piece.shape[0] / sample_rate
+            parts, sample_rate = _speak_whole(model, chunk, kwargs, speakable, patch_s, ctx)
+            for at, part in enumerate(parts):
+                pieces.append(part)
+                written_s += part.shape[0] / sample_rate
+                if at + 1 < len(parts):
+                    pieces.append(np.zeros(int(0.18 * sample_rate), dtype=np.float32))
             reporting.chunk_done(written_s, index + 1)
             if index + 1 < len(chunks):
                 # A short gap between chunks reads as a breath rather than a join.
@@ -1171,7 +1308,9 @@ def m_synthesis_generate(params: dict, ctx: protocol.Context) -> dict:
     gen_s = time.perf_counter() - started
 
     wav = np.concatenate(pieces) if len(pieces) > 1 else pieces[0]
-    wav = _settle_edges_and_pauses(wav, sample_rate)
+    wav = _settle_edges_and_pauses(
+        wav, sample_rate, _natural_pause_ceiling(params.get("reference_audio"))
+    )
     # Normalise once over the whole utterance: per-chunk normalisation would
     # make the volume step at every join.
     peak = float(np.max(np.abs(wav)))
