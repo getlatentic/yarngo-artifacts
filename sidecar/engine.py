@@ -26,6 +26,7 @@ from pathlib import Path
 import platform
 import random
 import difflib
+import math
 import re
 import threading
 
@@ -392,6 +393,58 @@ WORDS_PER_SECOND = 3.2
 # and seed: 110 words scores 0.985/0.980/0.985/0.980 and 40 scores 0.985 four
 # times, which is the same answer, and 40 takes 162s where 110 takes 127s.
 CHUNK_TARGET_WORDS = 110
+
+# When even a calibrated chunk cannot be made big enough to be worth speaking,
+# the reference is eating nearly the whole budget.
+CHUNK_FLOOR_WORDS = 20
+# The model's pace on long text is not the reference's reading pace; the gap
+# measured here was up to thirty percent, and running out of budget cuts a
+# sentence off mid-word.
+PACE_SAFETY = 0.7
+
+
+def _calibrated_target_words(
+    patch_seconds: float | None,
+    budget_patches: int,
+    reference_seconds: float,
+    reference_words: int,
+) -> int:
+    """How many words fit one generation, for this voice and this reference.
+
+    The model has one budget for reference and output together, so a longer
+    reference means less room to speak — a 42 second reference was measured
+    leaving 37 of 80 seconds, and a fixed 110-word chunk then stops mid-word at
+    the ceiling with nothing reporting it. The voice's own pace comes from the
+    reference itself: its duration over its words is how fast this person
+    talks, which is the number a fixed target in words has to guess.
+    """
+    if not patch_seconds or budget_patches <= 0:
+        return CHUNK_TARGET_WORDS
+    reference_patches = (
+        max(0, math.ceil(reference_seconds / patch_seconds) - 1)
+        if reference_seconds > 0
+        else 0
+    )
+    speakable = (budget_patches - reference_patches - 2) * patch_seconds
+    if speakable <= 0:
+        return CHUNK_FLOOR_WORDS
+    pace = (
+        reference_seconds / reference_words
+        if reference_seconds > 0 and reference_words > 0
+        # Slower than anyone measured here, because the cost of guessing slow
+        # is smaller chunks and the cost of guessing fast is a cut sentence.
+        else 0.55
+    )
+    return max(CHUNK_FLOOR_WORDS, min(CHUNK_TARGET_WORDS, int(speakable * PACE_SAFETY / pace)))
+
+
+def _patch_seconds(model) -> float | None:
+    """One patch of output, in seconds, where the backend has such a thing."""
+    try:
+        config = model._generator.config
+        return config.patch_size * config.vocoder.hop_size / config.vocoder.sample_rate
+    except AttributeError:
+        return None
 
 
 def _split_into_chunks(text: str, target_words: int = CHUNK_TARGET_WORDS) -> list[str]:
@@ -1068,9 +1121,32 @@ def m_synthesis_generate(params: dict, ctx: protocol.Context) -> dict:
         if params.get("reference_text"):
             kwargs["reference_text"] = params["reference_text"]
 
-    chunks = _split_into_chunks(params["text"])
+    # Sized for this voice: the reference spends part of the model's one
+    # budget, and the reference's own duration over its own words is how fast
+    # this person speaks.
+    reference_seconds = 0.0
+    reference_words = 0
+    if params.get("reference_audio"):
+        try:
+            info = sf.info(_recording(params["reference_audio"]))
+            reference_seconds = info.frames / info.samplerate
+        except Exception:  # noqa: BLE001 - sizing falls back, generation decides
+            reference_seconds = 0.0
+        reference_words = len(_words(params.get("reference_text") or ""))
+    target_words = _calibrated_target_words(
+        _patch_seconds(model),
+        int(kwargs.get("max_audio_patches") or 0),
+        reference_seconds,
+        reference_words,
+    )
+    chunks = _split_into_chunks(params["text"], target_words)
     if not chunks:
         raise ValueError("nothing to say")
+    if target_words != CHUNK_TARGET_WORDS:
+        _log(
+            f"chunking for this voice: {target_words} words per chunk "
+            f"({reference_seconds:.0f}s reference)"
+        )
     out = Path(params["output_path"])
 
     started = time.perf_counter()
