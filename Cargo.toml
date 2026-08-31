@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/core", "crates/store", "crates/speech-engine", "crates/synthesis", "crates/testing", "crates/app"]
 
 [workspace.package]
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition = "2021"
 rust-version = "1.82"
 
