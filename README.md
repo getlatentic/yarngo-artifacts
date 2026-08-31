@@ -57,8 +57,14 @@ this stays believed.
 The `latest` and `catalog-*` release tags are from an earlier scheme that named
 files by URL and digest in an unsigned manifest. Nothing reads them.
 
+## Application builds
+
+Notarized `.dmg` builds of yarngo studio are attached to the
+[Releases](https://github.com/getlatentic/yarngo-artifacts/releases) of this
+repository — release assets, not repository contents, so the tree stays small.
+
 ## What is not here
 
-Application builds, model weights, and interpreters. The application is
-distributed separately; weights and interpreters come from their own upstreams,
-which is why this repository stays small enough to be read at a glance.
+Model weights and interpreters, which come from their own upstreams, and the
+application's source. Runtime recipes and application builds are the two
+things this repository distributes.
