@@ -56,109 +56,11 @@ command -v tuftool >/dev/null || {
 # that is not a laptop.
 ROOT_EXPIRY='in 52 weeks'
 ROLE_EXPIRY='in 26 weeks'
-TIMESTAMP_EXPIRY='in 30 days'
+TIMESTAMP_EXPIRY='in 90 days'
 
-die() { echo "$*" >&2; exit 1; }
-
-case "${1:-}" in
-init)
-  [ -e "$KEYS/root.json" ] && die \
-"Signing keys already exist at $KEYS.
-
-Creating a second set would orphan every copy of the application already
-shipped with the first — they trust these keys and no others. If you meant to
-rotate them, that is a different and more careful job than this command."
-
-  # A key inside the working tree is a key one 'git add .' from being public.
-  case "$(cd "$(dirname "$KEYS")" 2>/dev/null && pwd || echo "$KEYS")" in
-    "$PWD"|"$PWD"/*) die "Refusing to write signing keys inside the repository ($KEYS)." ;;
-  esac
-
-  mkdir -p "$KEYS"
-  chmod 700 "$KEYS"
-
-  # Root is held by three keys needing two to sign: one lost is recoverable,
-  # one stolen is not enough. Each other role holds one key of its own, so the
-  # timestamp key — the one that gets re-signed most often and is therefore
-  # most exposed — can say a snapshot is current and cannot say which targets
-  # are ours.
-  tuftool root init "$KEYS/root.json"
-  tuftool root expire "$KEYS/root.json" "$ROOT_EXPIRY"
-  tuftool root set-threshold "$KEYS/root.json" root 2
-  for n in 1 2 3; do
-    tuftool root gen-rsa-key "$KEYS/root.json" "$KEYS/root-$n.pem" --role root
-  done
-  for role in targets snapshot timestamp; do
-    tuftool root set-threshold "$KEYS/root.json" "$role" 1
-    tuftool root gen-rsa-key "$KEYS/root.json" "$KEYS/$role.pem" --role "$role"
-  done
-  tuftool root sign "$KEYS/root.json" -k "$KEYS/root-1.pem" -k "$KEYS/root-2.pem"
-  chmod 600 "$KEYS"/*.pem
-
-  # Nothing has been published from these keys, and recording that is what
-  # separates "the first publish" from "the counter went missing" — which are
-  # the same absence and need opposite treatment.
-  echo 0 > "$KEYS/metadata-version"
-
-  mkdir -p "$(dirname "$ANCHOR")"
-  cp "$KEYS/root.json" "$ANCHOR"
-
-  cat <<DONE
-
-Done. Two things exist now.
-
-  $KEYS
-      The private keys. Back this directory up somewhere you would keep a
-      password. If you lose it you cannot publish to anyone who already
-      installed the app; if someone else gets it they can publish to everyone
-      who did.
-
-  $ANCHOR
-      The public half. Commit it:
-
-          git add $ANCHOR && git commit -m "Ship the runtime trust anchor"
-
-      Builds made after that can install published runtimes. Builds made
-      before it cannot, ever — so anyone already running one needs a new
-      version of the application, not a new runtime.
-
-Next: scripts/tuf-repo.sh publish <version>
-DONE
-  ;;
-
-publish)
-  version="${2:-}"
-  [ -n "$version" ] || die "Which version? e.g. scripts/tuf-repo.sh publish $(date +%Y.%m.%d).1"
-  [ -f "$KEYS/root.json" ] || die "No signing keys at $KEYS. Run: scripts/tuf-repo.sh init"
-
-  staged="$(mktemp -d)"
-  trap 'rm -rf "$staged"' EXIT
-
-  # The recipe as it stands in this checkout, named for the version it is being
-  # published as. Nothing is invented here: what ships inside the application
-  # and what is published are the same two files.
-  cp packaging/packs/mlx/uv.lock        "$staged/mlx-$version.uv.lock"
-  cp packaging/packs/mlx/pyproject.toml "$staged/mlx-$version.pyproject.toml"
-
-  # The floor is this application's own version: a build older than the one
-  # that produced this recipe should pass the release over rather than install
-  # something it cannot drive.
-  floor="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
-  cat > "$staged/catalogue.json" <<JSON
-{
-  "schema": 1,
-  "runtimes": {
-    "mlx": [
-      { "version": "$version",
-        "min_app_version": "$floor",
-        "engine_api": 1,
-        "lock": "mlx-$version.uv.lock",
-        "pyproject": "mlx-$version.pyproject.toml" }
-    ]
-  }
-}
-JSON
-
+sign_and_swap() {
+  version="$1"
+  staged="$2"
   # Monotonic across publishes, and kept with the keys rather than with the
   # output — the output is regenerated, and a metadata version that went
   # backwards would be read by every installed application as somebody
@@ -236,10 +138,132 @@ Until that lands, applications keep installing the recipe inside them.
 
 This publication is believed until $(python3 -c "
 import datetime
-print((datetime.date.today() + datetime.timedelta(days=30)).isoformat())"). Re-publishing before
+print((datetime.date.today() + datetime.timedelta(days=90)).isoformat())"). Re-publishing before
 then is what keeps it believed; expired metadata is refused, which is the point
 of it. "scripts/tuf-repo.sh status" shows the date.
 DONE
+}
+
+
+die() { echo "$*" >&2; exit 1; }
+
+case "${1:-}" in
+init)
+  [ -e "$KEYS/root.json" ] && die \
+"Signing keys already exist at $KEYS.
+
+Creating a second set would orphan every copy of the application already
+shipped with the first — they trust these keys and no others. If you meant to
+rotate them, that is a different and more careful job than this command."
+
+  # A key inside the working tree is a key one 'git add .' from being public.
+  case "$(cd "$(dirname "$KEYS")" 2>/dev/null && pwd || echo "$KEYS")" in
+    "$PWD"|"$PWD"/*) die "Refusing to write signing keys inside the repository ($KEYS)." ;;
+  esac
+
+  mkdir -p "$KEYS"
+  chmod 700 "$KEYS"
+
+  # Root is held by three keys needing two to sign: one lost is recoverable,
+  # one stolen is not enough. Each other role holds one key of its own, so the
+  # timestamp key — the one that gets re-signed most often and is therefore
+  # most exposed — can say a snapshot is current and cannot say which targets
+  # are ours.
+  tuftool root init "$KEYS/root.json"
+  tuftool root expire "$KEYS/root.json" "$ROOT_EXPIRY"
+  tuftool root set-threshold "$KEYS/root.json" root 2
+  for n in 1 2 3; do
+    tuftool root gen-rsa-key "$KEYS/root.json" "$KEYS/root-$n.pem" --role root
+  done
+  for role in targets snapshot timestamp; do
+    tuftool root set-threshold "$KEYS/root.json" "$role" 1
+    tuftool root gen-rsa-key "$KEYS/root.json" "$KEYS/$role.pem" --role "$role"
+  done
+  tuftool root sign "$KEYS/root.json" -k "$KEYS/root-1.pem" -k "$KEYS/root-2.pem"
+  chmod 600 "$KEYS"/*.pem
+
+  # Nothing has been published from these keys, and recording that is what
+  # separates "the first publish" from "the counter went missing" — which are
+  # the same absence and need opposite treatment.
+  echo 0 > "$KEYS/metadata-version"
+
+  mkdir -p "$(dirname "$ANCHOR")"
+  cp "$KEYS/root.json" "$ANCHOR"
+
+  cat <<DONE
+
+Done. Two things exist now.
+
+  $KEYS
+      The private keys. Back this directory up somewhere you would keep a
+      password. If you lose it you cannot publish to anyone who already
+      installed the app; if someone else gets it they can publish to everyone
+      who did.
+
+  $ANCHOR
+      The public half. Commit it:
+
+          git add $ANCHOR && git commit -m "Ship the runtime trust anchor"
+
+      Builds made after that can install published runtimes. Builds made
+      before it cannot, ever — so anyone already running one needs a new
+      version of the application, not a new runtime.
+
+Next: scripts/tuf-repo.sh publish <version>
+DONE
+  ;;
+
+refresh)
+  [ -f "$KEYS/root.json" ] || die "No signing keys at $KEYS. Run: scripts/tuf-repo.sh init"
+  [ -d "$OUT/targets" ] || die "Nothing published at $OUT to refresh. Run: scripts/tuf-repo.sh publish <version>"
+
+  # The very targets being served, under their own names again. Staging from
+  # the checkout instead would quietly publish whatever the working tree
+  # holds, and a freshness renewal must not change what is vouched for.
+  staged="$(mktemp -d)"
+  trap 'rm -rf "$staged"' EXIT
+  for hashed in "$OUT"/targets/*; do
+    cp "$hashed" "$staged/$(basename "$hashed" | sed 's/^[0-9a-f]\{64\}\.//')"
+  done
+  version="$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' "$staged/catalogue.json" | head -1)"
+  [ -n "$version" ] || die "The published catalogue at $OUT names no version; refusing to guess."
+  sign_and_swap "$version" "$staged"
+  ;;
+
+publish)
+  version="${2:-}"
+  [ -n "$version" ] || die "Which version? e.g. scripts/tuf-repo.sh publish $(date +%Y.%m.%d).1"
+  [ -f "$KEYS/root.json" ] || die "No signing keys at $KEYS. Run: scripts/tuf-repo.sh init"
+
+  staged="$(mktemp -d)"
+  trap 'rm -rf "$staged"' EXIT
+
+  # The recipe as it stands in this checkout, named for the version it is being
+  # published as. Nothing is invented here: what ships inside the application
+  # and what is published are the same two files.
+  cp packaging/packs/mlx/uv.lock        "$staged/mlx-$version.uv.lock"
+  cp packaging/packs/mlx/pyproject.toml "$staged/mlx-$version.pyproject.toml"
+
+  # The floor is this application's own version: a build older than the one
+  # that produced this recipe should pass the release over rather than install
+  # something it cannot drive.
+  floor="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
+  cat > "$staged/catalogue.json" <<JSON
+{
+  "schema": 1,
+  "runtimes": {
+    "mlx": [
+      { "version": "$version",
+        "min_app_version": "$floor",
+        "engine_api": 1,
+        "lock": "mlx-$version.uv.lock",
+        "pyproject": "mlx-$version.pyproject.toml" }
+    ]
+  }
+}
+JSON
+
+  sign_and_swap "$version" "$staged"
   ;;
 
 status)

@@ -45,8 +45,16 @@ cp -R dist/tuf/. <yarngo-artifacts checkout>/tuf/
 cd <that checkout> && git add tuf && git commit -m "Publish runtime <version>" && git push
 ```
 
-`scripts/tuf-repo.sh status` shows the "believed until" date; republishing
-before it is what keeps the repository trusted (currently a 30-day window).
+`scripts/tuf-repo.sh status` shows the "believed until" date. Renewing it is
+one command that changes nothing else:
+
+```
+scripts/tuf-repo.sh refresh
+```
+
+then copy `dist/tuf` and push as above. The window is 90 days, and missing it
+breaks nothing: installed apps keep working and keep their runtime — only the
+update channel goes quiet until the next publish or refresh.
 
 ## When both changed
 
