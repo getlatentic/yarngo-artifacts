@@ -12,7 +12,7 @@ yarngo studio is a macOS app that speaks text in your own voice, running entirel
 
 ## Install
 
-Download the `.dmg` from [Releases](https://github.com/getlatentic/yarngo-artifacts/releases/latest), open it, and drag **yarngo studio** into Applications. It is notarized, so it opens without warnings. The first run downloads a speech runtime (~350 MB) and the model you pick.
+Download the `.dmg` from [Releases](https://github.com/getlatentic/yarngo-artifacts/releases), open it, and drag **yarngo studio** into Applications. It is notarized, so it opens without warnings. The first run downloads a speech runtime (~350 MB) and the model you pick.
 
 ## Status
 
