@@ -125,10 +125,10 @@ To make it real, serve those files at:
 
   $SERVED_AT
 
-which for a GitHub repository means copying them in and pushing:
+which is this repository's own tuf/ directory, served by GitHub Pages:
 
-  cp -R $OUT/. <your-artifacts-checkout>/tuf/
-  cd <your-artifacts-checkout> && git add tuf && git commit -m "Publish runtime $version" && git push
+  cp -R $OUT/. tuf/
+  git add tuf && git commit -m "Publish runtime $version" && git push
 
 Until that lands, applications keep installing the recipe inside them.
 
