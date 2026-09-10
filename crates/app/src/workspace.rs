@@ -731,9 +731,9 @@ impl VoiceStudio {
                             .h_flex()
                             .gap(px(8.0))
                             .items_center()
-                            // While something is running that is the fact worth
+                            // While a clip is running that is the fact worth
                             // stating; the rest of the time it is the disk.
-                            .when(self.busy(), |d| {
+                            .when(crate::a_clip_is_generating(&self.status), |d| {
                                 d.child(crate::icon::icon(
                                     crate::icon::name::GRAPHIC_EQ,
                                     15.0,
@@ -742,7 +742,7 @@ impl VoiceStudio {
                                 .child(t!("clip.one_generating").to_string())
                                 .text_color(theme::hex(0x8F4406))
                             })
-                            .when(!self.busy(), |d| {
+                            .when(!crate::a_clip_is_generating(&self.status), |d| {
                                 d.child(crate::icon::icon(
                                     crate::icon::name::HARD_DRIVE,
                                     15.0,

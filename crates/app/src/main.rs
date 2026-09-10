@@ -79,6 +79,15 @@ fn start_engine(preferred: Option<&str>) -> Result<EngineHandle, speech_engine::
     })
 }
 
+/// Whether a clip is being generated right now.
+///
+/// Narrower than `busy`, which also covers a cold start and a runtime install.
+/// Neither of those is a clip, and the library footer counting them as one told
+/// somebody a clip was generating when the application had only just opened.
+pub(crate) fn a_clip_is_generating(status: &Status) -> bool {
+    matches!(status, Status::Generating)
+}
+
 /// Whether the composer shows work in progress instead of the clip.
 ///
 /// Installing is real work with a number and belongs to no row, so it shows
@@ -2814,7 +2823,19 @@ fn main() {
 #[cfg(test)]
 mod startup_tests {
     use super::model_once_the_catalogue_arrives as chosen;
-    use super::{shows_work_in_progress, Status};
+    use super::{a_clip_is_generating, shows_work_in_progress, Status};
+
+    /// The library footer counts clips, and a cold start is not a clip.
+    #[test]
+    fn a_cold_start_is_not_a_clip_generating() {
+        assert!(!a_clip_is_generating(&Status::Preparing("Starting…".into())));
+        assert!(!a_clip_is_generating(&Status::Installing {
+            step: "Downloading".into(),
+            fraction: 0.1
+        }));
+        assert!(!a_clip_is_generating(&Status::Idle));
+        assert!(a_clip_is_generating(&Status::Generating));
+    }
 
     /// Starting the engine is not a generation.
     ///
