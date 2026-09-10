@@ -23,7 +23,11 @@ const MIN_SECONDS: f32 = 6.0;
 const MAX_SECONDS: f32 = 60.0;
 const MIN_PEAK: f32 = 0.02;
 const CLIPPING_PEAK: f32 = 0.99;
-const MIN_SNR_DB: f32 = 15.0;
+/// Saturation this long is a flat-top — the waveform was cut off, not loud.
+/// One hot sample is a click or a plosive and clones fine; refusing on it
+/// turned away good takes.
+const CLIPPING_RUN: usize = 3;
+const MIN_SNR_DB: f32 = 20.0;
 
 pub struct Recorder {
     stream: Option<Stream>,
@@ -115,7 +119,7 @@ impl Recorder {
         let mut writer =
             hound::WavWriter::create(path, spec).map_err(|e| format!("cannot write wav: {e}"))?;
         for sample in samples.iter() {
-            let clamped = (sample.clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
+            let clamped = (sample.clamp(-1.0, 1.0) * i16::MAX as f32).round() as i16;
             writer.write_sample(clamped).map_err(|e| e.to_string())?;
         }
         writer.finalize().map_err(|e| format!("cannot finish wav: {e}"))?;
@@ -285,7 +289,12 @@ pub fn assess(samples: &[f32], sample_rate: u32) -> Result<Quality, String> {
         if peak < MIN_PEAK {
             return Err("That was too quiet. Move closer to the microphone and try again.".into());
         }
-        if peak >= CLIPPING_PEAK {
+        let mut run = 0usize;
+        let clipped = samples.iter().any(|s| {
+            run = if s.abs() >= CLIPPING_PEAK { run + 1 } else { 0 };
+            run >= CLIPPING_RUN
+        });
+        if clipped {
             return Err("The recording is clipping. Move back from the microphone and try again.".into());
         }
 
@@ -311,7 +320,7 @@ pub fn assess(samples: &[f32], sample_rate: u32) -> Result<Quality, String> {
             ));
         }
 
-        Ok(Quality { seconds, snr_db })
+        Ok(Quality { seconds, snr_db, sample_rate_hz: sample_rate })
     }
 }
 
@@ -319,6 +328,9 @@ pub fn assess(samples: &[f32], sample_rate: u32) -> Result<Quality, String> {
 pub struct Quality {
     pub seconds: f32,
     pub snr_db: f32,
+    /// The rate the take was captured or decoded at — stored with the voice,
+    /// because a clone that sounds thin is diagnosed from exactly this.
+    pub sample_rate_hz: u32,
 }
 
 impl Quality {
@@ -428,11 +440,28 @@ mod tests {
     }
 
     #[test]
-    fn a_clipping_take_is_rejected() {
+    fn a_flat_topped_take_is_rejected_as_clipping() {
         let mut samples = tone(20.0, 0.5, 24_000);
-        samples[100] = 1.0;
+        for s in &mut samples[100..110] {
+            *s = 1.0;
+        }
         let err = assess(&samples, 24_000).unwrap_err();
         assert!(err.contains("clipping"), "{err}");
+    }
+
+    #[test]
+    fn one_hot_sample_is_a_click_not_clipping() {
+        let mut samples = speech_over_noise(20.0, 0.5, 0.002, 24_000);
+        samples[100] = 1.0;
+        assess(&samples, 24_000).expect("a lone spike is not a flat-top");
+    }
+
+    #[test]
+    fn a_room_below_twenty_decibels_is_refused() {
+        // 0.5 speech over 0.07 floor is about 17 dB: audible hum, and the
+        // clone inherits it.
+        let err = assess(&speech_over_noise(20.0, 0.5, 0.07, 24_000), 24_000).unwrap_err();
+        assert!(err.contains("background noise"), "{err}");
     }
 
     #[test]
@@ -447,7 +476,7 @@ mod tests {
     fn a_noisy_room_scores_worse_than_a_quiet_one() {
         let rate = 24_000;
         let quiet = assess(&speech_over_noise(20.0, 0.5, 0.002, rate), rate).unwrap();
-        let noisy = assess(&speech_over_noise(20.0, 0.5, 0.05, rate), rate).unwrap();
+        let noisy = assess(&speech_over_noise(20.0, 0.5, 0.03, rate), rate).unwrap();
         assert!(
             noisy.snr_db < quiet.snr_db,
             "noisy {} dB should score under quiet {} dB",

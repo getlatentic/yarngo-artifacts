@@ -782,6 +782,14 @@ impl VoiceStudio {
         }
         let Some(engine) = self.engine.clone() else { return };
 
+        // The numbers the take was accepted on, carried onto the voice so a
+        // clone that sounds wrong later can be diagnosed from what was
+        // actually captured.
+        let quality = match &self.enrolment {
+            Enrolment::Review(quality) => Some(*quality),
+            _ => None,
+        };
+
         // Written when the take was stopped, so review could play it; a file
         // brought in from disk is registered from where it already is.
         let Some(path) = self.take.as_ref().map(|t| t.path.clone()) else { return };
@@ -831,6 +839,8 @@ impl VoiceStudio {
                         // Measured by the engine once the file is stored.
                         seconds: 0.0,
                         consent,
+                        snr_db: quality.map(|q| q.snr_db),
+                        sample_rate_hz: quality.map(|q| q.sample_rate_hz),
                     })?;
                     engine.voices()
                 })

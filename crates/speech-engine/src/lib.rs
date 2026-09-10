@@ -84,6 +84,12 @@ pub struct Voice {
     /// append-only log at registration; a voice cannot be made without it.
     #[serde(default)]
     pub consent: Consent,
+    /// Measured when the take was accepted. Absent for voices enrolled before
+    /// the measurement existed — unknown, not zero.
+    #[serde(default)]
+    pub snr_db: Option<f32>,
+    #[serde(default)]
+    pub sample_rate_hz: Option<u32>,
 }
 
 /// The claim that permitted a voice to exist.

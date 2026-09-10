@@ -52,9 +52,12 @@ one command that changes nothing else:
 scripts/tuf-repo.sh refresh
 ```
 
-then copy `dist/tuf` and push as above. The window is 90 days, and missing it
-breaks nothing: installed apps keep working and keep their runtime — only the
-update channel goes quiet until the next publish or refresh.
+then copy `dist/tuf` and push as above. Everything — timestamp, snapshot,
+targets — is signed 52 weeks out to match the root, so the whole repository is
+one annual re-signing (`status` shows the date; the root is the wall, and a
+role signed further out than root would change nothing). Missing it breaks
+nothing: installed apps keep working and keep their runtime — only the update
+channel goes quiet until the next publish or refresh.
 
 ## When both changed
 

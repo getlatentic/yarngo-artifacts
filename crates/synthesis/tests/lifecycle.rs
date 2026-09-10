@@ -124,7 +124,9 @@ fn the_reference_transcript_reaches_the_engine() {
                 app_version: "test".into(),
                 source: "recording".into(),
             },
-        })
+        snr_db: None,
+        sample_rate_hz: None,
+    })
         .expect("register");
 
     // Read back from the database, not from what was handed in.
@@ -261,7 +263,9 @@ fn every_permission_reaches_the_log() {
                 app_version: "test".into(),
                 source: "recording".into(),
             },
-        })
+        snr_db: None,
+        sample_rate_hz: None,
+    })
         .expect("register");
 
     let lines: Vec<serde_json::Value> = std::fs::read_to_string(&log)
@@ -336,6 +340,8 @@ fn a_runtime_that_cannot_learn_a_voice_is_not_asked_to() {
             app_version: "test".into(),
             source: "recording".into(),
         },
+    snr_db: None,
+        sample_rate_hz: None,
     });
     assert!(refused.is_err(), "a voice was enrolled by a runtime that cannot prepare one");
     assert!(

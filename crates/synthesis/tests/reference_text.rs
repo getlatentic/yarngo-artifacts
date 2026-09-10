@@ -32,6 +32,8 @@ fn enrol(engine: &speech_engine::EngineHandle, recording: &std::path::Path) -> V
                 statement: "I agree".into(),
                 ..Default::default()
             },
+            snr_db: Some(31.0),
+            sample_rate_hz: Some(48_000),
         })
         .expect("enrol");
     engine.voices().expect("voices")
@@ -95,6 +97,21 @@ fn a_runtime_that_does_not_listen_back_leaves_the_script_alone() {
     let engine = common::engine_hearing(&sandbox, GRACE, 0);
     let voices = enrol(&engine, &recording);
     assert_eq!(stored(&voices), SCRIPT);
+}
+
+/// The numbers a take was accepted on survive onto the voice.
+///
+/// A clone that sounds thin or hissy months later is diagnosed from what was
+/// actually captured — and "we never measured" must read as absent, not as a
+/// zero that looks like a measurement.
+#[test]
+fn what_the_take_measured_is_stored_with_the_voice() {
+    let (sandbox, recording) = common::seeded();
+    let engine = common::engine_hearing(&sandbox, GRACE, 44);
+    let voices = enrol(&engine, &recording);
+    let reader = voices.iter().find(|v| v.voice_id == "reader").expect("the voice");
+    assert_eq!(reader.snr_db, Some(31.0), "the accepted take's noise figure");
+    assert_eq!(reader.sample_rate_hz, Some(48_000), "the capture rate");
 }
 
 /// A runtime that cannot listen must not tick a voice off as looked at.

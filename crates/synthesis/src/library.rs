@@ -108,7 +108,7 @@ fn title_of(text: &str) -> String {
 pub fn voices(store: &Store) -> Result<Vec<Voice>> {
     let mut statement = store.raw().prepare(
         "SELECT p.id, p.display_name, a.path, r.duration_seconds, r.reference_text,
-                e.statement, e.app_version, e.source
+                e.statement, e.app_version, e.source, r.snr_db, r.sample_rate_hz
            FROM voice_profiles p
            JOIN voice_revisions r ON r.voice_id = p.id AND r.deleted_at IS NULL
            JOIN assets a          ON a.id = r.source_asset_id AND a.state = 'active'
@@ -130,6 +130,8 @@ pub fn voices(store: &Store) -> Result<Vec<Voice>> {
                 app_version: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
                 source: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
             },
+            snr_db: row.get::<_, Option<f64>>(8)?.map(|v| v as f32),
+            sample_rate_hz: row.get(9)?,
         })
     })?;
     Ok(voices.collect::<std::result::Result<_, _>>()?)
@@ -295,8 +297,9 @@ pub fn register_voice(store: &mut Store, voice: &Voice, at: &str) -> Result<()> 
     )?;
     transaction.execute(
         "INSERT INTO voice_revisions
-            (id, voice_id, source_asset_id, duration_seconds, reference_text, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            (id, voice_id, source_asset_id, duration_seconds, reference_text,
+             snr_db, sample_rate_hz, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             revision,
             voice.voice_id,
@@ -305,6 +308,8 @@ pub fn register_voice(store: &mut Store, voice: &Voice, at: &str) -> Result<()> 
             // Empty is absent: a voice enrolled without a script was cloned
             // from audio alone, and saying so is not the same as saying "".
             Some(voice.reference_text.as_str()).filter(|text| !text.trim().is_empty()),
+            voice.snr_db.map(f64::from),
+            voice.sample_rate_hz,
             at
         ],
     )?;

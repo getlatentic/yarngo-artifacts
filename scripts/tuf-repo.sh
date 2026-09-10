@@ -41,22 +41,18 @@ command -v tuftool >/dev/null || {
   exit 1
 }
 
-# Root expires furthest out because rotating it means shipping an application.
-# Timestamp expires soonest because that is what freshness means: metadata
-# nobody has re-signed lately stops being believed.
-#
-# A day or two would be the textbook timestamp window, and it assumes an online
-# service holding the timestamp key alone. There is no such service here, and
-# `tuftool` cannot re-sign the timestamp without the targets and snapshot keys
-# as well — so automating a short window would mean an unattended machine
-# holding every key, which is the thing the roles are separated to prevent.
-# A month is what one person with the keys in their own hands can actually
-# keep up with, and an expiry nobody meets is not a freshness guarantee, it is
-# an outage with a delay on it. Shorten it when there is something to sign with
-# that is not a laptop.
+# Everything expires together, one year out, because the root does. "Never
+# expires" is not on the table: root expiry is the only thing that forces a
+# client to eventually stop believing a frozen or key-compromised repository,
+# and any role signed further out than root changes nothing — root is the wall.
+# So the whole repository is re-signed in one annual sitting, and the textbook
+# short timestamp window returns when there is something to sign with that is
+# not a laptop: it assumes an online service holding the timestamp key alone,
+# and `tuftool` cannot re-sign the timestamp without the targets and snapshot
+# keys as well.
 ROOT_EXPIRY='in 52 weeks'
-ROLE_EXPIRY='in 26 weeks'
-TIMESTAMP_EXPIRY='in 90 days'
+ROLE_EXPIRY='in 52 weeks'
+TIMESTAMP_EXPIRY='in 52 weeks'
 
 sign_and_swap() {
   version="$1"
@@ -136,14 +132,28 @@ which for a GitHub repository means copying them in and pushing:
 
 Until that lands, applications keep installing the recipe inside them.
 
-This publication is believed until $(python3 -c "
-import datetime
-print((datetime.date.today() + datetime.timedelta(days=90)).isoformat())"). Re-publishing before
-then is what keeps it believed; expired metadata is refused, which is the point
-of it. "scripts/tuf-repo.sh status" shows the date.
+This publication is believed until $(believed_until). Re-signing before then —
+one sitting, "scripts/tuf-repo.sh refresh" — is what keeps it believed; expired
+metadata is refused, which is the point of it. "scripts/tuf-repo.sh status"
+shows the date.
 DONE
 }
 
+
+# The date the repository stops being believed: whichever of root and
+# timestamp gives out first, read from what was actually signed rather than
+# recomputed — a printed date that drifts from the signed one is a wrong date.
+believed_until() {
+  python3 -c "
+import json
+dates = []
+for name in ('$OUT/root.json', '$OUT/metadata/timestamp.json'):
+    try:
+        dates.append(json.load(open(name))['signed']['expires'])
+    except Exception:
+        pass
+print(min(dates) if dates else 'unknown — nothing built yet')"
+}
 
 die() { echo "$*" >&2; exit 1; }
 
@@ -295,10 +305,7 @@ status)
   fi
   echo
   if $have_built && [ -f "$OUT/metadata/timestamp.json" ]; then
-    expires="$(python3 -c "
-import json,sys
-print(json.load(open('$OUT/metadata/timestamp.json'))['signed']['expires'])" 2>/dev/null || echo '')"
-    [ -n "$expires" ] && echo "                believed until $expires"
+    echo "                believed until $(believed_until)"
   fi
   echo
 
