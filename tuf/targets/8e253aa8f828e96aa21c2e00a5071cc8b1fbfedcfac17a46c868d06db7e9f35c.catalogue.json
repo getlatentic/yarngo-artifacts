@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "runtimes": {
+    "mlx": [
+      { "version": "2026.8.24.3",
+        "min_app_version": "0.1.0-alpha.1",
+        "engine_api": 1,
+        "lock": "mlx-2026.8.24.3.uv.lock",
+        "pyproject": "mlx-2026.8.24.3.pyproject.toml" }
+    ]
+  }
+}

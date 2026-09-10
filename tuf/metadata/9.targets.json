@@ -1,0 +1,38 @@
+{
+  "signed": {
+    "_type": "targets",
+    "spec_version": "1.0.0",
+    "version": 9,
+    "expires": "2027-09-09T18:32:48.040303Z",
+    "targets": {
+      "mlx-2026.8.24.6.uv.lock": {
+        "length": 191027,
+        "hashes": {
+          "sha256": "29758ff1a5064ec1922547c504479703f96c33457a59e4ee89cf77f2a888cd8d"
+        }
+      },
+      "mlx-2026.8.24.6.pyproject.toml": {
+        "length": 1488,
+        "hashes": {
+          "sha256": "fffaf94561417961de15c11d8e853056a01b1f16de46c5b0b2a4420ef861c83a"
+        }
+      },
+      "catalogue.json": {
+        "length": 260,
+        "hashes": {
+          "sha256": "de609f7c2645eb96c6fcb3c6fc4d9fe60ca5c1bacd224cf85ebd4d505dad8a04"
+        }
+      }
+    },
+    "delegations": {
+      "keys": {},
+      "roles": []
+    }
+  },
+  "signatures": [
+    {
+      "keyid": "22a02899132f2be412e83912138080c7f7bbe1fcf35c94206849ed8616f3bee0",
+      "sig": "82c7bc34ce66e42acac54f7e6b80fd87ffab330e664f227349bd2280c7409a0b589fda45ba43c68147820343cc51483e170146ecb277d865fa8fa2f234dfa2e0320d105d6ee9fb3f1927f06b9783a77f15d16b3e174c656bad6b41f2aba1e993644eb541e38fb0f9c91802b3edf6211dcbfd0dc076d221f4cd8adc35013f1d31ee9d2e32a8045710567285a54e8182f9ff0b966df8fc8a16448097f2b63986bd291790e967dd223866f9a1fd36fd530bf1c787f0f3a537996c41be2e6927e487b2d7eebfbb014cbf8d48fec62c46cf7de5a0761ededef587d7cae616e975f316b0cb50977e9d21b564356c4c5188103509120f24250c763d8ee09099e22dc3d5"
+    }
+  ]
+}
