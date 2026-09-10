@@ -6,6 +6,7 @@ members = ["crates/core", "crates/store", "crates/speech-engine", "crates/synthe
 version = "0.1.0-alpha.3"
 edition = "2021"
 rust-version = "1.82"
+license = "Apache-2.0"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

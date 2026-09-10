@@ -23,7 +23,7 @@ use crate::trust::{Anchor, Trusted};
 /// Changing this address is free only until a build ships pointing at the old
 /// one, because it is compiled into every copy — after that, the old address
 /// has to keep answering for as long as those copies exist.
-const REPOSITORY: &str = "https://getlatentic.github.io/yarngo-artifacts/tuf/";
+const REPOSITORY: &str = "https://getlatentic.github.io/yarngo-studio/tuf/";
 
 /// The root role, inside the bundle. The one file whose authenticity comes from
 /// somewhere other than TUF, because it is where TUF starts.
