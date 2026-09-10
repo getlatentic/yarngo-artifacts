@@ -127,6 +127,50 @@ def _load_catalog(backend: str) -> dict:
 
 
 _models: dict[str, object] = {}
+_models_lock = threading.Lock()
+# When each model last actually spoke. Listing models, drawing the interface,
+# checking status — none of that counts as use, so none of it keeps gigabytes
+# resident. Only the paths that need the weights touch this.
+_last_spoken: dict[str, float] = {}
+
+# A loaded model is gigabytes held against the possibility of another clip.
+# After this long without speaking it is written off and reloaded on demand —
+# a few seconds on the next generation, paid only by whoever comes back after
+# a long break. Memory is bought with that latency; both halves are shown to
+# the user (the model list says "loads in ~Ns").
+PARK_AFTER_S = float(os.environ.get("YARNGO_PARK_AFTER_S", "600"))
+
+
+def _park_due(last_spoken: dict[str, float], now: float, park_after: float) -> list[str]:
+    """Which models have been silent long enough to give their memory back.
+
+    `park_after <= 0` turns parking off — an operator's escape hatch, not a
+    default.
+    """
+    if park_after <= 0:
+        return []
+    return sorted(k for k, at in last_spoken.items() if now - at >= park_after)
+
+
+def _park_idle_models() -> None:
+    while True:
+        time.sleep(max(1.0, min(60.0, PARK_AFTER_S / 4)) if PARK_AFTER_S > 0 else 3600.0)
+        with _models_lock:
+            due = _park_due(_last_spoken, time.monotonic(), PARK_AFTER_S)
+            for model_id in due:
+                idle = time.monotonic() - _last_spoken.pop(model_id)
+                _models.pop(model_id, None)
+                _log(f"parked {model_id} after {idle:.0f}s idle; the next use reloads it")
+        if due:
+            import gc
+
+            gc.collect()
+            try:
+                import mlx.core as mx
+
+                mx.clear_cache()
+            except Exception:  # noqa: BLE001 - freeing cache is best-effort
+                pass
 
 
 def _backend() -> str:
@@ -158,22 +202,24 @@ def _default_model() -> str:
 def _load(model_id: str):
     if model_id not in MODELS:
         raise ValueError(f"unknown model {model_id!r}; have {sorted(MODELS)}")
-    if model_id not in _models and not _is_installed(MODELS[model_id]):
-        raise ValueError(f"model {model_id!r} is not installed")
-    if model_id not in _models:
-        started = time.perf_counter()
-        if BACKEND == "torch":
-            import dots_torch
+    with _models_lock:
+        if model_id not in _models and not _is_installed(MODELS[model_id]):
+            raise ValueError(f"model {model_id!r} is not installed")
+        if model_id not in _models:
+            started = time.perf_counter()
+            if BACKEND == "torch":
+                import dots_torch
 
-            _models[model_id] = dots_torch.load(MODELS[model_id])
-        else:
-            from mlx_speech import tts
+                _models[model_id] = dots_torch.load(MODELS[model_id])
+            else:
+                from mlx_speech import tts
 
-            _models[model_id] = tts.load(MODELS[model_id]["alias"])
-        elapsed = time.perf_counter() - started
-        _remember_load_time(model_id, elapsed)
-        _log(f"loaded {model_id} in {elapsed:.1f}s")
-    return _models[model_id]
+                _models[model_id] = tts.load(MODELS[model_id]["alias"])
+            elapsed = time.perf_counter() - started
+            _remember_load_time(model_id, elapsed)
+            _log(f"loaded {model_id} in {elapsed:.1f}s")
+        _last_spoken[model_id] = time.monotonic()
+        return _models[model_id]
 
 
 def _load_times() -> dict[str, float]:
@@ -366,7 +412,9 @@ def _forget_conditioning() -> ConditioningInvalidation:
     has no reachable conditioning left to speak with.
     """
     removed = 0
-    for model in _models.values():
+    with _models_lock:
+        resident = list(_models.values())
+    for model in resident:
         cache, lock = _conditioning_cache(model)
         with lock if lock is not None else contextlib.nullcontext():
             removed += len(cache) if hasattr(cache, "__len__") else 0
@@ -733,7 +781,9 @@ def m_delete_model(params: dict) -> dict:
     if model_id not in MODELS:
         raise ValueError(f"unknown model {model_id!r}")
     spec = MODELS[model_id]
-    _models.pop(model_id, None)
+    with _models_lock:
+        _models.pop(model_id, None)
+        _last_spoken.pop(model_id, None)
 
     try:
         root = Path(
@@ -1366,6 +1416,7 @@ JSONRPC_MODEL: dict[str, protocol.Handler] = {
 
 def main() -> None:
     _offline_by_default()
+    threading.Thread(target=_park_idle_models, daemon=True, name="park-idle-models").start()
     _log("sidecar ready")
     protocol.serve(
         broker=JSONRPC_BROKER, model=JSONRPC_MODEL, capabilities=_capabilities()
