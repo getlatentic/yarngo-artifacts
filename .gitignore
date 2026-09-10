@@ -18,3 +18,5 @@ third-party/
 # rewritten in full on every publish and never read from here.
 /dist/
 /tuf/
+# Belongs to the serving branch, which tuf-repo.sh writes for itself.
+/.nojekyll
