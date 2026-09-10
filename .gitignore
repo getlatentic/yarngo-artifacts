@@ -13,5 +13,8 @@ __pycache__/
 packaging/uv
 third-party/
 
-# Signed runtime repository, built by scripts/tuf-repo.sh — published, not committed.
+# Signed runtime repository, built by scripts/tuf-repo.sh and published to the
+# gh-pages branch. Serving state does not belong in the source history: it is
+# rewritten in full on every publish and never read from here.
 /dist/
+/tuf/

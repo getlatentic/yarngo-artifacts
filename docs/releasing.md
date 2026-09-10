@@ -41,9 +41,12 @@ identity.
 
 ```
 scripts/tuf-repo.sh publish <version>        # e.g. 2026.9.14.1
-cp -R dist/tuf/. <yarngo-artifacts checkout>/tuf/
-cd <that checkout> && git add tuf && git commit -m "Publish runtime <version>" && git push
+scripts/tuf-repo.sh serve                    # onto gh-pages, which Pages serves
 ```
+
+The served files live on the `gh-pages` branch, never on `main`: a publish
+rewrites every metadata file and adds targets that are never deleted, and none
+of that belongs in a source diff.
 
 There is no recurring signing duty. Everything — root included — is signed a
 century out, by decision: what expiry would buy is freeze-detection and a

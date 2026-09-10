@@ -125,10 +125,10 @@ To make it real, serve those files at:
 
   $SERVED_AT
 
-which for a GitHub repository means copying them in and pushing:
+which is the gh-pages branch of this repository, kept apart from the source so
+a publish never appears in a source diff:
 
-  cp -R $OUT/. <your-artifacts-checkout>/tuf/
-  cd <your-artifacts-checkout> && git add tuf && git commit -m "Publish runtime $version" && git push
+  scripts/tuf-repo.sh serve
 
 Until that lands, applications keep installing the recipe inside them.
 
@@ -237,6 +237,41 @@ refresh)
   version="$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' "$staged/catalogue.json" | head -1)"
   [ -n "$version" ] || die "The published catalogue at $OUT names no version; refusing to guess."
   sign_and_swap "$version" "$staged"
+  ;;
+
+serve)
+  # Put the published output on the branch GitHub Pages serves. Kept apart from
+  # the source: a publish rewrites every metadata file and adds targets that
+  # are never deleted, and none of that belongs in a source diff.
+  [ -d "$OUT/targets" ] || die "Nothing built at $OUT. Run: scripts/tuf-repo.sh publish <version>"
+  remote="$(git remote get-url origin 2>/dev/null)" ||
+    die "No 'origin' remote to serve from."
+  version="$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' "$OUT"/targets/*catalogue.json 2>/dev/null | head -1)"
+
+  work="$(mktemp -d)"
+  trap 'rm -rf "$work"' EXIT
+  # The branch as it stands, so its history is added to rather than replaced.
+  # A repository that has never served starts one.
+  if ! git clone --quiet --branch gh-pages --single-branch "$remote" "$work" 2>/dev/null; then
+    git clone --quiet "$remote" "$work"
+    git -C "$work" checkout --quiet --orphan gh-pages
+    git -C "$work" rm -rq --cached . 2>/dev/null || true
+    find "$work" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+  fi
+
+  rm -rf "$work/tuf"
+  cp -R "$OUT/." "$work/tuf/"
+  # Pages runs Jekyll otherwise, and Jekyll drops files it thinks are special.
+  touch "$work/.nojekyll"
+
+  git -C "$work" add -A
+  if git -C "$work" diff --cached --quiet; then
+    echo "Already serving $version; nothing to push."
+  else
+    git -C "$work" commit -q -m "Serve runtime ${version:-repository}"
+    git -C "$work" push -q origin gh-pages
+    echo "Served $version at $SERVED_AT"
+  fi
   ;;
 
 publish)
