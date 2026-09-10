@@ -12,6 +12,14 @@ use crate::{Result, Store};
 /// Which runtime to start, by its id. Absent means the first that works.
 pub const RUNTIME: &str = "runtime";
 
+/// Which model is selected, by its id.
+pub const MODEL: &str = "model";
+
+/// That model's name as it was last shown. Kept beside the id so the title bar
+/// can be right on the first frame: the catalogue lives in the speech engine,
+/// which takes seconds to start, and a name is what the person reads.
+pub const MODEL_NAME: &str = "model.name";
+
 impl Store {
     pub fn preference(&self, key: &str) -> Result<Option<String>> {
         Ok(self

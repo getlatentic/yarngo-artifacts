@@ -141,10 +141,9 @@ impl VoiceStudio {
     /// right. Status rather than a picker, per the design.
     pub(crate) fn title_bar(&self, window: &Window, cx: &mut Context<Self>) -> impl IntoElement {
         let setup = !matches!(self.screen(), crate::Screen::Workspace);
-        let model = self
-            .models
-            .iter()
-            .find(|m| Some(m.id.as_str()) == self.selected_model.as_deref());
+        // Named from what was shown last time until the catalogue arrives, so
+        // the bar does not gain a model a second after the window opens.
+        let model = self.selected_model.as_deref().and_then(|id| self.name_of_model(id));
 
         // A download in progress is the model's state, and the only one with a
         // number worth putting in the title bar.
@@ -247,8 +246,8 @@ impl VoiceStudio {
                     .text_size(px(11.5))
                     .font_medium()
                     .text_color(theme::hex(0x5F594F))
-                    .child(match model {
-                        Some(m) => format!("{} · {state}", model_name(m)),
+                    .child(match &model {
+                        Some(name) => format!("{name} · {state}"),
                         None => state,
                     })
                     // The chevron points the way the panel will move, so the
@@ -947,10 +946,7 @@ impl VoiceStudio {
     pub(crate) fn model_label(&self) -> String {
         // No model chosen yet is a draft, and a draft has nothing to name.
         let Some(id) = self.clip_model() else { return String::new() };
-        self.models
-            .iter()
-            .find(|m| m.id == id)
-            .map(model_name)
+        self.name_of_model(id)
             // A clip records what actually made it and that record is never
             // rewritten, so an id with no catalogue entry is a real state: the
             // model was removed, or the clip came from a machine running a

@@ -79,6 +79,44 @@ fn start_engine(preferred: Option<&str>) -> Result<EngineHandle, speech_engine::
     })
 }
 
+/// Whether the composer shows work in progress instead of the clip.
+///
+/// Installing is real work with a number and belongs to no row, so it shows
+/// wherever the person is standing. Starting the engine is neither: nothing is
+/// being generated, there is nothing for the Cancel button to cancel, and
+/// locking the composer stops somebody writing the text they opened the
+/// application to write. The status row under the composer says the engine is
+/// starting, which is the whole of what there is to say.
+pub(crate) fn shows_work_in_progress(
+    status: &Status,
+    generating: Option<&str>,
+    selected: &str,
+) -> bool {
+    matches!(status, Status::Installing { .. }) || generating == Some(selected)
+}
+
+/// Which model is selected once the engine has answered.
+///
+/// The choice restored from disk wins while the catalogue still has it: the
+/// engine finishing starting is not a reason to move somebody's selection, and
+/// silently replacing it would also make the name shown on the first frame a
+/// lie a second later.
+pub(crate) fn model_once_the_catalogue_arrives(
+    remembered: Option<&str>,
+    models: &[speech_engine::ModelSpec],
+) -> Option<String> {
+    remembered
+        .filter(|id| models.iter().any(|m| m.id == *id))
+        .map(str::to_string)
+        .or_else(|| {
+            models
+                .iter()
+                .find(|m| m.default)
+                .or_else(|| models.first())
+                .map(|m| m.id.clone())
+        })
+}
+
 /// Remember one, so the next start makes the same choice.
 pub(crate) fn remember_runtime(data_dir: &std::path::Path, id: Option<&str>) {
     let now = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
@@ -173,6 +211,10 @@ pub struct VoiceStudio {
     pub(crate) engine: Option<Arc<EngineHandle>>,
     pub(crate) models: Vec<ModelSpec>,
     pub(crate) selected_model: Option<String>,
+    /// The selected model's name as it was last shown, so the title bar reads
+    /// correctly before the engine has answered with the catalogue. Replaced
+    /// by the catalogue the moment it arrives.
+    pub(crate) remembered_model_name: Option<String>,
     pub(crate) voices: Vec<Voice>,
     pub(crate) selected_voice: Option<String>,
     pub(crate) text: Entity<TextareaState>,
@@ -317,6 +359,7 @@ impl VoiceStudio {
             engine: None,
             models: Vec::new(),
             selected_model: None,
+            remembered_model_name: None,
             voices: Vec::new(),
             selected_voice: None,
             text,
@@ -369,8 +412,60 @@ impl VoiceStudio {
         };
         // First run opens on a blank draft: the composer always has a clip.
         this.drafts.push(clips::Draft::blank());
+        this.show_what_is_already_here();
         this.start_engine(cx);
         this
+    }
+
+    /// Fill the first frame from disk, before there is a frame.
+    ///
+    /// Every one of these is a SQLite read costing a few hundred microseconds,
+    /// and not one of them needs the speech engine — which takes seconds to
+    /// start, because it is a Python process loading an audio stack. Drawing
+    /// the library only after that arrives means an application that has
+    /// visibly launched spends those seconds telling somebody with five clips,
+    /// in as many words, that they have none.
+    fn show_what_is_already_here(&mut self) {
+        let places = speech_engine::paths::places();
+        let Ok(store) = yarngo_store::Store::open(&places.data.join("yarngo.db")) else {
+            // No database yet is a first run, and a first run has nothing to
+            // show. The engine start that follows says what to do about it.
+            return;
+        };
+        self.clips = yarngo_synthesis::library::clips(&store).unwrap_or_default();
+        self.voices = yarngo_synthesis::library::voices(&store).unwrap_or_default();
+        self.selected_model = store.preference(yarngo_store::preferences::MODEL).ok().flatten();
+        self.remembered_model_name =
+            store.preference(yarngo_store::preferences::MODEL_NAME).ok().flatten();
+    }
+
+    /// Keep the choice, and the name it was shown under, for the next start.
+    fn remember_model(&self, id: &str) {
+        let name = self.name_of_model(id);
+        let at = chrono::Local::now().format("%Y-%m-%dT%H:%M:%S").to_string();
+        let db = speech_engine::paths::data_dir().join("yarngo.db");
+        if let Ok(store) = yarngo_store::Store::open(&db) {
+            let _ = store.set_preference(yarngo_store::preferences::MODEL, Some(id), &at);
+            let _ = store.set_preference(
+                yarngo_store::preferences::MODEL_NAME,
+                name.as_deref(),
+                &at,
+            );
+        }
+    }
+
+    /// A model's name: from the catalogue once the engine has answered, and
+    /// from what was shown last time until then.
+    pub(crate) fn name_of_model(&self, id: &str) -> Option<String> {
+        self.models
+            .iter()
+            .find(|m| m.id == id)
+            .map(workspace::model_name)
+            .or_else(|| {
+                (self.selected_model.as_deref() == Some(id))
+                    .then(|| self.remembered_model_name.clone())
+                    .flatten()
+            })
     }
 
     /// Engine startup loads models from disk, so it happens off the main thread.
@@ -415,11 +510,8 @@ impl VoiceStudio {
                 match started {
                     Ok((handle, can, models, voices)) => {
                         this.capabilities = can;
-                        this.selected_model = models
-                            .iter()
-                            .find(|m| m.default)
-                            .or_else(|| models.first())
-                            .map(|m| m.id.clone());
+                        this.selected_model =
+                            model_once_the_catalogue_arrives(this.selected_model.as_deref(), &models);
                         this.models = models;
                         // The bundled voice is the selection out of the box:
                         // it works with every model and needs nothing recorded,
@@ -1881,7 +1973,9 @@ impl VoiceStudio {
     /// Choosing a model can invalidate the voice: switching to a TTS-only model
     /// drops the selection rather than leaving a voice shown that is not used.
     pub(crate) fn select_model(&mut self, id: String, cx: &mut Context<Self>) {
-        self.selected_model = Some(id);
+        self.selected_model = Some(id.clone());
+        self.remembered_model_name = self.name_of_model(&id);
+        self.remember_model(&id);
         if !self.model_can_clone() {
             self.selected_voice = None;
         }
@@ -1922,16 +2016,11 @@ impl VoiceStudio {
     /// carries its own `generating` flag, so the card can follow the
     /// selection and the run stays visible in the sidebar where it belongs.
     pub(crate) fn showing_generation(&self) -> bool {
-        // Installing or preparing is not attached to any row, so it shows
-        // wherever you are — there is nowhere else for it to go.
-        if self.busy() && !matches!(self.status, Status::Generating) {
-            return true;
-        }
         let selected = match &self.selected {
             crate::clips::Selected::Draft(id) => id,
             crate::clips::Selected::Clip(id, _) => id,
         };
-        self.generating_row.as_deref() == Some(selected.as_str())
+        shows_work_in_progress(&self.status, self.generating_row.as_deref(), selected)
     }
 
     fn status_line(&self, cx: &Context<Self>) -> AnyElement {
@@ -2720,4 +2809,87 @@ fn main() {
         })
         .detach();
     });
+}
+
+#[cfg(test)]
+mod startup_tests {
+    use super::model_once_the_catalogue_arrives as chosen;
+    use super::{shows_work_in_progress, Status};
+
+    /// Starting the engine is not a generation.
+    ///
+    /// It was shown as one: a progress card, a Cancel button that had nothing
+    /// to cancel, and a composer locked against the person for the seconds a
+    /// Python process takes to start.
+    #[test]
+    fn starting_the_engine_does_not_look_like_generating() {
+        let starting = Status::Preparing("Starting the speech engine…".into());
+        assert!(!shows_work_in_progress(&starting, None, "draft-1"));
+    }
+
+    /// Installing has a number and no row of its own, so it shows wherever the
+    /// person is.
+    #[test]
+    fn installing_shows_wherever_you_are() {
+        let installing = Status::Installing { step: "Downloading".into(), fraction: 0.4 };
+        assert!(shows_work_in_progress(&installing, None, "draft-1"));
+    }
+
+    #[test]
+    fn a_clip_that_is_running_shows_its_progress() {
+        assert!(shows_work_in_progress(&Status::Idle, Some("clip-7"), "clip-7"));
+    }
+
+    /// Selecting another clip mid-generation must not drag the progress card
+    /// along with the selection.
+    #[test]
+    fn another_clips_generation_stays_on_that_clip() {
+        assert!(!shows_work_in_progress(&Status::Idle, Some("clip-7"), "clip-9"));
+    }
+
+    fn model(id: &str, default: bool) -> speech_engine::ModelSpec {
+        speech_engine::ModelSpec {
+            id: id.into(),
+            default,
+            ..Default::default()
+        }
+    }
+
+    /// The engine finishing its start is not a reason to move a selection.
+    ///
+    /// It would also make the first frame a liar: the title bar is drawn from
+    /// what was chosen last time, so replacing that choice a second later
+    /// changes a name somebody has already read.
+    #[test]
+    fn the_choice_restored_from_disk_survives_the_catalogue_arriving() {
+        let catalogue = [model("mf", true), model("soar", false)];
+        assert_eq!(chosen(Some("soar"), &catalogue).as_deref(), Some("soar"));
+    }
+
+    /// A model uninstalled since last time is gone, and something must be
+    /// selected — the default, exactly as a first run gets.
+    #[test]
+    fn a_choice_the_catalogue_no_longer_has_falls_back_to_the_default() {
+        let catalogue = [model("mf", true), model("soar", false)];
+        assert_eq!(chosen(Some("removed"), &catalogue).as_deref(), Some("mf"));
+    }
+
+    #[test]
+    fn a_first_run_takes_the_default() {
+        let catalogue = [model("soar", false), model("mf", true)];
+        assert_eq!(chosen(None, &catalogue).as_deref(), Some("mf"));
+    }
+
+    /// A catalogue that names no default still has to answer with something,
+    /// or the interface offers a model picker with nothing picked.
+    #[test]
+    fn a_catalogue_without_a_default_still_selects() {
+        let catalogue = [model("only", false)];
+        assert_eq!(chosen(None, &catalogue).as_deref(), Some("only"));
+    }
+
+    #[test]
+    fn an_empty_catalogue_selects_nothing() {
+        assert_eq!(chosen(Some("mf"), &[]), None);
+    }
 }

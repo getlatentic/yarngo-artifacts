@@ -23,7 +23,9 @@ pub use handle::EngineHandle;
 
 /// A model the user can pick between. Only commercially licensed models belong
 /// here; anything under non-commercial terms must never reach the catalogue.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+// Every field already carries a serde default, so the type has one; deriving
+// it says so, and lets a test name only the fields it is about.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct ModelSpec {
     pub id: String,
     /// What this app recommends it *for* — "Fast", "Best quality". A
