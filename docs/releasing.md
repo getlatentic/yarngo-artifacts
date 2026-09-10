@@ -45,19 +45,17 @@ cp -R dist/tuf/. <yarngo-artifacts checkout>/tuf/
 cd <that checkout> && git add tuf && git commit -m "Publish runtime <version>" && git push
 ```
 
-`scripts/tuf-repo.sh status` shows the "believed until" date. Renewing it is
-one command that changes nothing else:
-
-```
-scripts/tuf-repo.sh refresh
-```
-
-then copy `dist/tuf` and push as above. Everything — timestamp, snapshot,
-targets — is signed 52 weeks out to match the root, so the whole repository is
-one annual re-signing (`status` shows the date; the root is the wall, and a
-role signed further out than root would change nothing). Missing it breaks
-nothing: installed apps keep working and keep their runtime — only the update
-channel goes quiet until the next publish or refresh.
+There is no recurring signing duty. Everything — root included — is signed a
+century out, by decision: what expiry would buy is freeze-detection and a
+passive kill for leaked keys, and what remains without it is everything that
+stops anyone *changing* what is served — signatures, per-file hashes, role
+separation, and the monotonic metadata version that refuses rollbacks. (For
+scale: Sparkle, the de facto standard for Mac app updates, is a signed feed
+with no expiry at all.) The trade, written down: if a signing key ever leaks,
+the recovery is shipping an application with a new root, and installs that
+never update stay exposed to that key. `scripts/tuf-repo.sh refresh` re-signs
+what is already served and exists for key rotation, not for a calendar.
+Re-introduce real expiry windows when signing stops being one laptop.
 
 ## When both changed
 

@@ -41,18 +41,18 @@ command -v tuftool >/dev/null || {
   exit 1
 }
 
-# Everything expires together, one year out, because the root does. "Never
-# expires" is not on the table: root expiry is the only thing that forces a
-# client to eventually stop believing a frozen or key-compromised repository,
-# and any role signed further out than root changes nothing — root is the wall.
-# So the whole repository is re-signed in one annual sitting, and the textbook
-# short timestamp window returns when there is something to sign with that is
-# not a laptop: it assumes an online service holding the timestamp key alone,
-# and `tuftool` cannot re-sign the timestamp without the targets and snapshot
-# keys as well.
-ROOT_EXPIRY='in 52 weeks'
-ROLE_EXPIRY='in 52 weeks'
-TIMESTAMP_EXPIRY='in 52 weeks'
+# Signed a century out: there is no recurring re-signing obligation, by
+# decision. What expiry would buy is freeze-detection and a passive kill for
+# leaked keys; what remains without it is everything that stops anyone
+# *changing* what is served — signatures, per-file hashes, role separation,
+# and the monotonic metadata version that refuses rollbacks. The trade written
+# where it is made: if a signing key ever leaks, the recovery is shipping an
+# application with a new root, and installs that never update stay exposed to
+# that key. Re-introduce real windows here the day signing stops being one
+# laptop.
+ROOT_EXPIRY='in 5200 weeks'
+ROLE_EXPIRY='in 5200 weeks'
+TIMESTAMP_EXPIRY='in 5200 weeks'
 
 sign_and_swap() {
   version="$1"
@@ -132,10 +132,9 @@ which for a GitHub repository means copying them in and pushing:
 
 Until that lands, applications keep installing the recipe inside them.
 
-This publication is believed until $(believed_until). Re-signing before then —
-one sitting, "scripts/tuf-repo.sh refresh" — is what keeps it believed; expired
-metadata is refused, which is the point of it. "scripts/tuf-repo.sh status"
-shows the date.
+This publication is believed until $(believed_until) — effectively forever, by
+decision. "scripts/tuf-repo.sh refresh" re-signs what is already served, which
+matters only when rotating keys.
 DONE
 }
 
@@ -317,7 +316,8 @@ status)
     echo "Next:  scripts/tuf-repo.sh publish $(date +%Y.%-m.%-d).1"
   else
     echo "Next:  serve $OUT at $SERVED_AT"
-    echo "       and re-publish before the date above, which is what keeps it believed."
+    echo "       Nothing recurs: metadata is signed a century out, and "refresh"
+       exists for key rotation, not for a calendar."
   fi
   ;;
 
