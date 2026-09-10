@@ -44,9 +44,13 @@ scripts/tuf-repo.sh publish <version>        # e.g. 2026.9.14.1
 scripts/tuf-repo.sh serve                    # onto gh-pages, which Pages serves
 ```
 
-The served files live on the `gh-pages` branch, never on `main`: a publish
-rewrites every metadata file and adds targets that are never deleted, and none
-of that belongs in a source diff.
+The served files live in their own repository, `getlatentic/yarngo-studio-artifacts`,
+which `serve` works out from the address in `published.rs` so the two cannot
+drift. Kept apart for two reasons: a publish rewrites every metadata file and
+adds targets that are never deleted, none of which belongs in a source diff;
+and GitHub Pages requires a public repository, so a separate one is what lets
+this repository be renamed — or made private — without moving an address that
+is compiled into every copy already installed.
 
 There is no recurring signing duty. Everything — root included — is signed a
 century out, by decision: what expiry would buy is freeze-detection and a

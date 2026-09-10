@@ -240,24 +240,25 @@ refresh)
   ;;
 
 serve)
-  # Put the published output on the branch GitHub Pages serves. Kept apart from
-  # the source: a publish rewrites every metadata file and adds targets that
-  # are never deleted, and none of that belongs in a source diff.
+  # Put the published output where the application fetches it. That is a
+  # repository of its own: it is public because GitHub Pages requires it, it
+  # is rewritten in full on every publish, and keeping it apart is what lets
+  # the source repository be renamed, or made private, without changing an
+  # address that is compiled into every copy already installed.
   [ -d "$OUT/targets" ] || die "Nothing built at $OUT. Run: scripts/tuf-repo.sh publish <version>"
-  remote="$(git remote get-url origin 2>/dev/null)" ||
-    die "No 'origin' remote to serve from."
+
+  # Derived from the address the application actually uses, so the two cannot
+  # drift: github.io/<owner>/<repo>/tuf/ names the repository serving it.
+  serving_repo="$(printf '%s' "$SERVED_AT" |
+    sed -n 's|^https://\([^.]*\)\.github\.io/\([^/]*\)/.*|\1/\2|p')"
+  [ -n "$serving_repo" ] ||
+    die "Could not read which repository serves $SERVED_AT; publish by hand."
   version="$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' "$OUT"/targets/*catalogue.json 2>/dev/null | head -1)"
 
   work="$(mktemp -d)"
   trap 'rm -rf "$work"' EXIT
-  # The branch as it stands, so its history is added to rather than replaced.
-  # A repository that has never served starts one.
-  if ! git clone --quiet --branch gh-pages --single-branch "$remote" "$work" 2>/dev/null; then
-    git clone --quiet "$remote" "$work"
-    git -C "$work" checkout --quiet --orphan gh-pages
-    git -C "$work" rm -rq --cached . 2>/dev/null || true
-    find "$work" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-  fi
+  git clone --quiet "https://github.com/$serving_repo.git" "$work" ||
+    die "Could not clone $serving_repo."
 
   rm -rf "$work/tuf"
   cp -R "$OUT/." "$work/tuf/"
@@ -269,7 +270,7 @@ serve)
     echo "Already serving $version; nothing to push."
   else
     git -C "$work" commit -q -m "Serve runtime ${version:-repository}"
-    git -C "$work" push -q origin gh-pages
+    git -C "$work" push -q origin HEAD
     echo "Served $version at $SERVED_AT"
   fi
   ;;
