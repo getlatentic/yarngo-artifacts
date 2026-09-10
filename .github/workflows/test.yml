@@ -1,0 +1,65 @@
+# What a runner can check without holding anything secret.
+#
+# Signing and notarization are deliberately absent. The runtime repository is
+# signed with keys that decide what every installed copy of this application
+# downloads and runs, and notarization needs the Apple account; a runner
+# holding either is the thing the separation of roles exists to prevent. Those
+# two steps stay on a machine a person is sitting at.
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    # The application is macOS-only: GPUI, CoreAudio and the permission
+    # prompts have no other host to run on.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The sidecar stand-in the tests drive is a Python script, so the tests
+      # need an interpreter even though they never load a speech model.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: cargo test --workspace --locked
+
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  sidecar:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Everything the suites import. The speech packages are deliberately not
+      # here: each suite runs a slice of the engine's own source, so they test
+      # the shipped logic without a model or a gigabyte of wheels.
+      - run: pip install numpy soundfile
+
+      - name: Run every sidecar suite
+        run: |
+          failed=0
+          for suite in sidecar/test_*.py; do
+            echo "== $suite"
+            python3 "$suite" || failed=1
+          done
+          exit $failed
